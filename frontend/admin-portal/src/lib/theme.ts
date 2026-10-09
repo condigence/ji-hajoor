@@ -1,7 +1,7 @@
 import { createTheme, alpha } from '@mui/material/styles';
 
 /**
- * HomeFix Admin design system — desktop console.
+ * Ji-Hajoor Admin design system — desktop console.
  *
  * Shares the Customer app's palette and component shapes so the platform reads
  * as one product, tuned for a dense operational console: smaller default type,

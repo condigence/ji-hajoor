@@ -1,4 +1,4 @@
-HomeFix end-to-end smoke test
+Ji-Hajoor end-to-end smoke test
 
 == Service readiness
   FAIL  auth readiness                                       000 (expected 200)

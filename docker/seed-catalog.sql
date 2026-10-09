@@ -1,4 +1,4 @@
--- Seed sample catalog data for the local HomeFix core slice.
+-- Seed sample catalog data for the local Ji-Hajoor core slice.
 -- Categories and subcategories the customer-app Home screen will list.
 SET search_path TO catalog;
 

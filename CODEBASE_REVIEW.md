@@ -1,7 +1,7 @@
-# HomeFix Platform — Codebase Review
+# Ji-Hajoor Platform — Codebase Review
 
 **Date:** 2026-09-10, remediation status updated 2026-09-11
-**Repository:** `KripaGIT009/home-fix` (branch `main`)
+**Repository:** `condigence/ji-hajoor` (branch `main`)
 **Scope:** entire repository — 20 Spring Boot services, 4 shared libraries, 3 React apps, Docker Compose, Helm, Kubernetes manifests, Terraform, GitHub Actions, and the `.kiro` specifications.
 
 > **Remediation in progress.** A first pass of fixes has landed since this review was written. See
@@ -18,7 +18,7 @@
 
 ## 1. Executive summary
 
-HomeFix is an on-demand home-services marketplace (customers book verified providers for scheduled or emergency jobs). The codebase is a well-structured, spec-driven implementation of a 20-service event-driven architecture. The engineering fundamentals are strong: consistent hexagonal layout, transactional outbox + idempotent consumers, `BigDecimal` money handling, state machines as single sources of truth, injected clocks, property-based tests, and hardened Terraform.
+Ji-Hajoor is an on-demand home-services marketplace (customers book verified providers for scheduled or emergency jobs). The codebase is a well-structured, spec-driven implementation of a 20-service event-driven architecture. The engineering fundamentals are strong: consistent hexagonal layout, transactional outbox + idempotent consumers, `BigDecimal` money handling, state machines as single sources of truth, injected clocks, property-based tests, and hardened Terraform.
 
 However, the platform is **not deployable or safe to expose as it stands**. The review found a small number of systemic gaps that affect nearly every service, plus several broken inter-service contracts that prevent the core booking flow from completing end to end.
 
@@ -60,13 +60,13 @@ A prioritised remediation plan is in [Section 11](#11-remediation-roadmap).
 ### Layout
 
 ```
-home-fix/
+ji-hajoor/
 ├── .github/workflows/      ci.yml, pr-checks.yml, cd-production.yml, frontend-ci.yml
 ├── .kiro/specs/            requirements.md, design.md, tasks.md (the product & architecture spec)
 ├── docker/                 init-db.sql, seed scripts, smoke tests, scratch output files
 ├── docker-compose.core.yml Full local stack (Postgres, Redis, Kafka, 20 services, 3 SPAs)
 ├── frontend/               admin-portal, customer-app, provider-app (independent Vite projects)
-├── helm/homefix-service/   Single generic chart used for every service
+├── helm/jihajoor-service/   Single generic chart used for every service
 ├── infra/k8s/              Observability + autoscaling manifests
 ├── infra/terraform/        AWS root module + 12 sub-modules
 ├── services/               20 Spring Boot services (each: pom.xml, Dockerfile, src/)
@@ -84,7 +84,7 @@ home-fix/
 | Frontend test files | 0 |
 | Spec tasks marked complete | 46 of 46 |
 
-There is no root aggregator `pom.xml`; each of the 24 Maven modules is a standalone build that depends on `com.homefix.shared:*:1.0.0-SNAPSHOT`, so the shared modules must be `mvn install`ed first.
+There is no root aggregator `pom.xml`; each of the 24 Maven modules is a standalone build that depends on `com.jihajoor.shared:*:1.0.0-SNAPSHOT`, so the shared modules must be `mvn install`ed first.
 
 ---
 
@@ -147,10 +147,10 @@ Default-port collisions: booking/catalog (8085), dispatch/location (8087), invoi
 
 | Module | Provides | Notes |
 |--------|----------|-------|
-| homefix-shared-security | `CorrelationIdFilter`, `JwtValidationFilter` (HS256, roles claim → `ROLE_*`), `RbacEnforcementFilter` (Ant patterns from `homefix.security.rbac.endpoint-roles`), auto-configured | Filter passes through when no rule matches; matches on raw `getRequestURI()` so `;param` segments bypass it. 28 unit tests. |
-| homefix-shared-outbox | `OutboxEventEntity`/repository, `OutboxEventPublisher` (`Propagation.MANDATORY`), `KafkaProducerTemplate` (fails fast without `acks=all` + idempotence), `IdempotentKafkaConsumer` (processed_event table, 3 retries with 5 s sleeps, DLQ), `DlqForwarder` | Atomicity proven with an H2 test. Handler and dedupe marker run in separate transactions. |
-| homefix-shared-resilience | `ResilienceFactory`, `ResilientCall` (timeout → retry → breaker → fallback), `TimeoutProfile` | Declared in all 20 service POMs; **used by only a handful** (booking, dispatch). Swallows non-transient exceptions into the fallback. |
-| homefix-shared-observability | Logstash JSON logging base, `PiiMaskingConverter`/`PiiScrubber`, `TracingSupport`, `ErrorResponseDto` | Stack traces are not scrubbed despite the config comment; card regex masks any 13–19 digit number. |
+| jihajoor-shared-security | `CorrelationIdFilter`, `JwtValidationFilter` (HS256, roles claim → `ROLE_*`), `RbacEnforcementFilter` (Ant patterns from `jihajoor.security.rbac.endpoint-roles`), auto-configured | Filter passes through when no rule matches; matches on raw `getRequestURI()` so `;param` segments bypass it. 28 unit tests. |
+| jihajoor-shared-outbox | `OutboxEventEntity`/repository, `OutboxEventPublisher` (`Propagation.MANDATORY`), `KafkaProducerTemplate` (fails fast without `acks=all` + idempotence), `IdempotentKafkaConsumer` (processed_event table, 3 retries with 5 s sleeps, DLQ), `DlqForwarder` | Atomicity proven with an H2 test. Handler and dedupe marker run in separate transactions. |
+| jihajoor-shared-resilience | `ResilienceFactory`, `ResilientCall` (timeout → retry → breaker → fallback), `TimeoutProfile` | Declared in all 20 service POMs; **used by only a handful** (booking, dispatch). Swallows non-transient exceptions into the fallback. |
+| jihajoor-shared-observability | Logstash JSON logging base, `PiiMaskingConverter`/`PiiScrubber`, `TracingSupport`, `ErrorResponseDto` | Stack traces are not scrubbed despite the config comment; card regex masks any 13–19 digit number. |
 
 The shared libs are the strongest part of the codebase. The most impactful bug is the RBAC filter's fail-open default combined with no service configuring rules.
 
@@ -176,11 +176,11 @@ Weaknesses: **zero tests**, no shared package, sessions do not survive a page re
 
 ## 7. Infrastructure and delivery
 
-**Docker Compose** (`docker-compose.core.yml`): Postgres 16 (host 5533), Redis 7 (6380), Kafka 3.7.1 KRaft (9095), all 20 services on 8080–8099 with `wget` readiness health checks and `depends_on: service_healthy`, three SPAs on 5173–5175. Images are runtime-only; jars must be built on the host first. All secrets are inline literals (`homefix`, a shared dev JWT secret repeated ~19 times). Hibernate is forced to `ddl-auto: update`. OTPs are written to a mounted file and echoed to logs. Two services run Spring Security at DEBUG.
+**Docker Compose** (`docker-compose.core.yml`): Postgres 16 (host 5533), Redis 7 (6380), Kafka 3.7.1 KRaft (9095), all 20 services on 8080–8099 with `wget` readiness health checks and `depends_on: service_healthy`, three SPAs on 5173–5175. Images are runtime-only; jars must be built on the host first. All secrets are inline literals (`jihajoor`, a shared dev JWT secret repeated ~19 times). Hibernate is forced to `ddl-auto: update`. OTPs are written to a mounted file and echoed to logs. Two services run Spring Security at DEBUG.
 
-**Helm** (`helm/homefix-service`): one generic chart with Deployment, Service, ConfigMap, HPA v2, PDB, ServiceAccount, topology spread, and a good pod security context (non-root, read-only FS, drop ALL, seccomp). But it probes `/actuator/health/*` and scrapes `/actuator/prometheus` on port 8080; every service actually serves `/health/*` and `/prometheus` on its own port. No Ingress, NetworkPolicy or Secret template.
+**Helm** (`helm/jihajoor-service`): one generic chart with Deployment, Service, ConfigMap, HPA v2, PDB, ServiceAccount, topology spread, and a good pod security context (non-root, read-only FS, drop ALL, seccomp). But it probes `/actuator/health/*` and scrapes `/actuator/prometheus` on port 8080; every service actually serves `/health/*` and `/prometheus` on its own port. No Ingress, NetworkPolicy or Secret template.
 
-**Kubernetes manifests** (`infra/k8s`): HPAs, KEDA ScaledObjects for Kafka consumers, Prometheus/Alertmanager with SLO alerts, Fluent Bit → CloudWatch, Grafana dashboards. They target bare Deployment names in six domain namespaces; the Helm chart and CI produce `homefix-<svc>` in `staging`/`production`. Committed `Secret` objects contain `PLACEHOLDER` credentials; Grafana admin password is in a tracked values file. Nothing applies these manifests.
+**Kubernetes manifests** (`infra/k8s`): HPAs, KEDA ScaledObjects for Kafka consumers, Prometheus/Alertmanager with SLO alerts, Fluent Bit → CloudWatch, Grafana dashboards. They target bare Deployment names in six domain namespaces; the Helm chart and CI produce `jihajoor-<svc>` in `staging`/`production`. Committed `Secret` objects contain `PLACEHOLDER` credentials; Grafana admin password is in a tracked values file. Nothing applies these manifests.
 
 **Terraform** (`infra/terraform`, AWS ap-south-1): well-hardened and reasonably complete (VPC with flow logs, EKS with IRSA and KMS secret encryption, Multi-AZ encrypted RDS with deletion protection, MSK TLS+SCRAM, encrypted ElastiCache, KMS-encrypted S3 with TLS-only policies, WAF, HTTP API Gateway with JWT authorizer, per-service IRSA roles and Secrets Manager shells, namespace quotas). Gaps: EKS API endpoint public to `0.0.0.0/0`, S3 backend commented out, fragile two-phase `-target` apply, API Gateway JWT issuer/audience cannot match auth-service tokens, no NetworkPolicies or analytics store.
 
@@ -292,12 +292,12 @@ Each finding was verified by reading the code. Line numbers refer to the current
 |-----|---------|-------|
 | **Critical** | Pipeline defaults every job to `hello-world-service`, which does not exist. Pushes to `main` test/build/deploy nothing real. | `ci.yml:43,78,96,210,286,342`, `cd-production.yml:72,182` |
 | **Critical** | Docker build copies `target/*.jar` that CI never produces; `mvn test` cannot resolve `shared/` SNAPSHOTs (never installed, no aggregator). | `ci.yml:230-246`, `services/*/Dockerfile:5` |
-| **Critical** | Helm probes `/actuator/health/*` on port 8080; services expose `/health/*` on 8081–8099. Every Helm-deployed pod fails its startup probe. | `helm/homefix-service/values.yaml:52,57,78,84,91` |
+| **Critical** | Helm probes `/actuator/health/*` on port 8080; services expose `/health/*` on 8081–8099. Every Helm-deployed pod fails its startup probe. | `helm/jihajoor-service/values.yaml:52,57,78,84,91` |
 | **High** | EKS API endpoint public to `0.0.0.0/0`. | `infra/terraform/modules/eks/main.tf:84-85` |
 | **High** | Committed `Secret` manifests with `PLACEHOLDER` credentials; Grafana admin password in tracked values; hard-coded MSK hostnames. | `infra/k8s/observability/keda-scaledobjects.yaml:22-35,...`, `prometheus-values.yaml:222` |
 | **High** | Static AWS access keys in all jobs instead of OIDC; Trivy pinned to `@master` with `exit-code: 0`; Helm installed via `curl \| bash`. | `ci.yml:52,216-217,255-259` |
 | **High** | Auto-promotion on `workflow_run` deploys `${{ github.sha }}` of the CD run, never the image CI built; smoke test path wrong and passes via `\|\| echo`. | `cd-production.yml:19-27,72-73,133` |
-| **High** | API Gateway JWT authorizer issuer/audience cannot match auth-service tokens (`iss: homefix-auth`, no `aud`). | `infra/terraform/modules/api_gateway/main.tf:62-66` |
+| **High** | API Gateway JWT authorizer issuer/audience cannot match auth-service tokens (`iss: jihajoor-auth`, no `aud`). | `infra/terraform/modules/api_gateway/main.tf:62-66` |
 | **Medium** | Plaintext dev secrets repeated ~19 times in Compose; Spring Security DEBUG left on; `\|\| true` on coverage and Dockerfile checks; missing `Dockerfile.base`; empty S3 backend block; `automountServiceAccountToken: true`; images pinned by tag not digest; frontend nginx runs as root; K8s HPAs target Deployment names the chart never produces; two inconsistent namespace layouts. | various |
 | **Low** | `your-org` placeholder in `Chart.yaml:18`; personal `.vscode/settings.json`; tracked scratch files `docker/_probe.txt`, `flow.txt`, `out.txt`, `p.txt`, `st.txt`, `smoke-result.txt` (which records 4 failing smoke checks), `run.ps1`; `.jqwik-database` files in three services; `customer-app/src/features/catalog/tsc-errors.txt`. | various |
 
@@ -323,7 +323,7 @@ Systematic gaps:
 
 ## 10. Technical debt summary
 
-1. **No monorepo structure.** 24 standalone POMs with copy-pasted `dependencyManagement`/plugins; three frontend forks with ~40 identical files already drifting. A parent POM, a `shared-web` starter (security config, exception handler, principal helper, KMS adapter) and a frontend workspace with `@homefix/api` + `@homefix/ui` would remove most duplication.
+1. **No monorepo structure.** 24 standalone POMs with copy-pasted `dependencyManagement`/plugins; three frontend forks with ~40 identical files already drifting. A parent POM, a `shared-web` starter (security config, exception handler, principal helper, KMS adapter) and a frontend workspace with `@jihajoor/api` + `@jihajoor/ui` would remove most duplication.
 2. **Stubs on production paths** with no tracking: payment gateways, wallet, refunds, SMS/email/push, S3/media storage (bytes discarded), background checks, geocoding, pricing parameter/coupon persistence, admin config, presence, analytics store, invoice storage. Several are silent data loss.
 3. **Three retry mechanisms** (payment `Retries`, invoice `Sleeper`, shared resilience lib) with the shared one mostly unused.
 4. **Dead/unused code:** emergency SLA properties, `Booking.setProviderId`, `autoResolveApprovalTimeout`, `PriceEstimate.COMPONENT_LABELS`, `authStore.setAccessToken`, admin social login buttons, catalog API functions against non-existent endpoints.
@@ -495,7 +495,7 @@ a day, and the code has to be read out of a log file locally or an SMS in produc
 **Startup account seeding.** Staff roles are correctly not self-assignable, which left a
 fresh database with no account able to open the Admin Portal at all; the gap was filled by a
 shell script issuing SQL inserts after the fact. `DevAccountSeeder` now creates the nine
-documented test accounts at startup, off unless `homefix.auth.dev-seed.enabled` is true and
+documented test accounts at startup, off unless `jihajoor.auth.dev-seed.enabled` is true and
 inert unless given a password that has no default. It is idempotent and preserves account
 ids, so re-running never orphans data that references an account.
 
@@ -899,7 +899,7 @@ Every database-backed service now runs Flyway, and Hibernate only validates. Eac
 was generated with `pg_dump` from a database Hibernate had populated from the current entities,
 then proven by applying all of them to an empty database and diffing the two dumps: identical
 apart from PostgreSQL's own re-spelling of the same CHECK expressions. The shared outbox tables
-ship as a repeatable migration inside `homefix-shared-outbox`, serialised across services with
+ship as a repeatable migration inside `jihajoor-shared-outbox`, serialised across services with
 an advisory lock. `baseline-on-migrate` lets a database created by the old `ddl-auto=update`
 setup adopt the migrations without re-creating anything. Compose no longer forces
 `ddl-auto=update`, so the local stack now uses the same mechanism as a deployment.
@@ -968,7 +968,7 @@ The customer app was redesigned: a self-hosted typeface and a real type scale, a
 1200 px layout with a desktop top nav and a mobile tab bar instead of a phone column stranded
 on a wide screen, a proper home page, a split sign-in with a six-box OTP input, and every
 screen restyled. Two behaviours changed with it. Errors are humanised in one place — an
-unreachable or restarting backend (network, 502/503/504) reads "We can't reach HomeFix right
+unreachable or restarting backend (network, 502/503/504) reads "We can't reach Ji-Hajoor right
 now" instead of "Request failed with status code 502" — and tracking is status-aware, polling
 the new detail endpoint: finding a professional, no professional available (with book-again),
 assigned, on the way with the live map, in progress, done or cancelled. A missing location fix
@@ -1165,7 +1165,7 @@ Found during the documentation pass, not yet fixed:
    provider-service refuses at once.
 2. `TenantService.removeAdmin` deletes the membership, revokes the role, and restores the membership in a
    separate write if the revoke fails; if that restore also fails, membership and role disagree.
-3. provider-service has only `StubCatalogClientAdapter`; setting `homefix.catalog.client=http` would leave
+3. provider-service has only `StubCatalogClientAdapter`; setting `jihajoor.catalog.client=http` would leave
    no `CatalogClientPort` bean and the service would not start.
 4. `SplashScreen.tsx` and `SocialLoginButtons.tsx` in the admin portal are imported nowhere.
 5. Found while auditing `docs/API_CONTRACTS.md` against the code (each still to be verified and fixed):

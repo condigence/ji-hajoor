@@ -1,0 +1,33 @@
+# Staging overrides for the shared jihajoor-service chart.
+# Applied by .github/workflows/deploy-services.yml for environment=staging,
+# before helm/services/<service>.yaml.
+
+environment: staging
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 384Mi
+  limits:
+    cpu: "1"
+    memory: 640Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: 85
+
+config:
+  # No application-<profile>.yml exists yet; set so profile-specific config can be
+  # added without touching the chart.
+  SPRING_PROFILES_ACTIVE: staging
+
+podDisruptionBudget:
+  enabled: false
+
+topologySpreadConstraints:
+  enabled: false

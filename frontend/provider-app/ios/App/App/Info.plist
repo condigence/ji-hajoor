@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>HomeFix Pro</string>
+        <string>Ji-Hajoor Pro</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -23,11 +23,11 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>HomeFix Pro shares your location with the customer while you are on the way to their job, so they can see you approaching.</string>
+	<string>Ji-Hajoor Pro shares your location with the customer while you are on the way to their job, so they can see you approaching.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>HomeFix Pro uses the camera to take the before and after photos of a job.</string>
+	<string>Ji-Hajoor Pro uses the camera to take the before and after photos of a job.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>HomeFix Pro lets you attach before and after photos of a job from your photo library.</string>
+	<string>Ji-Hajoor Pro lets you attach before and after photos of a job from your photo library.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

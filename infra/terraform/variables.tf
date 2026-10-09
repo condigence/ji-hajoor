@@ -18,7 +18,7 @@ variable "environment" {
 variable "project_name" {
   description = "Project name used as prefix for resource naming"
   type        = string
-  default     = "homefix"
+  default     = "jihajoor"
 }
 
 # ─────────────────────────────────────────────
@@ -134,7 +134,7 @@ variable "rds_engine_version" {
 variable "rds_db_name" {
   description = "Initial database name"
   type        = string
-  default     = "homefix"
+  default     = "jihajoor"
 }
 
 # ─────────────────────────────────────────────

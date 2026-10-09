@@ -157,7 +157,7 @@ export const useAuthStore = create<AuthState>()(
       hasRole: (role) => get().user?.roles.includes(role) ?? false,
     }),
     {
-      name: 'homefix.auth',
+      name: 'jihajoor.auth',
       // Token storage strategy (Task 31):
       // - Access token lives in memory only. Short-lived (15 min, Req 1.8) and
       //   kept out of persistent storage to limit XSS token-theft exposure.

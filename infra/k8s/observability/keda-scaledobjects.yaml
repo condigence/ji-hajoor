@@ -25,7 +25,7 @@ metadata:
   name: keda-kafka-auth
   namespace: booking-dispatch-location
   labels:
-    app: homefix
+    app: jihajoor
     component: keda
 type: Opaque
 stringData:
@@ -87,7 +87,7 @@ spec:
   triggers:
     - type: kafka
       metadata:
-        bootstrapServers: "b-1.homefix-msk.ap-south-1.amazonaws.com:9098,b-2.homefix-msk.ap-south-1.amazonaws.com:9098"
+        bootstrapServers: "b-1.jihajoor-msk.ap-south-1.amazonaws.com:9098,b-2.jihajoor-msk.ap-south-1.amazonaws.com:9098"
         consumerGroup: dispatch-engine
         topic: booking.events
         lagThreshold: "50"
@@ -121,7 +121,7 @@ spec:
   triggers:
     - type: kafka
       metadata:
-        bootstrapServers: "b-1.homefix-msk.ap-south-1.amazonaws.com:9098,b-2.homefix-msk.ap-south-1.amazonaws.com:9098"
+        bootstrapServers: "b-1.jihajoor-msk.ap-south-1.amazonaws.com:9098,b-2.jihajoor-msk.ap-south-1.amazonaws.com:9098"
         consumerGroup: location-service
         topic: booking.events
         lagThreshold: "100"
@@ -139,7 +139,7 @@ metadata:
   name: keda-kafka-auth
   namespace: payment-invoice-rating
   labels:
-    app: homefix
+    app: jihajoor
     component: keda
 type: Opaque
 stringData:
@@ -185,7 +185,7 @@ spec:
   triggers:
     - type: kafka
       metadata:
-        bootstrapServers: "b-1.homefix-msk.ap-south-1.amazonaws.com:9098,b-2.homefix-msk.ap-south-1.amazonaws.com:9098"
+        bootstrapServers: "b-1.jihajoor-msk.ap-south-1.amazonaws.com:9098,b-2.jihajoor-msk.ap-south-1.amazonaws.com:9098"
         consumerGroup: invoice-service
         topic: payment.events
         lagThreshold: "100"
@@ -218,7 +218,7 @@ spec:
   triggers:
     - type: kafka
       metadata:
-        bootstrapServers: "b-1.homefix-msk.ap-south-1.amazonaws.com:9098,b-2.homefix-msk.ap-south-1.amazonaws.com:9098"
+        bootstrapServers: "b-1.jihajoor-msk.ap-south-1.amazonaws.com:9098,b-2.jihajoor-msk.ap-south-1.amazonaws.com:9098"
         consumerGroup: rating-review-service
         topic: payment.events
         lagThreshold: "200"
@@ -236,7 +236,7 @@ metadata:
   name: keda-kafka-auth
   namespace: notification-chat-complaint
   labels:
-    app: homefix
+    app: jihajoor
     component: keda
 type: Opaque
 stringData:
@@ -282,7 +282,7 @@ spec:
   triggers:
     - type: kafka
       metadata:
-        bootstrapServers: "b-1.homefix-msk.ap-south-1.amazonaws.com:9098,b-2.homefix-msk.ap-south-1.amazonaws.com:9098"
+        bootstrapServers: "b-1.jihajoor-msk.ap-south-1.amazonaws.com:9098,b-2.jihajoor-msk.ap-south-1.amazonaws.com:9098"
         consumerGroup: notification-service
         topic: booking.events,payment.events,review.events
         lagThreshold: "100"
@@ -315,7 +315,7 @@ spec:
   triggers:
     - type: kafka
       metadata:
-        bootstrapServers: "b-1.homefix-msk.ap-south-1.amazonaws.com:9098,b-2.homefix-msk.ap-south-1.amazonaws.com:9098"
+        bootstrapServers: "b-1.jihajoor-msk.ap-south-1.amazonaws.com:9098,b-2.jihajoor-msk.ap-south-1.amazonaws.com:9098"
         consumerGroup: chat-service
         topic: booking.events,payment.events
         lagThreshold: "150"

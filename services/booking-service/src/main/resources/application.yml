@@ -1,15 +1,15 @@
 spring:
   servlet:
     multipart:
-      # Job photos and booking media: the service checks its own 50 MB limit (homefix.booking.media),
+      # Job photos and booking media: the service checks its own 50 MB limit (jihajoor.booking.media),
       # so the container must not refuse first at Spring's default 1 MB per file.
       max-file-size: 50MB
       max-request-size: 60MB
   application:
     name: booking-service
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/homefix}
-    username: ${DB_USERNAME:homefix}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/jihajoor}
+    username: ${DB_USERNAME:jihajoor}
     # Required: no default, so the service fails fast when DB_PASSWORD is not set.
     password: ${DB_PASSWORD}
   jpa:
@@ -47,7 +47,7 @@ spring:
 server:
   port: ${SERVER_PORT:8085}
 
-homefix:
+jihajoor:
   security:
     enabled: true
     # HMAC-SHA256 signing secret shared with the shared JwtValidationFilter (Task 4).
@@ -101,12 +101,12 @@ homefix:
     client: ${PRICING_CLIENT:stub}
     base-url: ${PRICING_ENGINE_URL:http://pricing-engine:8086}
     # Timezone the Pricing Engine evaluates night/weekend surcharge windows in; must match its
-    # own homefix.pricing.zone-id (Requirement 6.5, 6.6).
+    # own jihajoor.pricing.zone-id (Requirement 6.5, 6.6).
     zone: ${PRICING_ZONE:UTC}
   media-storage:
     # Selects the active MediaStoragePort adapter: 's3' (production) or 'local' (dev/test).
     provider: ${MEDIA_STORAGE_PROVIDER:local}
-    bucket: ${MEDIA_BUCKET:homefix-media}
+    bucket: ${MEDIA_BUCKET:jihajoor-media}
   outbox:
     enabled: true
 

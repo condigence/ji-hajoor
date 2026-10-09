@@ -12,7 +12,7 @@ variable "stage_name" {
 variable "jwt_issuer_url" {
   description = "JWT issuer URL — should match the Auth Service token issuer claim"
   type        = string
-  default     = "https://auth.homefix.internal"
+  default     = "https://auth.jihajoor.internal"
 }
 
 variable "throttle_burst_limit" {

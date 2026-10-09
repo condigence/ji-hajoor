@@ -15,7 +15,7 @@ spring:
 server:
   port: ${SERVER_PORT:8096}
 
-homefix:
+jihajoor:
   security:
     enabled: true
     # HMAC-SHA256 signing secret shared with the shared JwtValidationFilter (Task 4).
@@ -31,7 +31,7 @@ homefix:
     synchronous-threshold-days: 7
     # Asynchronous download link lifetime (Requirement 20.3). ISO-8601 duration.
     download-link-ttl: 7d
-    download-base-url: ${REPORT_DOWNLOAD_BASE_URL:https://reports.homefix.internal/download}
+    download-base-url: ${REPORT_DOWNLOAD_BASE_URL:https://reports.jihajoor.internal/download}
 
 management:
   endpoints:

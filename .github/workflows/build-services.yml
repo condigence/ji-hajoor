@@ -5,7 +5,7 @@ name: Build services (reusable)
 # pr-checks.yml (pull requests); not triggered on its own.
 #
 # Repository layout this relies on:
-#   shared/homefix-shared-{observability,security,resilience,outbox}
+#   shared/jihajoor-shared-{observability,security,resilience,outbox}
 #       Plain Maven jars (1.0.0-SNAPSHOT) every service depends on through the
 #       local repository. There is no aggregator pom, so they are `mvn install`ed
 #       first and handed to the service jobs as an artifact.
@@ -69,7 +69,7 @@ jobs:
           # Our own artifacts are never cached: they must come from this commit.
           path: |
             ~/.m2/repository
-            !~/.m2/repository/com/homefix
+            !~/.m2/repository/com/jihajoor
           key: m2-${{ runner.os }}-shared-${{ hashFiles('shared/*/pom.xml') }}
           restore-keys: |
             m2-${{ runner.os }}-shared-
@@ -79,10 +79,10 @@ jobs:
           # The four modules depend only on third-party artifacts, never on each
           # other, so any order works; it is fixed to keep logs comparable.
           for module in \
-            homefix-shared-observability \
-            homefix-shared-security \
-            homefix-shared-resilience \
-            homefix-shared-outbox; do
+            jihajoor-shared-observability \
+            jihajoor-shared-security \
+            jihajoor-shared-resilience \
+            jihajoor-shared-outbox; do
             echo "::group::${module}"
             mvn -f "shared/${module}/pom.xml" install
             echo "::endgroup::"
@@ -91,13 +91,13 @@ jobs:
       - name: Stage installed artifacts
         run: |
           mkdir -p shared-m2
-          cp -R ~/.m2/repository/com/homefix/shared/. shared-m2/
+          cp -R ~/.m2/repository/com/jihajoor/shared/. shared-m2/
           find shared-m2 -name '*.jar' -print
 
       - name: Upload shared libraries
         uses: actions/upload-artifact@v4
         with:
-          name: homefix-shared-m2
+          name: jihajoor-shared-m2
           path: shared-m2/
           if-no-files-found: error
           retention-days: 3
@@ -126,7 +126,7 @@ jobs:
     env:
       SERVICE: ${{ matrix.service }}
       SERVICE_DIR: services/${{ matrix.service }}
-      LOCAL_IMAGE: homefix/${{ matrix.service }}:${{ inputs.image-tag }}
+      LOCAL_IMAGE: jihajoor/${{ matrix.service }}:${{ inputs.image-tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -144,7 +144,7 @@ jobs:
           # shared key would only ever store whichever job saved first.
           path: |
             ~/.m2/repository
-            !~/.m2/repository/com/homefix
+            !~/.m2/repository/com/jihajoor
           key: m2-${{ runner.os }}-svc-${{ matrix.service }}-${{ hashFiles(format('services/{0}/pom.xml', matrix.service), 'shared/*/pom.xml') }}
           restore-keys: |
             m2-${{ runner.os }}-svc-${{ matrix.service }}-
@@ -153,13 +153,13 @@ jobs:
       - name: Download shared libraries
         uses: actions/download-artifact@v4
         with:
-          name: homefix-shared-m2
+          name: jihajoor-shared-m2
           path: shared-m2
 
       - name: Install shared libraries into the local repository
         run: |
-          mkdir -p ~/.m2/repository/com/homefix/shared
-          cp -R shared-m2/. ~/.m2/repository/com/homefix/shared/
+          mkdir -p ~/.m2/repository/com/jihajoor/shared
+          cp -R shared-m2/. ~/.m2/repository/com/jihajoor/shared/
           rm -rf shared-m2
 
       - name: Build, test and package

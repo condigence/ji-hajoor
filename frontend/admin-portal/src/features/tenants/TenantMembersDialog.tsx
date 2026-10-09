@@ -125,7 +125,7 @@ export function TenantMembersDialog({ tenant, onClose }: TenantMembersDialogProp
               key="admins"
               label="Administrator's mobile number"
               submitLabel="Add administrator"
-              helperText="They must already have a HomeFix account; they get the agency portal at their next sign-in."
+              helperText="They must already have a Ji-Hajoor account; they get the agency portal at their next sign-in."
               onAdd={(mobile) => addAdmin.mutateAsync(mobile)}
               isPending={addAdmin.isPending}
               error={addAdmin.error}

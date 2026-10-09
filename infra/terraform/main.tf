@@ -1,6 +1,6 @@
 ##############################################################
-# HomeFix Platform — Root Terraform Module
-# Wires together all child modules for the HomeFix AWS infra.
+# Ji-Hajoor Platform — Root Terraform Module
+# Wires together all child modules for the Ji-Hajoor AWS infra.
 #
 # DEPLOYMENT ORDER (two-phase apply required):
 #
@@ -33,7 +33,7 @@ locals {
   name_prefix = "${var.project_name}-${var.environment}"
 
   common_tags = {
-    Project     = "HomeFix"
+    Project     = "Ji-Hajoor"
     Environment = var.environment
     ManagedBy   = "Terraform"
   }

@@ -21,7 +21,7 @@ const rowId = (subcategory: ServiceSubcategory) => `service-${subcategory.id}`;
  * Subcategory selection screen (Requirement 28.7), laid out like a storefront
  * category page: on desktop a left rail of the category's services that jumps
  * to each one, the services as rows with their starting price, typical
- * duration and 24×7 availability (Requirement 3.7), and HomeFix's promises in
+ * duration and 24×7 availability (Requirement 3.7), and Ji-Hajoor's promises in
  * a sticky side card. Mobile is a single column. Booking a row opens the
  * Service Request screen.
  */
@@ -127,7 +127,7 @@ export function SubcategoryScreen() {
               component="h2"
               sx={{ fontSize: '1rem', fontWeight: 700, mb: 2 }}
             >
-              The HomeFix promise
+              The Ji-Hajoor promise
             </Typography>
             <TrustList layout="stack" />
           </Box>

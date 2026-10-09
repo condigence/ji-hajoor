@@ -18,7 +18,7 @@ const PROMISES = [
 ] as const;
 
 /**
- * Splash screen: shows HomeFix Provider branding briefly, then routes
+ * Splash screen: shows Ji-Hajoor Provider branding briefly, then routes
  * authenticated providers to the Dashboard and everyone else to Login.
  */
 export function SplashScreen() {
@@ -59,7 +59,7 @@ export function SplashScreen() {
         <BrandLogo size={76} inverted markOnly />
         <Box>
           <Typography variant="h3" component="h1" fontWeight={800}>
-            HomeFix
+            Ji-Hajoor
           </Typography>
           <Typography variant="overline" sx={{ opacity: 0.75, letterSpacing: '0.2em' }}>
             Provider

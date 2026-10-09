@@ -1,5 +1,5 @@
 ##############################################################
-# VPC Module — HomeFix
+# VPC Module — Ji-Hajoor
 # Creates VPC, public/private/database subnets, IGW, NAT GW,
 # route tables, and VPC flow logs.
 ##############################################################

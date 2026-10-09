@@ -4,7 +4,7 @@
 #
 # Every setting can be overridden from the environment, e.g. for the containerised fallback in
 # docker-compose.infra.yml:
-#   PGPORT=5533 KAFKA_BOOTSTRAP=kafka:9092 KAFKA_CLIENT_NETWORK=homefix-core_default bash docker/...
+#   PGPORT=5533 KAFKA_BOOTSTRAP=kafka:9092 KAFKA_CLIENT_NETWORK=jihajoor-core_default bash docker/...
 
 _LOCAL_INFRA_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -17,8 +17,8 @@ if [ -z "${PSQL:-}" ]; then
 fi
 export PGHOST="${PGHOST:-localhost}"
 export PGPORT="${PGPORT:-5432}"
-export PGUSER="${PGUSER:-homefix}"
-export PGDATABASE="${PGDATABASE:-homefix}"
+export PGUSER="${PGUSER:-jihajoor}"
+export PGDATABASE="${PGDATABASE:-jihajoor}"
 if [ -z "${PGPASSWORD:-}" ] && [ -f "${_LOCAL_INFRA_ROOT}/.env" ]; then
   PGPASSWORD="$(grep -m1 '^DB_PASSWORD=' "${_LOCAL_INFRA_ROOT}/.env" | cut -d= -f2- | tr -d '\r')"
   export PGPASSWORD

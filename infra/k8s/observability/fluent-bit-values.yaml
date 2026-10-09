@@ -13,7 +13,7 @@ serviceAccount:
   create: true
   annotations:
     # IRSA annotation — replace ACCOUNT_ID and OIDC_ID with real values
-    eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT_ID:role/homefix-fluent-bit"
+    eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT_ID:role/jihajoor-fluent-bit"
 
 resources:
   requests:
@@ -76,7 +76,7 @@ config:
     [FILTER]
         Name    record_modifier
         Match   kube.*
-        Record  cluster_name homefix-eks
+        Record  cluster_name jihajoor-eks
         Record  environment production
 
     # Suppress health-check noise
@@ -93,7 +93,7 @@ config:
         Name               cloudwatch_logs
         Match              kube.*_auth-customer-provider_*
         region             ap-south-1
-        log_group_name     /homefix/eks/auth-customer-provider
+        log_group_name     /jihajoor/eks/auth-customer-provider
         log_stream_prefix  ${HOSTNAME}-
         auto_create_group  true
         log_retention_days 90
@@ -106,7 +106,7 @@ config:
         Name               cloudwatch_logs
         Match              kube.*_booking-dispatch-location_*
         region             ap-south-1
-        log_group_name     /homefix/eks/booking-dispatch-location
+        log_group_name     /jihajoor/eks/booking-dispatch-location
         log_stream_prefix  ${HOSTNAME}-
         auto_create_group  true
         log_retention_days 90
@@ -119,7 +119,7 @@ config:
         Name               cloudwatch_logs
         Match              kube.*_payment-invoice-rating_*
         region             ap-south-1
-        log_group_name     /homefix/eks/payment-invoice-rating
+        log_group_name     /jihajoor/eks/payment-invoice-rating
         log_stream_prefix  ${HOSTNAME}-
         auto_create_group  true
         log_retention_days 90
@@ -132,7 +132,7 @@ config:
         Name               cloudwatch_logs
         Match              kube.*_notification-chat-complaint_*
         region             ap-south-1
-        log_group_name     /homefix/eks/notification-chat-complaint
+        log_group_name     /jihajoor/eks/notification-chat-complaint
         log_stream_prefix  ${HOSTNAME}-
         auto_create_group  true
         log_retention_days 90
@@ -145,7 +145,7 @@ config:
         Name               cloudwatch_logs
         Match              kube.*_admin-reporting-promotion_*
         region             ap-south-1
-        log_group_name     /homefix/eks/admin-reporting-promotion
+        log_group_name     /jihajoor/eks/admin-reporting-promotion
         log_stream_prefix  ${HOSTNAME}-
         auto_create_group  true
         log_retention_days 90
@@ -158,20 +158,20 @@ config:
         Name               cloudwatch_logs
         Match              kube.*_catalog-pricing-verification_*
         region             ap-south-1
-        log_group_name     /homefix/eks/catalog-pricing-verification
+        log_group_name     /jihajoor/eks/catalog-pricing-verification
         log_stream_prefix  ${HOSTNAME}-
         auto_create_group  true
         log_retention_days 90
         log_key            log_processed
 
     # -------------------------------------------------------------------------
-    # Catch-all: remaining system pods → /homefix/eks/system
+    # Catch-all: remaining system pods → /jihajoor/eks/system
     # -------------------------------------------------------------------------
     [OUTPUT]
         Name               cloudwatch_logs
         Match              kube.*
         region             ap-south-1
-        log_group_name     /homefix/eks/system
+        log_group_name     /jihajoor/eks/system
         log_stream_prefix  ${HOSTNAME}-
         auto_create_group  true
         log_retention_days 30

@@ -138,7 +138,7 @@ export function ProfileScreen() {
         </Button>
 
         <Typography variant="caption" color="text.secondary" align="center">
-          HomeFix Provider — Earn More. Serve Better.
+          Ji-Hajoor Provider — Earn More. Serve Better.
         </Typography>
       </Stack>
     </AppShell>

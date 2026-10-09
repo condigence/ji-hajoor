@@ -52,7 +52,7 @@ export interface TeamProvider {
 export function notAssignableReason(provider: TeamProvider): string {
   switch (provider.verificationStatus) {
     case 'APPROVED':
-      return 'Under review by HomeFix; cannot take jobs until the review ends.';
+      return 'Under review by Ji-Hajoor; cannot take jobs until the review ends.';
     case null:
     case undefined:
       return 'Verification status unknown right now; try again shortly.';
@@ -105,12 +105,12 @@ export function formatCoordinates(latitude: number, longitude: number): string {
 const TENANT_ERROR_MESSAGES: Record<string, string> = {
   TENANT_NOT_FOUND: 'This agency no longer exists. Refresh the list.',
   TENANT_SUSPENDED:
-    'This agency is suspended, so its portal is read-only. Contact HomeFix support to reactivate it.',
+    'This agency is suspended, so its portal is read-only. Contact Ji-Hajoor support to reactivate it.',
   USER_NOT_FOUND:
-    'No HomeFix account uses that mobile number. The person must sign up before they can be made an administrator.',
+    'No Ji-Hajoor account uses that mobile number. The person must sign up before they can be made an administrator.',
   ADMIN_OF_OTHER_TENANT: 'That person already administers another agency.',
   PROVIDER_NOT_FOUND:
-    'No service provider uses that mobile number. The person must sign up in the HomeFix provider app and create a profile first.',
+    'No service provider uses that mobile number. The person must sign up in the Ji-Hajoor provider app and create a profile first.',
   PROVIDER_IN_OTHER_TENANT: 'That provider already belongs to another agency.',
   BOOKING_NOT_ASSIGNABLE:
     'This request was just assigned by another partner or has moved on, so it has left the queue.',

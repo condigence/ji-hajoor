@@ -1,6 +1,6 @@
 name: Deploy services (reusable)
 
-# Deploys already-built images to one environment with helm/homefix-service.
+# Deploys already-built images to one environment with helm/jihajoor-service.
 # Called by ci.yml (staging) and cd-production.yml (production).
 #
 # Everything below must exist before this can succeed; none of it is created by
@@ -163,7 +163,7 @@ jobs:
         service: ${{ fromJSON(inputs.services) }}
     env:
       SERVICE: ${{ matrix.service }}
-      RELEASE: homefix-${{ matrix.service }}
+      RELEASE: jihajoor-${{ matrix.service }}
       TARGET_ENV: ${{ inputs.environment }}
       IMAGE_TAG: ${{ inputs.image-tag }}
       AWS_REGION: ${{ vars.AWS_REGION }}
@@ -203,9 +203,9 @@ jobs:
             > "${RUNNER_TEMP}/platform-values.json"
           # --atomic rolls the release back (or removes a first install) if the
           # pods do not become ready within the timeout.
-          helm upgrade --install "${RELEASE}" helm/homefix-service \
+          helm upgrade --install "${RELEASE}" helm/jihajoor-service \
             --namespace "${K8S_NAMESPACE}" \
-            -f "helm/homefix-service/values-${TARGET_ENV}.yaml" \
+            -f "helm/jihajoor-service/values-${TARGET_ENV}.yaml" \
             -f "helm/services/${SERVICE}.yaml" \
             -f "${RUNNER_TEMP}/platform-values.json" \
             --set-string image.repository="${ECR_REGISTRY}/${SERVICE}" \

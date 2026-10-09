@@ -160,7 +160,7 @@ export function AssignProviderDialog({
           <Alert severity="error">{tenantErrorMessage(teamQuery.error)}</Alert>
         ) : assignableCount === 0 ? (
           <Alert severity="info">
-            Nobody in your team can be assigned right now: providers must be verified by HomeFix
+            Nobody in your team can be assigned right now: providers must be verified by Ji-Hajoor
             first.{' '}
             <Link component={RouterLink} to="/tenant/team">
               Review your team

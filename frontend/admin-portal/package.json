@@ -1,9 +1,9 @@
 {
-  "name": "@homefix/admin-portal",
+  "name": "@jihajoor/admin-portal",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "HomeFix Admin Portal — dashboard, operational modules, and RBAC-controlled platform administration.",
+  "description": "Ji-Hajoor Admin Portal — dashboard, operational modules, and RBAC-controlled platform administration.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

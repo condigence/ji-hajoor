@@ -49,7 +49,7 @@ CUSTOMER=http://localhost:8082
 GATEWAY=http://localhost:8080
 # psql_q / kafka_tool for the locally installed Postgres and Kafka.
 . "$(dirname "$0")/local-infra.sh"
-DISPATCH_CONTAINER="${DISPATCH_CONTAINER:-homefix-core-dispatch-engine-1}"
+DISPATCH_CONTAINER="${DISPATCH_CONTAINER:-jihajoor-core-dispatch-engine-1}"
 SMS_LOG="${SMS_LOG:-$(dirname "$0")/dev-sms/dev-sms.log}"
 
 PASSED=0
@@ -60,7 +60,7 @@ FAILED=0
 pass() { printf '  PASS  %s\n' "$1"; PASSED=$((PASSED + 1)); }
 fail() { printf '  FAIL  %s\n' "$1"; [ -n "${2:-}" ] && printf '        %s\n' "$2"; FAILED=$((FAILED + 1)); }
 
-printf 'HomeFix outbox flow verification\n\n'
+printf 'Ji-Hajoor outbox flow verification\n\n'
 
 # ---------------------------------------------------------------- schema ----
 printf '== Shared outbox schema\n'
@@ -204,7 +204,7 @@ fi
 printf '\n== Dispatch match and provider acceptance\n'
 BOOKING_ID="$(psql_q "SELECT id FROM booking.booking WHERE reference = '${REFERENCE}';")"
 PROVIDER_LOGIN="$(curl -s -X POST -H "${JSON}" \
-  -d "{\"username\":\"${PROVIDER_USER:-provider}\",\"password\":\"${DEV_SEED_PASSWORD:-HomeFix@2026}\"}" \
+  -d "{\"username\":\"${PROVIDER_USER:-provider}\",\"password\":\"${DEV_SEED_PASSWORD:-JiHajoor@2026}\"}" \
   "${AUTH}/auth/login/password")"
 PROVIDER_TOKEN="$(printf '%s' "${PROVIDER_LOGIN}" | sed 's/.*"accessToken":"\([^"]*\)".*/\1/')"
 if [ -z "${PROVIDER_TOKEN}" ] || [ "${PROVIDER_TOKEN}" = "${PROVIDER_LOGIN}" ]; then
@@ -380,7 +380,7 @@ fi
 
 # ------------------------------------------------------------------ tenant --
 login_token() {
-  curl -s -X POST -H "${JSON}" -d "{\"username\":\"$1\",\"password\":\"${DEV_SEED_PASSWORD:-HomeFix@2026}\"}" \
+  curl -s -X POST -H "${JSON}" -d "{\"username\":\"$1\",\"password\":\"${DEV_SEED_PASSWORD:-JiHajoor@2026}\"}" \
     "${AUTH}/auth/login/password" | sed 's/.*"accessToken":"\([^"]*\)".*/\1/'
 }
 booking_status() { psql_q "SELECT status FROM booking.booking WHERE id = '$1';"; }

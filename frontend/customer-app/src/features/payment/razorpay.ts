@@ -109,7 +109,7 @@ export async function openRazorpayCheckout(
       order_id: checkout.orderId,
       amount: checkout.amount,
       currency: checkout.currency,
-      name: 'HomeFix',
+      name: 'Ji-Hajoor',
       description: checkout.description ? `Booking ${checkout.description}` : 'Booking payment',
       prefill: {
         name: customer.name ?? '',

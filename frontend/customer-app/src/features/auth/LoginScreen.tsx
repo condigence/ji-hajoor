@@ -199,7 +199,7 @@ export function LoginScreen() {
           ) : null}
 
           <Typography variant="h3" component="h1">
-            {step === 'mobile' ? 'Sign in to HomeFix' : 'Enter the code'}
+            {step === 'mobile' ? 'Sign in to Ji-Hajoor' : 'Enter the code'}
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ mt: 1, mb: 3 }}>
             {step === 'mobile' ? (
@@ -283,7 +283,7 @@ function BrandPanel() {
   return (
     <Box
       component="aside"
-      aria-label="About HomeFix"
+      aria-label="About Ji-Hajoor"
       sx={{
         position: 'relative',
         overflow: 'hidden',
@@ -370,7 +370,7 @@ function BrandPanel() {
         variant="caption"
         sx={{ position: 'relative', opacity: 0.6, display: { xs: 'none', md: 'block' } }}
       >
-        © {new Date().getFullYear()} HomeFix · Verified Help. Anytime. Anywhere.
+        © {new Date().getFullYear()} Ji-Hajoor · Verified Help. Anytime. Anywhere.
       </Typography>
     </Box>
   );

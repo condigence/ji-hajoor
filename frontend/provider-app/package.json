@@ -1,9 +1,9 @@
 {
-  "name": "@homefix/provider-app",
+  "name": "@jihajoor/provider-app",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "HomeFix Provider App — manage jobs, upload photos, track earnings, and verification status.",
+  "description": "Ji-Hajoor Provider App — manage jobs, upload photos, track earnings, and verification status.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

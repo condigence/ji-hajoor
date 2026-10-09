@@ -1,5 +1,5 @@
 output "vpc_id" {
-  description = "ID of the HomeFix VPC"
+  description = "ID of the Ji-Hajoor VPC"
   value       = module.vpc.vpc_id
 }
 

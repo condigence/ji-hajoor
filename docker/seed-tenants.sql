@@ -1,4 +1,4 @@
--- Seed a demo Tenant (service agency) for the local HomeFix stack (Requirement MT-15.5).
+-- Seed a demo Tenant (service agency) for the local Ji-Hajoor stack (Requirement MT-15.5).
 --
 -- "Ara Home Services" covers the seeded Ara service area (20 km around Provider One's base) for every
 -- active catalog category, is administered by the `tenantadmin` dev account (+919000000031, TENANT_ADMIN,

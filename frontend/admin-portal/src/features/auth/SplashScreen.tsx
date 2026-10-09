@@ -8,7 +8,7 @@ import { useAuthStore } from '@stores/authStore';
 const SPLASH_DURATION_MS = 1200;
 
 /**
- * Splash screen: shows HomeFix Admin branding briefly, then routes
+ * Splash screen: shows Ji-Hajoor Admin branding briefly, then routes
  * authenticated staff to their landing module ("/" resolves it per role) and
  * everyone else to Login.
  */
@@ -38,7 +38,7 @@ export function SplashScreen() {
       <Stack spacing={2} alignItems="center" textAlign="center">
         <HandymanRoundedIcon sx={{ fontSize: 72 }} aria-hidden />
         <Typography variant="h3" component="h1" fontWeight={700}>
-          HomeFix Admin
+          Ji-Hajoor Admin
         </Typography>
         <Typography variant="subtitle1" sx={{ opacity: 0.9 }}>
           Platform operations, configuration, and oversight.

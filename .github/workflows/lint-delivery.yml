@@ -79,7 +79,7 @@ jobs:
           # can render; real ones come from the deploy workflow.
           cat > /tmp/lint-values.yaml <<'EOF'
           image:
-            repository: lint.invalid/homefix
+            repository: lint.invalid/jihajoor
             tag: 0000000000000000000000000000000000000000
           platform:
             redis:
@@ -91,10 +91,10 @@ jobs:
             for values in helm/services/*.yaml; do
               svc=$(basename "${values}" .yaml)
               echo "::group::${env} / ${svc}"
-              helm lint helm/homefix-service --strict \
-                -f "helm/homefix-service/values-${env}.yaml" -f "${values}" -f /tmp/lint-values.yaml
-              helm template "homefix-${svc}" helm/homefix-service --namespace "${env}" \
-                -f "helm/homefix-service/values-${env}.yaml" -f "${values}" -f /tmp/lint-values.yaml \
+              helm lint helm/jihajoor-service --strict \
+                -f "helm/jihajoor-service/values-${env}.yaml" -f "${values}" -f /tmp/lint-values.yaml
+              helm template "jihajoor-${svc}" helm/jihajoor-service --namespace "${env}" \
+                -f "helm/jihajoor-service/values-${env}.yaml" -f "${values}" -f /tmp/lint-values.yaml \
                 > "/tmp/${env}-${svc}.yaml"
               echo "::endgroup::"
             done

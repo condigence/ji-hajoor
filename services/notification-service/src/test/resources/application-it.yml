@@ -39,7 +39,7 @@ spring:
       properties:
         enable.idempotence: true
 
-homefix:
+jihajoor:
   security:
     # The shared servlet security filter chain is disabled for the IT; these tests do not drive
     # the HTTP surface, only the Kafka consumer path.
@@ -57,4 +57,4 @@ logging:
   level:
     org.apache.kafka: warn
     org.springframework.kafka: warn
-    com.homefix.notification: info
+    com.jihajoor.notification: info

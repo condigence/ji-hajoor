@@ -1,4 +1,4 @@
-/** Default country calling code for HomeFix's India-first launch market. */
+/** Default country calling code for Ji-Hajoor's India-first launch market. */
 export const DEFAULT_COUNTRY_CODE = '+91';
 
 /**

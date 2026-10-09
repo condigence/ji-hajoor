@@ -1,7 +1,7 @@
 import { createTheme, alpha } from '@mui/material/styles';
 
 /**
- * HomeFix Provider design system — mobile-first.
+ * Ji-Hajoor Provider design system — mobile-first.
  *
  * Shares the Customer app's neutrals, typography and component shapes so both
  * apps feel like one product, but leads with teal rather than blue: a provider

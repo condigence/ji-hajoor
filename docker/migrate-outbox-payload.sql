@@ -10,7 +10,7 @@
 -- gets the right type from ddl-auto. This script is only for a volume that already has the
 -- oid column. It is idempotent: on an already-migrated database it does nothing.
 --
---   docker exec -i homefix-core-postgres-1 psql -U homefix -d homefix \
+--   docker exec -i jihajoor-core-postgres-1 psql -U jihajoor -d jihajoor \
 --     -v ON_ERROR_STOP=1 < docker/migrate-outbox-payload.sql
 
 DO $$

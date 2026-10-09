@@ -5,8 +5,8 @@ The Admin Portal does not: it is a desktop console and stays a web app.
 
 | App | Directory | App id | App name |
 | --- | --- | --- | --- |
-| Customer | `frontend/customer-app` | `com.homefix.customer` | HomeFix |
-| Provider | `frontend/provider-app` | `com.homefix.provider` | HomeFix Pro |
+| Customer | `frontend/customer-app` | `com.jihajoor.customer` | Ji-Hajoor |
+| Provider | `frontend/provider-app` | `com.jihajoor.provider` | Ji-Hajoor Pro |
 
 ## What Capacitor gives us, and why we wrap instead of rewriting
 
@@ -179,7 +179,7 @@ Addresses that work from a device:
     `127.0.0.1:8080:8080` mapping or a service bound to `localhost` is not
     reachable from the phone;
   - the host firewall must allow inbound TCP 8080 and 8081 (Windows: accept the
-    firewall prompt, or run `New-NetFirewallRule -DisplayName HomeFix
+    firewall prompt, or run `New-NetFirewallRule -DisplayName Ji-Hajoor
     -Direction Inbound -Protocol TCP -LocalPort 8080,8081 -Action Allow
     -Profile Private` with the Wi-Fi network set to *Private*);
   - check from the phone's browser first: `http://192.168.1.20:8080/` should
@@ -371,7 +371,7 @@ Simulate a location from *Features → Location* in the Simulator menu.
    for your own device (the app expires after 7 days and must be re-run); the
    paid Apple Developer Program is needed for TestFlight and the App Store. If
    the bundle id is taken in your team, change it for local work only; the
-   committed ids are `com.homefix.customer` and `com.homefix.provider`.
+   committed ids are `com.jihajoor.customer` and `com.jihajoor.provider`.
 3. Select the phone as the run destination and press Run. With a free account,
    the first launch is blocked until you trust the developer under *Settings →
    General → VPN & Device Management*.

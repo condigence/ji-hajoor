@@ -21,10 +21,10 @@
 set -uo pipefail
 
 # Any container on the compose network with wget and a shell; the gateway will do.
-RUNNER="${RUNNER:-homefix-core-api-gateway-1}"
+RUNNER="${RUNNER:-jihajoor-core-api-gateway-1}"
 ADMIN_USER="${ADMIN_USER:-admin}"
 # Matches DEV_SEED_PASSWORD, which auth-service seeds the admin account with.
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-${DEV_SEED_PASSWORD:-HomeFix@2026}}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-${DEV_SEED_PASSWORD:-JiHajoor@2026}}"
 
 echo "==> Signing in as ${ADMIN_USER}"
 echo "==> Seeding from inside the compose network"

@@ -95,4 +95,4 @@ jobs:
           context: frontend/${{ matrix.app }}
           file: frontend/${{ matrix.app }}/Dockerfile
           push: false
-          tags: homefix/${{ matrix.app }}:${{ github.sha }}
+          tags: jihajoor/${{ matrix.app }}:${{ github.sha }}

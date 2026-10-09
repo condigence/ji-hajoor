@@ -21,7 +21,7 @@
 -- logs it). Run it after postgres is healthy and before the rebuilt outbox-processor starts:
 --
 --   docker compose -f docker-compose.core.yml up -d postgres
---   docker exec -i homefix-core-postgres-1 psql -U homefix -d homefix \
+--   docker exec -i jihajoor-core-postgres-1 psql -U jihajoor -d jihajoor \
 --     -v ON_ERROR_STOP=1 < docker/migrate-outbox-next-attempt.sql
 --   docker compose -f docker-compose.core.yml up -d --build
 

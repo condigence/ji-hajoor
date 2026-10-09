@@ -1,4 +1,4 @@
-# PrometheusRule — HomeFix platform alerting rules
+# PrometheusRule — Ji-Hajoor platform alerting rules
 # Applied by the Prometheus Operator (kube-prometheus-stack).
 # The `release: kube-prometheus-stack` label lets the operator's default
 # ruleSelector pick this up; with ruleSelectorNilUsesHelmValues=false in
@@ -12,10 +12,10 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: homefix-platform-alerts
+  name: jihajoor-platform-alerts
   namespace: monitoring
   labels:
-    app: homefix
+    app: jihajoor
     release: kube-prometheus-stack
     role: alert-rules
 spec:
@@ -23,7 +23,7 @@ spec:
     # ---------------------------------------------------------------------
     # Latency SLO — p99 > 2s over a 5-minute window
     # ---------------------------------------------------------------------
-    - name: homefix.latency.slo
+    - name: jihajoor.latency.slo
       rules:
         - alert: HighP99LatencyPerService
           # Uses Spring Boot / Micrometer http_server_requests_seconds histogram.
@@ -66,7 +66,7 @@ spec:
     # ---------------------------------------------------------------------
     # Error-rate SLO — 5xx error ratio > 1% over a 5-minute window
     # ---------------------------------------------------------------------
-    - name: homefix.errors.slo
+    - name: jihajoor.errors.slo
       rules:
         - alert: HighErrorRatePerService
           expr: |
@@ -93,7 +93,7 @@ spec:
     # ---------------------------------------------------------------------
     # Kafka consumer lag — event-driven services falling behind
     # ---------------------------------------------------------------------
-    - name: homefix.kafka.consumer
+    - name: jihajoor.kafka.consumer
       rules:
         - alert: KafkaConsumerLagHigh
           expr: |
@@ -145,7 +145,7 @@ spec:
     # ---------------------------------------------------------------------
     # Resource saturation — DB pool, JVM, pods
     # ---------------------------------------------------------------------
-    - name: homefix.resources
+    - name: jihajoor.resources
       rules:
         - alert: DbConnectionPoolNearExhaustion
           expr: |
@@ -197,7 +197,7 @@ spec:
     # ---------------------------------------------------------------------
     # Cache — Redis hit ratio degradation
     # ---------------------------------------------------------------------
-    - name: homefix.cache
+    - name: jihajoor.cache
       rules:
         - alert: RedisCacheHitRatioLow
           expr: |

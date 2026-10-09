@@ -1,5 +1,5 @@
 ##############################################################
-# Secrets Manager Module — HomeFix
+# Secrets Manager Module — Ji-Hajoor
 # Placeholder secrets for all 19 microservices.
 # Each secret stores a JSON envelope; the actual values are
 # rotated/updated by the service CI/CD pipeline or rotation

@@ -20,7 +20,7 @@ const progress = keyframes`
 `;
 
 /**
- * Splash screen (Requirement 28.7): shows HomeFix branding briefly, then
+ * Splash screen (Requirement 28.7): shows Ji-Hajoor branding briefly, then
  * routes authenticated users to Home and everyone else to Login.
  */
 export function SplashScreen() {
@@ -57,7 +57,7 @@ export function SplashScreen() {
         <BrandLogo size={72} inverted markOnly />
         <Box>
           <Typography variant="h1" component="h1" sx={{ fontSize: { xs: '2.5rem', md: '3rem' } }}>
-            HomeFix
+            Ji-Hajoor
           </Typography>
           <Typography variant="h6" component="p" sx={{ opacity: 0.85, mt: 1, fontWeight: 500 }}>
             Verified Help. Anytime. Anywhere.
@@ -65,7 +65,7 @@ export function SplashScreen() {
         </Box>
         <Box
           role="progressbar"
-          aria-label="Loading HomeFix"
+          aria-label="Loading Ji-Hajoor"
           sx={{
             width: 120,
             height: 4,

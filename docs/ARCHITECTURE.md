@@ -1,4 +1,4 @@
-# HomeFix — Architecture and Diagrams
+# Ji-Hajoor — Architecture and Diagrams
 
 **Audience:** engineers joining the platform, and anyone reviewing its design.
 **Companion documents:** [API_CONTRACTS.md](API_CONTRACTS.md) for JSON payloads, [LOCAL_ACCESS.md](LOCAL_ACCESS.md) for test users and URLs, [../CODEBASE_REVIEW.md](../CODEBASE_REVIEW.md) for the findings audit.
@@ -9,7 +9,7 @@ Diagrams are Mermaid and render natively on GitHub. Where a diagram shows an int
 
 ## 1. System context
 
-HomeFix is an on-demand home-services marketplace. Customers book verified providers for scheduled or emergency jobs (plumbing, electrical, AC, cleaning). Providers are onboarded through document verification and a background check, then matched to jobs by a dispatch engine.
+Ji-Hajoor is an on-demand home-services marketplace. Customers book verified providers for scheduled or emergency jobs (plumbing, electrical, AC, cleaning). Providers are onboarded through document verification and a background check, then matched to jobs by a dispatch engine.
 
 ```mermaid
 graph TB
@@ -196,7 +196,7 @@ sequenceDiagram
     SVC-->>SPA: 200 booking JSON
 ```
 
-The gateway's introspection call has a response timeout (3 s by default) and resolves auth-service through the JDK resolver so a recreated container is followed (review 14.1). Active results are reused for at most `homefix.gateway.auth.introspection-cache.ttl` (30 s by default) and never past the token's `exp`, keyed by a SHA-256 of the token and bounded to 10,000 entries; inactive results and failed calls are never cached, so an auth-service outage still denies. Concurrent requests carrying the same uncached token share one call. The cost is revocation latency: if access tokens ever become revocable before `exp`, the gateway honours a revocation within the ttl. Today logout revokes only the refresh token, so nothing is lost. Set the ttl to `0` to introspect every request.
+The gateway's introspection call has a response timeout (3 s by default) and resolves auth-service through the JDK resolver so a recreated container is followed (review 14.1). Active results are reused for at most `jihajoor.gateway.auth.introspection-cache.ttl` (30 s by default) and never past the token's `exp`, keyed by a SHA-256 of the token and bounded to 10,000 entries; inactive results and failed calls are never cached, so an auth-service outage still denies. Concurrent requests carrying the same uncached token share one call. The cost is revocation latency: if access tokens ever become revocable before `exp`, the gateway honours a revocation within the ttl. Today logout revokes only the refresh token, so nothing is lost. Set the ttl to `0` to introspect every request.
 
 The role filter used to be the larger problem. It passes through when no rule matches, and until recently no service except admin and reporting configured any rule, so every staff endpoint accepted any valid token. Every service behind the gateway except the outbox relay (18 of them) now registers rules, including one for every Admin Portal and Tenant Portal path. Public paths are still deliberately left unruled, because this filter runs inside the security chain and a rule on a public path would turn it into a 401. Rules are matched against the decoded path within the application, without the servlet context path, with one trailing slash removed and case ignored, rather than against the raw request URI. A `GET` rule also governs `HEAD`. Anything Spring Security's `StrictHttpFirewall` refuses, such as `;` path parameters, encoded `/`, `\`, `.` or `%`, `//`, `/./` or `/../`, is answered with 400 before any rule is evaluated. Before this change, `/admin;x/users`, `/%61dmin/users` and `HEAD /admin/users` each reached the admin handler without a role check. See review sections 8.2 and 12.1.
 
@@ -704,7 +704,7 @@ graph TB
 
 The outbox tables are the deliberate exception to the one-schema-per-service rule. They are infrastructure rather than domain data, and every producer plus the relay must agree on where they live, so they sit in a single shared `outbox` schema. Atomicity is unaffected: a producer still writes its event row in the same transaction as its domain change, in the same database. Before this, each producer wrote into its own schema while the relay polled another, so no event was ever published.
 
-Every database-backed service runs Flyway from `src/main/resources/db/migration`, and Hibernate only validates (`ddl-auto: validate`, also in Compose). `docker/init-db.sql` creates the schemas only. Each `V1__baseline` was generated from the entities and must not be edited; later changes are incremental (`baseline-on-migrate` lets a database created by the old `ddl-auto=update` setup adopt them). The shared outbox tables ship as a repeatable migration in `homefix-shared-outbox`. See review section 16.7. Migrations after the baseline:
+Every database-backed service runs Flyway from `src/main/resources/db/migration`, and Hibernate only validates (`ddl-auto: validate`, also in Compose). `docker/init-db.sql` creates the schemas only. Each `V1__baseline` was generated from the entities and must not be edited; later changes are incremental (`baseline-on-migrate` lets a database created by the old `ddl-auto=update` setup adopt them). The shared outbox tables ship as a repeatable migration in `jihajoor-shared-outbox`. See review section 16.7. Migrations after the baseline:
 
 | Service | Migration | Change |
 | --- | --- | --- |
@@ -1430,7 +1430,7 @@ graph TB
     S --> SMS
 ```
 
-Postgres, Kafka and Redis are the ones installed on the machine, reached from the containers through `host.docker.internal` (override with `HOMEFIX_DB_HOST`, `HOMEFIX_REDIS_HOST`, `HOMEFIX_KAFKA_BOOTSTRAP_SERVERS`; `docker-compose.infra.yml` runs them as containers instead). Kafka does not start on its own after a reboot, and on native Windows it runs with retention and the log cleaner off because it cannot delete segments. Setup is in [LOCAL_ACCESS.md](LOCAL_ACCESS.md) section 1.
+Postgres, Kafka and Redis are the ones installed on the machine, reached from the containers through `host.docker.internal` (override with `JIHAJOOR_DB_HOST`, `JIHAJOOR_REDIS_HOST`, `JIHAJOOR_KAFKA_BOOTSTRAP_SERVERS`; `docker-compose.infra.yml` runs them as containers instead). Kafka does not start on its own after a reboot, and on native Windows it runs with retention and the log cleaner off because it cannot delete segments. Setup is in [LOCAL_ACCESS.md](LOCAL_ACCESS.md) section 1.
 
 Each service container has a `wget` readiness healthcheck with a 300 s start period and a bounded `on-failure` restart policy. Images are runtime-only: the fat jar must already exist under each service's `target/`. Every Java service has `mem_limit: 448m` and a `JAVA_TOOL_OPTIONS` heap percentage, because twenty unbounded JVMs exhaust the WSL VM.
 
@@ -1443,7 +1443,7 @@ Settings that differ from the code defaults locally:
 | `TENANT_ASSIGNMENT_TIMEOUT` | booking-service | `PT60M` | how long a booking may wait for a Tenant assignment; same in Helm |
 | `KAFKA_BOOTSTRAP_SERVERS` | booking-service and the other consumers | `host.docker.internal:9094` | booking-service now consumes `PaymentCompleted` |
 | `INTERNAL_API_KEY` | every service with `/internal/**` callers or endpoints | from `.env` | shared service credential |
-| `DEV_SEED_ENABLED`, `DEV_SEED_PASSWORD` | auth-service | from `.env` (`true`, `HomeFix@2026`) | seeds the test accounts; Compose's own default is off |
+| `DEV_SEED_ENABLED`, `DEV_SEED_PASSWORD` | auth-service | from `.env` (`true`, `JiHajoor@2026`) | seeds the test accounts; Compose's own default is off |
 
 ### 10.2 AWS target (Terraform)
 
@@ -1478,7 +1478,7 @@ Terraform is the most complete infrastructure layer. Database migrations now exi
 
 ### 10.3 Namespace and chart layout
 
-All services share one Helm chart, `helm/homefix-service`, with one release per service (`homefix-<service>`) rendered from `values-<environment>.yaml` plus `helm/services/<service>.yaml`. Resources are named after the bare service, so in-cluster DNS matches Compose (`auth-service:8081`). The pipeline deploys into the namespace configured on each GitHub environment, while the Kubernetes manifests under `infra/k8s` still assume six domain namespaces. Reconciling these is step 12 of the roadmap.
+All services share one Helm chart, `helm/jihajoor-service`, with one release per service (`jihajoor-<service>`) rendered from `values-<environment>.yaml` plus `helm/services/<service>.yaml`. Resources are named after the bare service, so in-cluster DNS matches Compose (`auth-service:8081`). The pipeline deploys into the namespace configured on each GitHub environment, while the Kubernetes manifests under `infra/k8s` still assume six domain namespaces. Reconciling these is step 12 of the roadmap.
 
 ---
 
@@ -1507,9 +1507,9 @@ Resilience is meant to wrap every synchronous call through the shared `Resilient
 
 ## 12. Reading order for newcomers
 
-1. This document, then `.kiro/specs/homefix-platform/requirements.md` for the product rules.
+1. This document, then `.kiro/specs/jihajoor-platform/requirements.md` for the product rules.
 2. [LOCAL_ACCESS.md](LOCAL_ACCESS.md) to get the stack running and log in as each role.
 3. [API_CONTRACTS.md](API_CONTRACTS.md) when wiring a client or a new service.
-4. `shared/homefix-shared-security` and `shared/homefix-shared-outbox`, which every service depends on.
+4. `shared/jihajoor-shared-security` and `shared/jihajoor-shared-outbox`, which every service depends on.
 5. `services/booking-service`, the richest domain model and the best example of the intended patterns.
 6. [../CODEBASE_REVIEW.md](../CODEBASE_REVIEW.md) before trusting any integration to work end to end.

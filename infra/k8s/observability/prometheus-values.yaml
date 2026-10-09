@@ -308,7 +308,7 @@ alertmanager:
       - name: "sns-warning"
         sns_configs:
           - api_url: "https://sns.ap-south-1.amazonaws.com"
-            topic_arn: "arn:aws:sns:ap-south-1:ACCOUNT_ID:homefix-alerts"
+            topic_arn: "arn:aws:sns:ap-south-1:ACCOUNT_ID:jihajoor-alerts"
             attributes:
               severity: "{{ .CommonLabels.severity }}"
     templates:

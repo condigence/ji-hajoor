@@ -1,6 +1,6 @@
-# HomeFix Provider App
+# Ji-Hajoor Provider App
 
-React + TypeScript + Vite app for HomeFix service providers: take job offers,
+React + TypeScript + Vite app for Ji-Hajoor service providers: take job offers,
 answer jobs their agency assigns, run a job from "on my way" to completion
 with photos, parts and location sharing, follow the customer's payment, and
 track earnings, settlements and verification. Mobile-first, built with the same
@@ -125,7 +125,7 @@ realtime stream, so it has no `VITE_REALTIME_BASE_URL`.
 
 ## Mobile builds (Android and iOS)
 
-App id `com.homefix.provider`, app name **HomeFix Pro**. The native projects
+App id `com.jihajoor.provider`, app name **Ji-Hajoor Pro**. The native projects
 live in `android/` and `ios/`. Set absolute backend URLs in `.env` first (the
 commented native section of `.env.example` has emulator and LAN examples), then:
 
@@ -174,7 +174,7 @@ Shared layout pieces:
 
 - `components/AppShell.tsx` — sticky app bar (branded on top-level tabs, titled
   with a back button on drill-in screens) plus the fixed bottom navigation.
-- `components/BrandLogo.tsx` — the HomeFix mark and wordmark.
+- `components/BrandLogo.tsx` — the Ji-Hajoor mark and wordmark.
 - `components/QueryStateView.tsx` — the standard loading / error / empty states.
 
 ## Project structure

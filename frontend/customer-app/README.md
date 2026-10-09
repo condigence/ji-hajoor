@@ -1,6 +1,6 @@
-# HomeFix Customer App
+# Ji-Hajoor Customer App
 
-React + TypeScript + Vite app for HomeFix customers: find a service, book it,
+React + TypeScript + Vite app for Ji-Hajoor customers: find a service, book it,
 follow the professional to the door, approve price changes, pay, and look back
 at past bookings. It runs in the browser and ships as Android and iOS apps
 from the same code (Capacitor, see [Mobile builds](#mobile-builds-android-and-ios)).
@@ -135,7 +135,7 @@ not an absolute URL (`assertRuntimeConfig` in `src/config/env.ts`).
 
 ## Mobile builds (Android and iOS)
 
-App id `com.homefix.customer`, app name **HomeFix**. The native projects live in
+App id `com.jihajoor.customer`, app name **Ji-Hajoor**. The native projects live in
 `android/` and `ios/`. Set absolute backend URLs in `.env` first (the commented
 native section of `.env.example` has emulator and LAN examples), then:
 
@@ -186,7 +186,7 @@ Shared layout pieces:
   and the fixed bottom tab bar. Top-level pages also get the site footer.
 - `components/ServiceSearchField.tsx` — the header/home search bound to `?q=`.
 - `components/ProgressTimeline.tsx` — the booking journey timeline.
-- `components/BrandLogo.tsx` — the HomeFix mark and wordmark.
+- `components/BrandLogo.tsx` — the Ji-Hajoor mark and wordmark.
 - `components/QueryStateView.tsx`, `components/StateViews.tsx` — the standard
   loading / error / empty states.
 

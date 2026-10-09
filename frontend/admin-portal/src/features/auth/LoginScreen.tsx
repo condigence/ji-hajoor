@@ -213,7 +213,7 @@ export function LoginScreen() {
               variant="body1"
               sx={{ mt: 2, maxWidth: 420, color: 'rgba(255,255,255,0.76)' }}
             >
-              HomeFix Operations brings bookings, providers, payments and support into a single
+              Ji-Hajoor Operations brings bookings, providers, payments and support into a single
               workspace.
             </Typography>
           </Box>
@@ -253,7 +253,7 @@ export function LoginScreen() {
           variant="caption"
           sx={{ position: 'relative', color: 'rgba(255,255,255,0.55)' }}
         >
-          © {new Date().getFullYear()} HomeFix. Internal staff console.
+          © {new Date().getFullYear()} Ji-Hajoor. Internal staff console.
         </Typography>
       </Box>
 

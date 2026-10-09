@@ -9,8 +9,8 @@ import type { CapacitorConfig } from '@capacitor/cli';
  * absolute — src/config/env.ts refuses to start a native build otherwise.
  */
 const config: CapacitorConfig = {
-  appId: 'com.homefix.customer',
-  appName: 'HomeFix',
+  appId: 'com.jihajoor.customer',
+  appName: 'Ji-Hajoor',
   webDir: 'dist',
 };
 

@@ -1,7 +1,7 @@
 ##############################################################
-# Kubernetes Namespaces Module — HomeFix
+# Kubernetes Namespaces Module — Ji-Hajoor
 # Creates the six namespaces that group the 19 microservices
-# as defined in the HomeFix architecture:
+# as defined in the Ji-Hajoor architecture:
 #
 #   auth-customer-provider          → Auth, Customer, Provider
 #   booking-dispatch-location       → Booking, Dispatch, Location
@@ -48,11 +48,11 @@ resource "kubernetes_namespace" "this" {
 
     labels = merge(var.labels, {
       "app.kubernetes.io/managed-by" = "terraform"
-      "homefix.io/tier"              = each.value.tier
+      "jihajoor.io/tier"              = each.value.tier
     })
 
     annotations = {
-      "homefix.io/description" = each.value.description
+      "jihajoor.io/description" = each.value.description
     }
   }
 }
@@ -184,7 +184,7 @@ resource "kubernetes_network_policy" "allow_from_api_gateway" {
       from {
         namespace_selector {
           match_labels = {
-            "homefix.io/tier" = "ingress"
+            "jihajoor.io/tier" = "ingress"
           }
         }
       }

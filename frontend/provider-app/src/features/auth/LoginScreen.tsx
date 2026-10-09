@@ -138,7 +138,7 @@ export function LoginScreen() {
           <BrandLogo size={44} inverted showRole />
           <Box>
             <Typography variant="h4" component="h1">
-              {step === 'mobile' ? 'HomeFix for Providers' : 'Verify your number'}
+              {step === 'mobile' ? 'Ji-Hajoor for Providers' : 'Verify your number'}
             </Typography>
             <Typography variant="body2" sx={{ opacity: 0.85, mt: 0.5 }}>
               {step === 'mobile'

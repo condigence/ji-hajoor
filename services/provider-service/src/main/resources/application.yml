@@ -2,8 +2,8 @@ spring:
   application:
     name: provider-service
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/homefix}
-    username: ${DB_USERNAME:homefix}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/jihajoor}
+    username: ${DB_USERNAME:jihajoor}
     # Required: no default, so the service fails fast when DB_PASSWORD is not set.
     password: ${DB_PASSWORD}
   jpa:
@@ -25,7 +25,7 @@ spring:
 server:
   port: ${SERVER_PORT:8083}
 
-homefix:
+jihajoor:
   security:
     enabled: true
     # HMAC-SHA256 signing secret shared with the shared JwtValidationFilter (Task 4).
@@ -36,14 +36,14 @@ homefix:
     # 'http' reads live active jobs from the Booking Service; 'stub' reports none (Req 28.8).
     client: ${BOOKING_CLIENT:stub}
     base-url: ${BOOKING_SERVICE_URI:http://booking-service:8084}
-    # Must match the Booking Service's homefix.booking.internal-api-key.
+    # Must match the Booking Service's jihajoor.booking.internal-api-key.
     internal-api-key: ${INTERNAL_API_KEY:}
   catalog:
     base-url: ${CATALOG_SERVICE_URI:http://catalog-service:8085}
   verification:
     # Batch APPROVED lookup behind the dispatch eligibility search (Req 5.10, 8.2).
     base-url: ${VERIFICATION_SERVICE_URL:http://verification-service:8094}
-    # Must match the Verification Service's homefix.verification.internal-api-key. When unset,
+    # Must match the Verification Service's jihajoor.verification.internal-api-key. When unset,
     # no provider can be confirmed APPROVED and every eligibility search returns nobody.
     internal-api-key: ${INTERNAL_API_KEY:}
   provider:

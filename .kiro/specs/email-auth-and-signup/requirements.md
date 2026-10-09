@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Today a HomeFix account is created by mobile OTP (customer and provider apps) or seeded for local use
+Today a Ji-Hajoor account is created by mobile OTP (customer and provider apps) or seeded for local use
 (staff). Password sign-in exists only by username, and the customer and provider apps offer no password
 sign-in at all. Staff accounts and agency (Tenant) administrators can only be created by a platform admin.
 
@@ -81,7 +81,7 @@ I can sign in without waiting for an SMS code.
 
 ### Requirement 2: Email and Password Sign-In
 
-**User Story:** As any HomeFix user, I want to sign in with my email and password in the app I use.
+**User Story:** As any Ji-Hajoor user, I want to sign in with my email and password in the app I use.
 
 #### Acceptance Criteria
 
@@ -121,7 +121,7 @@ also sign in with them.
 
 ### Requirement 5: Agency Sign-Up
 
-**User Story:** As a service company, I want to register on HomeFix from the Admin Portal, so that I can
+**User Story:** As a service company, I want to register on Ji-Hajoor from the Admin Portal, so that I can
 manage my team and take requests once approved.
 
 #### Acceptance Criteria

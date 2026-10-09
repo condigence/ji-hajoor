@@ -1,4 +1,4 @@
-# HomeFix — JSON Contracts
+# Ji-Hajoor — JSON Contracts
 
 Every field name and type here was read out of the Java records and controllers, not inferred. Where a producer and a consumer disagree about the same event, both shapes are shown and the mismatch is called out, because several of those disagreements are live defects.
 
@@ -10,7 +10,7 @@ Every field name and type here was read out of the Java records and controllers,
 
 **Authentication.** The shared `JwtValidationFilter` reads `Authorization: Bearer <jwt>`, takes the user id from `sub` and roles from the `roles` claim, and grants `ROLE_<NAME>` authorities. Tokens are HS384-signed. `CorrelationIdFilter` propagates `X-Correlation-ID` into the logging context.
 
-**Authorization, as actually configured.** The shared `RbacEnforcementFilter` matches `"METHOD /path/**" → [roles]` entries from `homefix.security.rbac.endpoint-roles`, first match wins. No service defines that map in YAML. Every servlet service populates it programmatically in a `*RbacConfig` class, eighteen in all: admin, auth, booking, catalog, chat, complaint, customer, dispatch, invoice, location, notification, payment, pricing, promotion, provider, rating-review, reporting and verification. Only api-gateway (reactive, no shared filters) and outbox-processor (no web API) have none. Where no rule matches, the filter still passes the request through, so that endpoint is **authenticated only, with no role rule configured**, whatever the Javadoc claims. Entries below say so explicitly rather than repeating the intent. Some services end their map with an `/admin/**` catch-all, which acts as deny-by-default within that prefix only. Many handlers add an ownership check on top of the role rule. The path id must be the caller's unless the caller is staff, and the staff set is usually `ADMIN`, `SUPER_ADMIN`, `FINANCE_ADMIN`, `SUPPORT_AGENT`, `DISPATCHER`. A refusal is 403 `FORBIDDEN`, or a 404 where existence must not leak.
+**Authorization, as actually configured.** The shared `RbacEnforcementFilter` matches `"METHOD /path/**" → [roles]` entries from `jihajoor.security.rbac.endpoint-roles`, first match wins. No service defines that map in YAML. Every servlet service populates it programmatically in a `*RbacConfig` class, eighteen in all: admin, auth, booking, catalog, chat, complaint, customer, dispatch, invoice, location, notification, payment, pricing, promotion, provider, rating-review, reporting and verification. Only api-gateway (reactive, no shared filters) and outbox-processor (no web API) have none. Where no rule matches, the filter still passes the request through, so that endpoint is **authenticated only, with no role rule configured**, whatever the Javadoc claims. Entries below say so explicitly rather than repeating the intent. Some services end their map with an `/admin/**` catch-all, which acts as deny-by-default within that prefix only. Many handlers add an ownership check on top of the role rule. The path id must be the caller's unless the caller is staff, and the staff set is usually `ADMIN`, `SUPER_ADMIN`, `FINANCE_ADMIN`, `SUPPORT_AGENT`, `DISPATCHER`. A refusal is 403 `FORBIDDEN`, or a 404 where existence must not leak.
 
 **Service-to-service calls** go to `/internal/**` paths, which the gateway does not route. They carry the shared `INTERNAL_API_KEY` in `X-Internal-Api-Key`, compared in constant time, with no default. A per-service `InternalApiKeyFilter` grants `ROLE_INTERNAL` and answers a missing or wrong key with 401 `{"errorCode":"INTERNAL_AUTH_FAILED","message":...}`, without the rest of the envelope. A user's JWT never opens these paths.
 
@@ -114,7 +114,7 @@ Global filters, in order, each rejection using the shared envelope:
 | -100 | `HttpsRedirectGatewayFilter` | 301 when `X-Forwarded-Proto` is not https and enforcement is on |
 | -90 | `CorrelationIdGatewayFilter` | Sets or echoes `X-Correlation-ID` |
 | -80 | `WafInspectionGatewayFilter` | Regex scan of path, query values, `User-Agent`, `Referer`, `X-Forwarded-For`, `Cookie` → 400 |
-| -70 | `JwtIntrospectionGatewayFilter` | Calls `GET /auth/introspect`; 401 unless the path starts with `/auth/register`, `/auth/login`, `/auth/token/refresh`, `/auth/introspect`, `/actuator`, `/health`. An active result is reused for up to `homefix.gateway.auth.introspection-cache.ttl` (default `30s`, env `INTROSPECTION_CACHE_TTL`, `0` disables) and never past the token's `exp`. Entries are keyed by the token's SHA-256 and capped at `max-entries` (default 10000, env `INTROSPECTION_CACHE_MAX_ENTRIES`). Inactive results and failed or timed-out calls are never cached, and they still give 401 |
+| -70 | `JwtIntrospectionGatewayFilter` | Calls `GET /auth/introspect`; 401 unless the path starts with `/auth/register`, `/auth/login`, `/auth/token/refresh`, `/auth/introspect`, `/actuator`, `/health`. An active result is reused for up to `jihajoor.gateway.auth.introspection-cache.ttl` (default `30s`, env `INTROSPECTION_CACHE_TTL`, `0` disables) and never past the token's `exp`. Entries are keyed by the token's SHA-256 and capped at `max-entries` (default 10000, env `INTROSPECTION_CACHE_MAX_ENTRIES`). Inactive results and failed or timed-out calls are never cached, and they still give 401 |
 | -60 | `OtpRateLimitGatewayFilter` | On `/auth/register/otp`, over 5 per phone per hour → 429, `Retry-After: 3600` |
 | -50 | `RateLimitGatewayFilter` | 60-second window per subject: CUSTOMER 100, provider 60, default 60 → 429, `Retry-After: 60` |
 
@@ -248,7 +248,7 @@ Refresh rotates within a token family and re-resolves roles. Replaying an alread
   "active": true,
   "sub": "bc0551ae-b3fb-4571-8587-017fa39096a4",
   "roles": ["CUSTOMER"],
-  "iss": "homefix-auth",
+  "iss": "jihajoor-auth",
   "exp": 1789189800
 }
 ```
@@ -314,7 +314,7 @@ Port 8082, rooted at `/customers`, plus one service-to-service endpoint under `/
 {
   "displayName": "Ananya Rao",
   "email": "ananya.rao@example.com",
-  "photoUrl": "https://cdn.homefix.example/photos/bc0551ae.jpg"
+  "photoUrl": "https://cdn.jihajoor.example/photos/bc0551ae.jpg"
 }
 ```
 
@@ -326,7 +326,7 @@ Response 200:
 {
   "id": "bc0551ae-b3fb-4571-8587-017fa39096a4",
   "userId": "bc0551ae-b3fb-4571-8587-017fa39096a4",
-  "photoUrl": "https://cdn.homefix.example/photos/bc0551ae.jpg"
+  "photoUrl": "https://cdn.jihajoor.example/photos/bc0551ae.jpg"
 }
 ```
 
@@ -385,7 +385,7 @@ Response 201:
 
 **DELETE /customers/{id}/addresses/{addressId}** returns 204. A missing address gives 404 `CUSTOMER_NOT_FOUND`. Booking-service is then asked whether an active booking references the address, through `GET /internal/bookings/active?customerId=&addressId=` with `X-Internal-Api-Key`. A non-null `bookingReference` gives `ADDRESS_IN_USE`. An unreachable or refusing booking-service gives `BOOKING_SERVICE_UNAVAILABLE` rather than risking a wrong delete. A booking waiting in a Tenant queue (`AWAITING_ASSIGNMENT`) does not count as active. Deleting the default promotes the most recently created remaining address.
 
-**GET /internal/addresses/{addressId}** is service-to-service only. `BookingCreated` carries the booking's `addressId`, not coordinates, so dispatch-engine resolves it here before matching a provider. booking-service reads it too, for the job address on the booking detail and the Tenant queue. The caller must send the platform's shared service credential in `X-Internal-Api-Key` (the `INTERNAL_API_KEY` value booking-service's and auth-service's `/internal/**` endpoints also use; customer-service reads it as `homefix.customer.internal-api-key`). The key is compared in constant time and has no default: with none configured every internal call is refused. A user's JWT does not grant access, even the address owner's or a staff role. The gateway routes only `/customers/**` here and has no `/internal/**` route, so this path cannot be reached from outside the cluster.
+**GET /internal/addresses/{addressId}** is service-to-service only. `BookingCreated` carries the booking's `addressId`, not coordinates, so dispatch-engine resolves it here before matching a provider. booking-service reads it too, for the job address on the booking detail and the Tenant queue. The caller must send the platform's shared service credential in `X-Internal-Api-Key` (the `INTERNAL_API_KEY` value booking-service's and auth-service's `/internal/**` endpoints also use; customer-service reads it as `jihajoor.customer.internal-api-key`). The key is compared in constant time and has no default: with none configured every internal call is refused. A user's JWT does not grant access, even the address owner's or a staff role. The gateway routes only `/customers/**` here and has no `/internal/**` route, so this path cannot be reached from outside the cluster.
 
 Response 200:
 
@@ -441,7 +441,7 @@ Port 8083. `/providers/{id}` for the provider's own profile and wallet, `/admin/
 | GET | `/internal/providers/summaries?ids=` | service credential | Names and primary skills by id |
 | POST | `/internal/providers/{providerId}/earnings` | service credential | Credit a paid booking's earning, from payment-service |
 
-`/internal/**` requires `X-Internal-Api-Key` matching `homefix.provider.internal-api-key` (`INTERNAL_API_KEY`), compared in constant time, with no default. A missing or wrong key gets 401 `{"errorCode":"INTERNAL_AUTH_FAILED","message":...}` from the filter, without the rest of the envelope. The gateway has no `/internal/**` route.
+`/internal/**` requires `X-Internal-Api-Key` matching `jihajoor.provider.internal-api-key` (`INTERNAL_API_KEY`), compared in constant time, with no default. A missing or wrong key gets 401 `{"errorCode":"INTERNAL_AUTH_FAILED","message":...}` from the filter, without the rest of the envelope. The gateway has no `/internal/**` route.
 
 **PUT /providers/{id}/profile**
 
@@ -681,7 +681,7 @@ Response 201, and the same body with 200 from the status read and all five admin
   "documents": [
     {
       "documentType": "GOVERNMENT_ID",
-      "storageRef": "s3://homefix-documents/dd73094d/GOVERNMENT_ID/1e7b4d09",
+      "storageRef": "s3://jihajoor-documents/dd73094d/GOVERNMENT_ID/1e7b4d09",
       "uploadedAt": "2026-09-11T09:30:00Z"
     }
   ],
@@ -784,7 +784,7 @@ Staff here is `ADMIN`, `SUPER_ADMIN`, `FINANCE_ADMIN`, `SUPPORT_AGENT` and `DISP
 | GET | `/internal/bookings/provider/{providerId}/active` | service credential | A provider's in-flight jobs, for provider-service's dashboard |
 | GET | `/internal/bookings/active?customerId=&addressId=` | service credential | Whether an active booking uses an address, for customer-service |
 
-`/internal/**` requires `X-Internal-Api-Key` equal to `homefix.booking.internal-api-key` (`INTERNAL_API_KEY`, no default), compared in constant time. A missing or wrong key gets 401 `{"errorCode":"INTERNAL_AUTH_FAILED","message":...}` from the filter, without the rest of the envelope. The gateway has no `/internal/**` route. The internal endpoints take the booking UUID only; a non-UUID gives 400 `VALIDATION_ERROR`.
+`/internal/**` requires `X-Internal-Api-Key` equal to `jihajoor.booking.internal-api-key` (`INTERNAL_API_KEY`, no default), compared in constant time. A missing or wrong key gets 401 `{"errorCode":"INTERNAL_AUTH_FAILED","message":...}` from the filter, without the rest of the envelope. The gateway has no `/internal/**` route. The internal endpoints take the booking UUID only; a non-UUID gives 400 `VALIDATION_ERROR`.
 
 **POST /bookings**
 
@@ -1045,7 +1045,7 @@ Port 8085. `/catalog` is the public read surface; `/admin/catalog` is CRUD. Only
     "id": "3f1a6c2e-9b4d-4f7a-8c21-5d0e7a9b1c34",
     "name": "Plumbing",
     "description": "Taps, pipes, drains and water heaters",
-    "iconUrl": "https://cdn.homefix.example/icons/plumbing.svg",
+    "iconUrl": "https://cdn.jihajoor.example/icons/plumbing.svg",
     "displayOrder": 1,
     "subcategories": [
       {
@@ -1068,7 +1068,7 @@ Port 8085. `/catalog` is the public read surface; `/admin/catalog` is CRUD. Only
 {
   "name": "Plumbing",
   "description": "Taps, pipes, drains and water heaters",
-  "iconUrl": "https://cdn.homefix.example/icons/plumbing.svg",
+  "iconUrl": "https://cdn.jihajoor.example/icons/plumbing.svg",
   "displayOrder": 1
 }
 ```
@@ -1274,7 +1274,7 @@ A non-staff caller acting on another customer's transaction gets 403 `FORBIDDEN`
 }
 ```
 
-`bookingId` and `method` are `@NotNull`. `method` is one of `UPI`, `CREDIT_DEBIT_CARD`, `NET_BANKING`, `WALLET`, `CASH`. `gatewayId` is optional, at most 32 characters, and defaults to `homefix.payment.default-gateway` (env `PAYMENT_DEFAULT_GATEWAY`, default `razorpay`). An unknown gateway gives 400 `VALIDATION_ERROR`. `paymentCredential` is optional and stored encrypted, never returned. Older clients still send `customerId`, `providerId`, `amount` and `platformFee`. Those fields are accepted and ignored.
+`bookingId` and `method` are `@NotNull`. `method` is one of `UPI`, `CREDIT_DEBIT_CARD`, `NET_BANKING`, `WALLET`, `CASH`. `gatewayId` is optional, at most 32 characters, and defaults to `jihajoor.payment.default-gateway` (env `PAYMENT_DEFAULT_GATEWAY`, default `razorpay`). An unknown gateway gives 400 `VALIDATION_ERROR`. `paymentCredential` is optional and stored encrypted, never returned. Older clients still send `customerId`, `providerId`, `amount` and `platformFee`. Those fields are accepted and ignored.
 
 **Who pays, who is credited and how much come from booking-service**, never from the client. The steps:
 
@@ -1288,7 +1288,7 @@ If booking-service cannot answer at any step (unreachable, 5xx, 401/403, open br
 
 The PENDING transaction row is committed before the gateway is charged, and the charge request carries the transaction id so the gateway can echo it in its signed callback. A gateway decline marks the transaction `FAILED` and still answers 201 with that status. If the charge call itself errors the outcome is unknown, so the transaction stays `PENDING` for its callback to settle and the response is `502 PAYMENT_GATEWAY_ERROR`.
 
-**The local `simulator` gateway.** It is registered only when `homefix.payment.gateways.simulator.enabled=true` (env `PAYMENT_SIMULATOR_ENABLED`, default `false`), and logs a WARN at startup. The local compose stack enables it and makes it the default gateway; Helm never does. Otherwise `simulator` is an unknown gateway (400). It accepts every charge, refund and transfer without moving money. After the charge commits it feeds itself a correctly signed `SUCCEEDED` callback (secret `PAYMENT_SIMULATOR_SECRET`, or a built-in dev default) through the normal callback path. So the `POST /payments` response is already `SUCCESS`. If that settlement fails the payment stays `PENDING`.
+**The local `simulator` gateway.** It is registered only when `jihajoor.payment.gateways.simulator.enabled=true` (env `PAYMENT_SIMULATOR_ENABLED`, default `false`), and logs a WARN at startup. The local compose stack enables it and makes it the default gateway; Helm never does. Otherwise `simulator` is an unknown gateway (400). It accepts every charge, refund and transfer without moving money. After the charge commits it feeds itself a correctly signed `SUCCEEDED` callback (secret `PAYMENT_SIMULATOR_SECRET`, or a built-in dev default) through the normal callback path. So the `POST /payments` response is already `SUCCESS`. If that settlement fails the payment stays `PENDING`.
 
 Response 201, and the same body with 200 from the read, callback, retry, refund and reconcile endpoints:
 
@@ -1334,7 +1334,7 @@ The signed `payload` is a JSON object:
 | `gatewayId` | yes | Must equal the body's `gatewayId` and the transaction's gateway |
 | `status` | yes | `SUCCEEDED` or `FAILED`, exact upper case |
 | `amount` | yes | Decimal in major units (rupees, not paise), as a JSON number or string. Must equal the transaction amount; scale is ignored, so `1250` matches `1250.00` |
-| `timestamp` | yes | ISO-8601 instant. Rejected if older than `homefix.payment.callback-max-age` (default `72h`, `0` disables) or more than 5 minutes in the future |
+| `timestamp` | yes | ISO-8601 instant. Rejected if older than `jihajoor.payment.callback-max-age` (default `72h`, `0` disables) or more than 5 minutes in the future |
 | `failureReason` | no | Recorded only when `status` is `FAILED`, truncated to 512 characters |
 
 Unknown payload fields are ignored, so a gateway may sign extra data. Checks run in this order, and nothing touches the database until the signature has passed:
@@ -1471,7 +1471,7 @@ Port 8089, read-only controller at `/invoices`.
     "bookingId": "b2e7d410-3a65-4c98-9f12-7d4e6a8b0c55",
     "paymentId": "7e4b1c93-0d58-4a26-bf71-3c9e5d2a8b64",
     "generatedAt": "2026-09-11T09:30:00Z",
-    "downloadUrl": "https://homefix-invoices.s3.amazonaws.com/HFX-INV-2026-000912.pdf?X-Amz-Expires=900",
+    "downloadUrl": "https://jihajoor-invoices.s3.amazonaws.com/HFX-INV-2026-000912.pdf?X-Amz-Expires=900",
     "downloadUrlExpiresAt": "2026-09-11T09:45:00Z"
   }
 ]
@@ -2265,7 +2265,7 @@ Both answer a `BookingResponse`, and 409 `BOOKING_CHANGED` when a concurrent cha
 
 - When dispatch-engine reports that nobody accepted, booking-service asks provider-service which ACTIVE Tenants cover the booking's address and category. If any do, it snapshots them as candidates and moves the booking to `AWAITING_ASSIGNMENT`, publishing nothing. Tenants find the booking by polling the queue.
 - If none cover it, or a lookup fails, the booking fails as before.
-- `AssignmentTimeoutSweeper` runs every minute, 100 bookings a pass. It fails any queued booking still `AWAITING_ASSIGNMENT` or `PROVIDER_ASSIGNED` once `homefix.booking.tenant-assignment-timeout` (default `PT60M`, env `TENANT_ASSIGNMENT_TIMEOUT`) has passed since it was first queued.
+- `AssignmentTimeoutSweeper` runs every minute, 100 bookings a pass. It fails any queued booking still `AWAITING_ASSIGNMENT` or `PROVIDER_ASSIGNED` once `jihajoor.booking.tenant-assignment-timeout` (default `PT60M`, env `TENANT_ASSIGNMENT_TIMEOUT`) has passed since it was first queued.
 - A failed booking goes to `SEARCHING_FAILED`, passing through `AWAITING_ASSIGNMENT` when a provider had been assigned, and publishes `BookingCancelled`. That event still names the provider, so they are told the job is off.
 - A late acceptance is then refused with 409 `INVALID_BOOKING_TRANSITION`.
 
@@ -2356,7 +2356,7 @@ The producer refuses to start unless `acks=all` and idempotence are enabled. The
 
 **Delivery is at-least-once.** An event can reach Kafka twice: the relay dies or loses its database after the broker ACK, a timed-out publish is delivered by the producer afterwards, or a relay outlives its lease (its stale outcome write is then rejected by the `@Version` check, but its publish has happened). Consumers deduplicate on `eventId`. Nothing is lost: a row only leaves `PENDING` on an ACK or an exhausted budget.
 
-**Consumer-side dedupe.** `IdempotentKafkaConsumer` extracts `eventId`, dead-letters immediately if it is absent, skips if the `(consumerGroup, eventId)` row already exists, otherwise handles the record with up to 3 attempts 5 seconds apart. In every service with a database the marker is inserted in the same transaction as the handler, so a concurrent duplicate hits the unique key and rolls back. Exactly-once still does not extend to a handler's non-database side effects, such as HTTP calls. Only a service without a transaction manager writes the marker separately. The 5 seconds are not slept on the listener thread: the shared module's auto-configuration gives Spring Boot's listener-container factory a `DefaultErrorHandler` that pauses the container between attempts (`ContainerPausingBackOffHandler`, `homefix.outbox.consumer.retry-delay`, default `PT5S`) and turns on the delivery-attempt header, so the consumer rethrows attempts 1 and 2 for redelivery and dead-letters on attempt 3 itself.
+**Consumer-side dedupe.** `IdempotentKafkaConsumer` extracts `eventId`, dead-letters immediately if it is absent, skips if the `(consumerGroup, eventId)` row already exists, otherwise handles the record with up to 3 attempts 5 seconds apart. In every service with a database the marker is inserted in the same transaction as the handler, so a concurrent duplicate hits the unique key and rolls back. Exactly-once still does not extend to a handler's non-database side effects, such as HTTP calls. Only a service without a transaction manager writes the marker separately. The 5 seconds are not slept on the listener thread: the shared module's auto-configuration gives Spring Boot's listener-container factory a `DefaultErrorHandler` that pauses the container between attempts (`ContainerPausingBackOffHandler`, `jihajoor.outbox.consumer.retry-delay`, default `PT5S`) and turns on the delivery-attempt header, so the consumer rethrows attempts 1 and 2 for redelivery and dead-letters on attempt 3 itself.
 
 **Dead letters** go to `<sourceTopic>.DLT` with headers `eventId`, `originalTopic` and `dlqReason`, preserving the key.
 
@@ -2470,7 +2470,7 @@ Identical shape:
 }
 ```
 
-location-service consumes it (topic `JobStarted`, overridable with `homefix.location.topics.job-started`) and reads only `bookingId`, to end the tracking session. notification-service addresses it to `customerId`.
+location-service consumes it (topic `JobStarted`, overridable with `jihajoor.location.topics.job-started`) and reads only `bookingId`, to end the tracking session. notification-service addresses it to `customerId`.
 
 #### JobCompleted
 
@@ -2669,7 +2669,7 @@ One consumer group binds all eleven lifecycle topics and the two complaint topic
 }
 ```
 
-`reference` is also accepted under its older name, `bookingReference`. `tenantName` fills the `{{tenantName}}` placeholder of the Tenant-assigned templates (falling back to "HomeFix"); `tenantId` is ignored. `newStatus` is the complaint's new status. `status` is the booking status on `BookingCancelled`, where `SEARCHING_FAILED` is rendered as "no professional available" rather than as a cancellation.
+`reference` is also accepted under its older name, `bookingReference`. `tenantName` fills the `{{tenantName}}` placeholder of the Tenant-assigned templates (falling back to "Ji-Hajoor"); `tenantId` is ignored. `newStatus` is the complaint's new status. `status` is the booking status on `BookingCancelled`, where `SEARCHING_FAILED` is rendered as "no professional available" rather than as a cancellation.
 
 **Events carry user ids, never contact details.** notification-service decides who each event concerns. It then fetches each recipient's addresses from auth-service's `GET /internal/users/{userId}/contact`, sending the shared `X-Internal-Api-Key`. Phone numbers stay out of Kafka and out of every producer. Any `mobileNumber`, `emailAddress` or `deviceToken` on an event is ignored.
 

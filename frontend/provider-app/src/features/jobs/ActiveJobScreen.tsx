@@ -301,7 +301,7 @@ function LocationShareNotice({ state }: { state: LocationShareState }) {
     return (
       <Alert severity="warning">
         Location permission is off, so the customer can&apos;t see you on the map. Allow location
-        access for HomeFix to share it.
+        access for Ji-Hajoor to share it.
       </Alert>
     );
   }

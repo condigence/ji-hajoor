@@ -1,0 +1,2 @@
+com.jihajoor.shared.outbox.JiHajoorOutboxAutoConfiguration
+com.jihajoor.shared.outbox.kafka.JiHajoorKafkaConsumerAutoConfiguration

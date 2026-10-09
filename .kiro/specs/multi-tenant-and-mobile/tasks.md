@@ -61,7 +61,7 @@ module's existing style; Java modules are tested with the capped-heap command in
 - [x] 5. Booking Service — fallback routing and timeout sweeper
   - In the `searching-failed` path: resolve address coordinates (`CustomerAddressPort`), call `covering`, insert candidates and transition to `AWAITING_ASSIGNMENT`, else `SEARCHING_FAILED`; lookup failures → `SEARCHING_FAILED` with WARN (Requirements 4.1–4.4, Property MT1)
   - Answer the `searching-failed` call with the resulting status
-  - `@Scheduled` sweeper (60 s) moving bookings older than `homefix.booking.tenant-assignment-timeout` (default `PT60M`) to `SEARCHING_FAILED`; safe under concurrency (Requirement 7, Property MT6)
+  - `@Scheduled` sweeper (60 s) moving bookings older than `jihajoor.booking.tenant-assignment-timeout` (default `PT60M`) to `SEARCHING_FAILED`; safe under concurrency (Requirement 7, Property MT6)
   - On `provider-accepted` from dispatch: set `tenant_id` from `of-provider`, best effort (Requirements 8.1–8.2)
   - Write tests: covered vs not covered vs lookup failure, no `BookingCancelled` on fallback, sweeper boundary and decline-does-not-extend, two sweepers racing, acceptance survives a failed tenant lookup
   - **Dependencies:** Task 4
@@ -129,7 +129,7 @@ module's existing style; Java modules are tested with the capped-heap command in
   - **Acceptance:** the provider Android app shares location from a device or emulator after granting permission
 
 - [x] 14. iOS projects for the customer and provider apps
-  - `npx cap add ios` in both apps; app ids `com.homefix.customer` / `com.homefix.provider`; `Info.plist` usage descriptions; `mobile:sync:ios` and `mobile:open:ios` scripts; ATS note for a local HTTP backend (Requirements 14.1, 14.5)
+  - `npx cap add ios` in both apps; app ids `com.jihajoor.customer` / `com.jihajoor.provider`; `Info.plist` usage descriptions; `mobile:sync:ios` and `mobile:open:ios` scripts; ATS note for a local HTTP backend (Requirements 14.1, 14.5)
   - Customer app: camera and photo-library permissions on both platforms for booking media (Requirement 14.4)
   - **Dependencies:** none (can start in Phase 1)
   - **Acceptance:** `ios/` projects are generated and committed; `npx cap sync ios` succeeds; building in Xcode on macOS is documented (not possible on Windows)

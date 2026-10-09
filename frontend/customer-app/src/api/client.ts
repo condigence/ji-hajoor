@@ -35,7 +35,7 @@ interface BackendErrorBody {
 
 /** Copy shown when the platform cannot be reached at all (offline, 502/503/504). */
 export const UNREACHABLE_MESSAGE =
-  "We can't reach HomeFix right now. Please try again in a moment.";
+  "We can't reach Ji-Hajoor right now. Please try again in a moment.";
 /** Copy shown for an unexpected server failure (500). */
 export const SERVER_ERROR_MESSAGE = 'Something went wrong on our side. Please try again.';
 /** Copy shown when nothing more specific is known. */

@@ -196,7 +196,7 @@ export function AppShell({
               <ButtonBase
                 component={RouterLink}
                 to="/home"
-                aria-label="HomeFix home"
+                aria-label="Ji-Hajoor home"
                 sx={{ borderRadius: `${radius.sm}px`, p: 0.5, ml: -0.5, mr: { md: 2.5 } }}
               >
                 <BrandLogo size={isDesktop ? 34 : 32} />
@@ -396,7 +396,7 @@ function SiteFooter() {
         </Box>
         <Box sx={{ mt: { xs: 4, md: 5 }, pt: 2.5, borderTop: `1px solid ${brand.lineStrong}` }}>
           <Typography variant="caption" color="text.secondary">
-            © {new Date().getFullYear()} HomeFix. Verified Help. Anytime. Anywhere.
+            © {new Date().getFullYear()} Ji-Hajoor. Verified Help. Anytime. Anywhere.
           </Typography>
         </Box>
       </Container>

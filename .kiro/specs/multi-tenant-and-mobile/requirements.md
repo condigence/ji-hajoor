@@ -2,15 +2,15 @@
 
 ## Introduction
 
-HomeFix today matches each booking to an individual Provider automatically. When no Provider accepts
+Ji-Hajoor today matches each booking to an individual Provider automatically. When no Provider accepts
 within the search radius cycles, the booking ends in `SEARCHING_FAILED` and the customer is told no one is
 available (platform spec, Requirement 8.9).
 
 This feature adds two capabilities:
 
-1. **Tenants (service agencies) inside the one HomeFix marketplace.** A Tenant is a service company that
+1. **Tenants (service agencies) inside the one Ji-Hajoor marketplace.** A Tenant is a service company that
    owns a team of Providers and covers a service area for a set of service categories. Customers, the
-   catalog and pricing stay shared: customers keep booking HomeFix, not a Tenant. When automatic matching
+   catalog and pricing stay shared: customers keep booking Ji-Hajoor, not a Tenant. When automatic matching
    finds no Provider, the booking is routed to the Tenants covering its address and service instead of
    failing, and a Tenant administrator assigns one of the Tenant's own Providers, who confirms the job.
 2. **Web, Android and iOS apps for Customers and Providers from one codebase.** The existing customer and
@@ -33,7 +33,7 @@ administrators (the Tenant portal polls), and publishing to the app stores.
 
 ## Glossary
 
-- **Tenant**: A service company (agency) registered on HomeFix that owns a team of Providers and covers a
+- **Tenant**: A service company (agency) registered on Ji-Hajoor that owns a team of Providers and covers a
   Service_Area for a set of Service_Categories.
 - **Tenant_Admin**: A user holding the `TENANT_ADMIN` role who manages exactly one Tenant: its team and its
   Assignment_Queue.
@@ -59,7 +59,7 @@ administrators (the Tenant portal polls), and publishing to the app stores.
 ### Requirement 1: Tenant Registry
 
 **User Story:** As a Platform_Admin, I want to register service agencies with the area and services they
-cover, so that bookings HomeFix cannot match automatically can be routed to them.
+cover, so that bookings Ji-Hajoor cannot match automatically can be routed to them.
 
 #### Acceptance Criteria
 
@@ -327,7 +327,7 @@ what happens next.
 
 ### Requirement 14: Android and iOS Apps
 
-**User Story:** As a Customer or Provider, I want HomeFix on my phone as an installed app as well as on the
+**User Story:** As a Customer or Provider, I want Ji-Hajoor on my phone as an installed app as well as on the
 web, so that I can use it the way I prefer.
 
 #### Acceptance Criteria

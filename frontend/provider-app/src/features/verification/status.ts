@@ -30,7 +30,7 @@ export const VERIFICATION_STEPS: {
   {
     status: 'DOCUMENT_SUBMITTED',
     label: 'Document review',
-    caption: 'A HomeFix admin checks what you sent',
+    caption: 'A Ji-Hajoor admin checks what you sent',
   },
   {
     status: 'DOCUMENT_VERIFIED',
@@ -54,19 +54,19 @@ const STATUS_MAP: Record<ProviderVerificationStatus, StatusDescriptor> = {
   NOT_STARTED: {
     label: 'Not started',
     description:
-      'You have not sent your documents yet. HomeFix can only send you jobs once you are verified.',
-    next: 'Upload the three documents below. A HomeFix admin reviews them after you send them.',
+      'You have not sent your documents yet. Ji-Hajoor can only send you jobs once you are verified.',
+    next: 'Upload the three documents below. A Ji-Hajoor admin reviews them after you send them.',
     severity: 'warning',
   },
   PENDING: {
     label: 'Documents needed',
     description: 'Your application is open, but we still need your documents.',
-    next: 'Upload the three documents below. A HomeFix admin reviews them after you send them.',
+    next: 'Upload the three documents below. A Ji-Hajoor admin reviews them after you send them.',
     severity: 'warning',
   },
   DOCUMENT_SUBMITTED: {
     label: 'Under review',
-    description: 'We have your documents. They are waiting for a HomeFix admin to check them.',
+    description: 'We have your documents. They are waiting for a Ji-Hajoor admin to check them.',
     next: 'Nothing to do for now. Once your documents are accepted, your background check starts automatically.',
     severity: 'info',
   },
@@ -90,14 +90,14 @@ const STATUS_MAP: Record<ProviderVerificationStatus, StatusDescriptor> = {
   },
   APPROVED: {
     label: 'Verified',
-    description: 'You are verified. HomeFix can send you job requests.',
+    description: 'You are verified. Ji-Hajoor can send you job requests.',
     next: 'You are all set. Accept jobs from your Dashboard.',
     severity: 'success',
   },
   REJECTED: {
     label: 'Not approved',
     description: 'Your application was not approved. The reason is shown below.',
-    next: 'A rejection is final. Contact HomeFix support if you think it is a mistake or your circumstances have changed.',
+    next: 'A rejection is final. Contact Ji-Hajoor support if you think it is a mistake or your circumstances have changed.',
     severity: 'error',
   },
   SUSPENDED: {

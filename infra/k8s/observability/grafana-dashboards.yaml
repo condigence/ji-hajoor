@@ -5,9 +5,9 @@
 # Deploy: kubectl apply -f grafana-dashboards.yaml
 #
 # Two dashboards are provided:
-#   1. homefix-platform-overview  — request rate, error rate, p50/p95/p99 latency,
+#   1. jihajoor-platform-overview  — request rate, error rate, p50/p95/p99 latency,
 #                                    DB connection pool, cache hit rate
-#   2. homefix-events-and-funnel  — Kafka consumer lag + booking funnel
+#   2. jihajoor-events-and-funnel  — Kafka consumer lag + booking funnel
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -16,16 +16,16 @@ metadata:
   namespace: monitoring
   labels:
     grafana_dashboard: "1"
-    app: homefix
+    app: jihajoor
 data:
   platform-overview.json: |
     {
       "annotations": { "list": [] },
       "editable": true,
       "schemaVersion": 39,
-      "title": "HomeFix — Platform Overview",
-      "uid": "homefix-platform-overview",
-      "tags": ["homefix", "slo"],
+      "title": "Ji-Hajoor — Platform Overview",
+      "uid": "jihajoor-platform-overview",
+      "tags": ["jihajoor", "slo"],
       "templating": {
         "list": [
           {
@@ -141,16 +141,16 @@ metadata:
   namespace: monitoring
   labels:
     grafana_dashboard: "1"
-    app: homefix
+    app: jihajoor
 data:
   events-and-funnel.json: |
     {
       "annotations": { "list": [] },
       "editable": true,
       "schemaVersion": 39,
-      "title": "HomeFix — Events & Booking Funnel",
-      "uid": "homefix-events-funnel",
-      "tags": ["homefix", "kafka", "funnel"],
+      "title": "Ji-Hajoor — Events & Booking Funnel",
+      "uid": "jihajoor-events-funnel",
+      "tags": ["jihajoor", "kafka", "funnel"],
       "time": { "from": "now-24h", "to": "now" },
       "refresh": "30s",
       "panels": [
@@ -174,22 +174,22 @@ data:
           "type": "timeseries",
           "gridPos": { "h": 9, "w": 24, "x": 0, "y": 9 },
           "datasource": "Prometheus",
-          "description": "Counters emitted by booking-service via Micrometer. Metric name: homefix_booking_transitions_total{to_state=...}",
+          "description": "Counters emitted by booking-service via Micrometer. Metric name: jihajoor_booking_transitions_total{to_state=...}",
           "targets": [
             {
-              "expr": "sum(increase(homefix_booking_transitions_total{to_state=\"SEARCHING_PROVIDER\"}[1h]))",
+              "expr": "sum(increase(jihajoor_booking_transitions_total{to_state=\"SEARCHING_PROVIDER\"}[1h]))",
               "legendFormat": "searching"
             },
             {
-              "expr": "sum(increase(homefix_booking_transitions_total{to_state=\"PROVIDER_ACCEPTED\"}[1h]))",
+              "expr": "sum(increase(jihajoor_booking_transitions_total{to_state=\"PROVIDER_ACCEPTED\"}[1h]))",
               "legendFormat": "accepted"
             },
             {
-              "expr": "sum(increase(homefix_booking_transitions_total{to_state=\"JOB_COMPLETED\"}[1h]))",
+              "expr": "sum(increase(jihajoor_booking_transitions_total{to_state=\"JOB_COMPLETED\"}[1h]))",
               "legendFormat": "completed"
             },
             {
-              "expr": "sum(increase(homefix_booking_transitions_total{to_state=\"SEARCHING_FAILED\"}[1h]))",
+              "expr": "sum(increase(jihajoor_booking_transitions_total{to_state=\"SEARCHING_FAILED\"}[1h]))",
               "legendFormat": "searching failed"
             }
           ]

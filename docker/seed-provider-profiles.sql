@@ -1,4 +1,4 @@
--- Seed provider profiles for the local HomeFix core slice.
+-- Seed provider profiles for the local Ji-Hajoor core slice.
 --
 -- seed-test-users.sh creates auth accounts only. A provider profile is otherwise created lazily by
 -- PUT /providers/{id}/profile (the onboarding screen), so until somebody completes onboarding the
@@ -23,7 +23,7 @@
 -- Idempotent: re-running leaves existing rows untouched. The one exception is the base location,
 -- which is filled in on an existing profile that has none (profiles seeded before the column
 -- existed), never overwritten.
---   Usage: docker exec -i homefix-core-postgres-1 psql -U homefix -d homefix < docker/seed-provider-profiles.sql
+--   Usage: docker exec -i jihajoor-core-postgres-1 psql -U jihajoor -d jihajoor < docker/seed-provider-profiles.sql
 
 -- Both providers are based in Ara, Bihar (the service area the apps hard-code); Provider Two about
 -- a kilometre north-east of Provider One. availability_slot is left empty on purpose: a provider

@@ -165,7 +165,7 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
 
-homefix:
+jihajoor:
   gateway:
     # HTTP -> HTTPS 301 redirect + HTTPS enforcement (Requirement 23.7, 23.8).
     # TLS < 1.2 rejection is enforced at the AWS edge; here we redirect any non-HTTPS request.

@@ -146,7 +146,7 @@ export function ProfileScreen() {
         </Button>
 
         <Typography variant="caption" color="text.secondary" align="center">
-          HomeFix — Verified Help. Anytime. Anywhere.
+          Ji-Hajoor — Verified Help. Anytime. Anywhere.
         </Typography>
       </Stack>
     </AppShell>

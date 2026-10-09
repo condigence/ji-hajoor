@@ -75,8 +75,8 @@ export function SettlementForm({ info }: SettlementFormProps) {
         }
       >
         {pending
-          ? `Your bank account ${pending.label} is waiting for verification. You can request a settlement once HomeFix has verified it.`
-          : 'Add a bank account in your profile before requesting a settlement. HomeFix verifies it before the first payout.'}
+          ? `Your bank account ${pending.label} is waiting for verification. You can request a settlement once Ji-Hajoor has verified it.`
+          : 'Add a bank account in your profile before requesting a settlement. Ji-Hajoor verifies it before the first payout.'}
       </Alert>
     );
   }

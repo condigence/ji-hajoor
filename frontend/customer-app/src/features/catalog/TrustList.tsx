@@ -5,7 +5,7 @@ import PaymentsRoundedIcon from '@mui/icons-material/PaymentsRounded';
 import { brand } from '@lib/theme';
 
 /**
- * HomeFix's promises, stated only where the product enforces them: pros pass
+ * Ji-Hajoor's promises, stated only where the product enforces them: pros pass
  * document and background checks before their first job, the price is shown
  * before a booking is confirmed, and payment is taken once the job is marked
  * complete. No ratings or customer counts — the platform does not collect them.

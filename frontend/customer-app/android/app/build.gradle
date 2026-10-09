@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.homefix.customer"
+    namespace "com.jihajoor.customer"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.homefix.customer"
+        applicationId "com.jihajoor.customer"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

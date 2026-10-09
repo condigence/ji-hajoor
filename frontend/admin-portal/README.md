@@ -1,6 +1,6 @@
-# HomeFix Admin Portal
+# Ji-Hajoor Admin Portal
 
-Desktop-first administrative web application for the HomeFix platform, and the
+Desktop-first administrative web application for the Ji-Hajoor platform, and the
 home of the **Tenant Portal** used by service agencies. Built with the same
 stack as the Customer and Provider apps (React + TypeScript + Vite, React
 Router, TanStack Query, Zustand, Material UI, React Hook Form + Zod), but laid
@@ -109,7 +109,7 @@ use the Tenants module instead.
 The login screen offers **Password** (selected by default; staff accounts with
 provisioned credentials) and **OTP** (mobile number + code). Locally, the
 seeded accounts in [`docs/LOCAL_ACCESS.md`](../../docs/LOCAL_ACCESS.md) section 3
-all use `HomeFix@2026`: `admin`, `superadmin`, `finance`, `dispatcher`,
+all use `JiHajoor@2026`: `admin`, `superadmin`, `finance`, `dispatcher`,
 `support` and `tenantadmin` (the demo agency "Ara Home Services").
 
 ## Development
@@ -188,7 +188,7 @@ Shared layout pieces:
   module list layout.
 - `components/ForbiddenScreen.tsx`, `components/RequireAuth.tsx`,
   `components/HomeRedirect.tsx` — role guard, Forbidden state, landing redirect.
-- `components/BrandLogo.tsx` — the HomeFix mark and wordmark.
+- `components/BrandLogo.tsx` — the Ji-Hajoor mark and wordmark.
 - `components/QueryStateView.tsx` — the standard loading / error / empty states.
 
 ## Project structure

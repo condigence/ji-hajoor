@@ -1,5 +1,5 @@
 ##############################################################
-# ElastiCache Redis Module — HomeFix
+# ElastiCache Redis Module — Ji-Hajoor
 # Redis replication group with cluster mode, TLS, auth token,
 # at-rest encryption, and automatic failover.
 ##############################################################
@@ -51,7 +51,7 @@ resource "aws_elasticache_subnet_group" "this" {
 resource "aws_elasticache_parameter_group" "this" {
   name        = "${var.name_prefix}-redis7-cluster"
   family      = "redis7"
-  description = "HomeFix Redis 7 cluster-mode parameter group"
+  description = "Ji-Hajoor Redis 7 cluster-mode parameter group"
 
   parameter {
     name  = "cluster-enabled"
@@ -91,7 +91,7 @@ resource "aws_elasticache_parameter_group" "this" {
 # ─────────────────────────────────────────────
 resource "aws_elasticache_replication_group" "this" {
   replication_group_id = "${var.name_prefix}-redis"
-  description          = "HomeFix Redis replication group — cluster mode"
+  description          = "Ji-Hajoor Redis replication group — cluster mode"
 
   node_type            = var.node_type
   engine_version       = var.engine_version

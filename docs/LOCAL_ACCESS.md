@@ -1,4 +1,4 @@
-# HomeFix — Running Locally, Test Users and URLs
+# Ji-Hajoor — Running Locally, Test Users and URLs
 
 Everything here targets the local stack defined in [`docker-compose.core.yml`](../docker-compose.core.yml), running against the Postgres, Kafka and Redis installed on this machine. Nothing in this document is a real credential: the stack ships with a throwaway signing secret and a file-based SMS gateway, and it must never be pointed at production data.
 
@@ -15,9 +15,9 @@ ElastiCache through per-environment values and Secrets (`helm/services/*.yaml`).
 
 | Component | Where | Port(s) the stack uses |
 |-----------|-------|------------------------|
-| PostgreSQL 18 | Windows service `postgresql-x64-18` | `5432`, database `homefix`, role `homefix` |
+| PostgreSQL 18 | Windows service `postgresql-x64-18` | `5432`, database `jihajoor`, role `jihajoor` |
 | Kafka 4.1 (KRaft) | `C:\kafka`, started by hand (below) | `9092` for host tools, `9094` for containers |
-| Redis-compatible | Memurai service, or the stand-in container `homefix-local-redis` | `6379` |
+| Redis-compatible | Memurai service, or the stand-in container `jihajoor-local-redis` | `6379` |
 
 **Postgres.** Create the role and database once, then the schemas. The password is
 `DB_PASSWORD` from `.env`:
@@ -25,9 +25,9 @@ ElastiCache through per-environment values and Secrets (`helm/services/*.yaml`).
 ```bash
 PSQL="/c/Program Files/PostgreSQL/18/bin/psql.exe"
 PGPASSWORD=<postgres superuser password> "$PSQL" -h localhost -U postgres \
-  -c "CREATE ROLE homefix LOGIN PASSWORD '<DB_PASSWORD from .env>'" \
-  -c "CREATE DATABASE homefix OWNER homefix"
-PGPASSWORD=<DB_PASSWORD> "$PSQL" -h localhost -U homefix -d homefix -f docker/init-db.sql
+  -c "CREATE ROLE jihajoor LOGIN PASSWORD '<DB_PASSWORD from .env>'" \
+  -c "CREATE DATABASE jihajoor OWNER jihajoor"
+PGPASSWORD=<DB_PASSWORD> "$PSQL" -h localhost -U jihajoor -d jihajoor -f docker/init-db.sql
 ```
 
 Containers' connections arrive as `127.0.0.1`, so the installer's default `pg_hba.conf` already
@@ -36,7 +36,7 @@ database-backed services a pool of 4.
 
 Tables are created by each service's **Flyway migrations** at startup
 (`services/*/src/main/resources/db/migration`, plus the shared outbox tables shipped in
-`homefix-shared-outbox`), and Hibernate only validates against them. That is the same
+`jihajoor-shared-outbox`), and Hibernate only validates against them. That is the same
 mechanism a deployment uses, so a schema that works locally works on RDS.
 
 **Kafka.** `C:\kafka\config\server.properties` needs four changes from the distribution
@@ -62,7 +62,7 @@ $id = (bin\windows\kafka-storage.bat random-uuid)
 bin\windows\kafka-storage.bat format -t $id -c config\server.properties --standalone
 $env:KAFKA_HEAP_OPTS = "-Xmx768m -Xms256m"
 Start-Process bin\windows\kafka-server-start.bat config\server.properties -WindowStyle Hidden `
-  -RedirectStandardOutput logs\homefix-stdout.log -RedirectStandardError logs\homefix-stderr.log
+  -RedirectStandardOutput logs\jihajoor-stdout.log -RedirectStandardError logs\jihajoor-stderr.log
 ```
 
 Do not delete topics on this broker: deletion hits the same Windows rename failure and takes
@@ -84,9 +84,9 @@ Until it is installed, a Redis container stands in on the same port, so nothing 
 when you switch:
 
 ```bash
-docker run -d --name homefix-local-redis --restart unless-stopped -p 6379:6379 redis:7-alpine
+docker run -d --name jihajoor-local-redis --restart unless-stopped -p 6379:6379 redis:7-alpine
 # once Memurai is installed:
-docker rm -f homefix-local-redis
+docker rm -f jihajoor-local-redis
 ```
 
 No local Postgres, Kafka or Redis at all? Use the containerised ones in
@@ -104,7 +104,7 @@ cp .env.example .env            # first time only; Compose refuses to start with
 
 # Shared libraries must be installed before any service will resolve.
 for m in observability security resilience outbox; do
-  (cd shared/homefix-shared-$m && mvn -q -DskipTests -Djacoco.skip=true install)
+  (cd shared/jihajoor-shared-$m && mvn -q -DskipTests -Djacoco.skip=true install)
 done
 
 # Every service, one at a time (see Memory below), or just the one you changed.
@@ -191,7 +191,7 @@ A readiness probe from the host is not evidence a service is down: under load Do
 forwarding drops connections while the service itself is fine. Probe from inside the network:
 
 ```bash
-docker exec homefix-core-api-gateway-1 \
+docker exec jihajoor-core-api-gateway-1 \
   wget -qO- http://rating-review-service:8097/health/readiness
 ```
 
@@ -249,14 +249,14 @@ Local ports differ from the `application.yml` defaults for location, verificatio
 
 | Component | From this machine | From the containers | Credentials |
 |-----------|-------------------|---------------------|-------------|
-| PostgreSQL 18 | `localhost:5432`, database `homefix` | `host.docker.internal:5432` | user `homefix`, password `DB_PASSWORD` from `.env` |
+| PostgreSQL 18 | `localhost:5432`, database `jihajoor` | `host.docker.internal:5432` | user `jihajoor`, password `DB_PASSWORD` from `.env` |
 | Redis | `localhost:6379` | `host.docker.internal:6379` | no auth |
 | Kafka 4.1 (KRaft) | `localhost:9092` | `host.docker.internal:9094` | no auth |
 
 ```bash
 # psql, topic listing and topic tailing, with the connection details filled in from .env
 . docker/local-infra.sh
-"$PSQL"                                       # interactive psql into homefix
+"$PSQL"                                       # interactive psql into jihajoor
 psql_q '\dn'                                  # the schemas, one per service
 psql_q 'SELECT version, type, success FROM booking.flyway_schema_history'
 kafka_tool kafka-topics.sh --list
@@ -279,21 +279,21 @@ The accounts are created by the Auth Service itself at startup when `DEV_SEED_EN
 account keeps its id and simply gains the roles and credentials below, so re-running it never
 orphans data that already references the account.
 
-Every account shares the password in `DEV_SEED_PASSWORD`, which defaults to `HomeFix@2026` in
+Every account shares the password in `DEV_SEED_PASSWORD`, which defaults to `JiHajoor@2026` in
 `.env.example`. Change it there and restart auth-service to rotate all ten at once.
 
 | Username | Password | Mobile number | Role | What it is for |
 |----------|----------|---------------|------|----------------|
-| `customer` | `HomeFix@2026` | `+919000000001` | CUSTOMER | Primary test customer: browse, book, pay, review |
-| `customer2` | `HomeFix@2026` | `+919000000002` | CUSTOMER | Second customer, for chat and review counterparties |
-| `provider` | `HomeFix@2026` | `+919000000011` | SERVICE_PROVIDER | Primary test provider (plumbing, electrical): accept offers, run the job, get paid |
-| `provider2` | `HomeFix@2026` | `+919000000012` | SERVICE_PROVIDER | Second provider (cleaning); with Provider One, the demo agency's team |
-| `admin` | `HomeFix@2026` | `+919000000021` | ADMIN | Operations console: every admin module except system config; manages Tenants |
-| `superadmin` | `HomeFix@2026` | `+919000000022` | SUPER_ADMIN + ADMIN | Adds System Configuration to the admin surface |
-| `finance` | `HomeFix@2026` | `+919000000023` | FINANCE_ADMIN | Payment reconciliation and settlement reports |
-| `dispatcher` | `HomeFix@2026` | `+919000000024` | DISPATCHER | Manual assignment and dispatch weight tuning |
-| `support` | `HomeFix@2026` | `+919000000025` | SUPPORT_AGENT | Complaint triage, status changes, refunds |
-| `tenantadmin` | `HomeFix@2026` | `+919000000031` | TENANT_ADMIN | Administers the demo agency "Ara Home Services" in the Admin Portal: assignment queue, team, jobs |
+| `customer` | `JiHajoor@2026` | `+919000000001` | CUSTOMER | Primary test customer: browse, book, pay, review |
+| `customer2` | `JiHajoor@2026` | `+919000000002` | CUSTOMER | Second customer, for chat and review counterparties |
+| `provider` | `JiHajoor@2026` | `+919000000011` | SERVICE_PROVIDER | Primary test provider (plumbing, electrical): accept offers, run the job, get paid |
+| `provider2` | `JiHajoor@2026` | `+919000000012` | SERVICE_PROVIDER | Second provider (cleaning); with Provider One, the demo agency's team |
+| `admin` | `JiHajoor@2026` | `+919000000021` | ADMIN | Operations console: every admin module except system config; manages Tenants |
+| `superadmin` | `JiHajoor@2026` | `+919000000022` | SUPER_ADMIN + ADMIN | Adds System Configuration to the admin surface |
+| `finance` | `JiHajoor@2026` | `+919000000023` | FINANCE_ADMIN | Payment reconciliation and settlement reports |
+| `dispatcher` | `JiHajoor@2026` | `+919000000024` | DISPATCHER | Manual assignment and dispatch weight tuning |
+| `support` | `JiHajoor@2026` | `+919000000025` | SUPPORT_AGENT | Complaint triage, status changes, refunds |
+| `tenantadmin` | `JiHajoor@2026` | `+919000000031` | TENANT_ADMIN | Administers the demo agency "Ara Home Services" in the Admin Portal: assignment queue, team, jobs |
 
 None of this is a real credential. The whole stack ships with a throwaway signing secret and a
 file-based SMS gateway, and must never be pointed at production data. The seeder is off unless
@@ -307,10 +307,10 @@ the out-of-band path a real administrator would otherwise take by hand.
 ### Signing in with a password
 
 In the Admin Portal (http://localhost:5175) the Password tab is selected by default: enter
-`admin` / `HomeFix@2026`. From the command line:
+`admin` / `JiHajoor@2026`. From the command line:
 
 ```bash
-curl -s -X POST http://localhost:8081/auth/login/password   -H 'Content-Type: application/json'   -d '{"username":"admin","password":"HomeFix@2026"}'
+curl -s -X POST http://localhost:8081/auth/login/password   -H 'Content-Type: application/json'   -d '{"username":"admin","password":"JiHajoor@2026"}'
 ```
 
 The response is the same body every other authentication path returns — user id, roles, a
@@ -393,7 +393,7 @@ Tenant fallback in 4.1) with assertions, so run that when you only want to know 
 ```bash
 GW=http://localhost:8080; J='Content-Type: application/json'
 login() { curl -s -X POST http://localhost:8081/auth/login/password -H "$J" \
-  -d "{\"username\":\"$1\",\"password\":\"HomeFix@2026\"}"; }
+  -d "{\"username\":\"$1\",\"password\":\"JiHajoor@2026\"}"; }
 field() { sed "s/.*\"$1\":\"\([^\"]*\)\".*/\1/"; }
 CS=$(login customer); C="Authorization: Bearer $(echo "$CS" | field accessToken)"
 CID=$(echo "$CS" | field userId)
@@ -464,7 +464,7 @@ category, administered by `tenantadmin`, with both test providers on its team.
    and booking-service routes the booking to the covering Tenant: status
    `AWAITING_ASSIGNMENT`, no cancellation sent to the customer. (Letting the offer expire
    works too, after the radius cycles finish.)
-2. Sign in to http://localhost:5175 as `tenantadmin` / `HomeFix@2026`. The Tenant Portal shows
+2. Sign in to http://localhost:5175 as `tenantadmin` / `JiHajoor@2026`. The Tenant Portal shows
    only three pages:
    - **Requests**: the assignment queue, refreshed every 15 s with a badge for new requests.
      Assign opens the team picker; only members who are approved and not under review are
@@ -546,7 +546,7 @@ docker compose -f docker-compose.core.yml down
 
 # Full reset of the data: recreate the database, then start and seed again (section 1.3)
 PGPASSWORD=<postgres superuser password> "/c/Program Files/PostgreSQL/18/bin/psql.exe" \
-  -h localhost -U postgres -c "DROP DATABASE homefix WITH (FORCE)" -c "CREATE DATABASE homefix OWNER homefix"
+  -h localhost -U postgres -c "DROP DATABASE jihajoor WITH (FORCE)" -c "CREATE DATABASE jihajoor OWNER jihajoor"
 . docker/local-infra.sh && "$PSQL" -f docker/init-db.sql
 rm -f docker/dev-sms/dev-sms.log
 ```

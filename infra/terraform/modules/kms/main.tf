@@ -1,5 +1,5 @@
 ##############################################################
-# KMS Module — HomeFix
+# KMS Module — Ji-Hajoor
 # Three CMKs: RDS encryption, S3 encryption, PII field-level.
 ##############################################################
 
@@ -39,7 +39,7 @@ data "aws_iam_policy_document" "kms_base" {
 # KMS Key — RDS Encryption
 # ─────────────────────────────────────────────
 resource "aws_kms_key" "rds" {
-  description              = "HomeFix RDS PostgreSQL encryption key"
+  description              = "Ji-Hajoor RDS PostgreSQL encryption key"
   deletion_window_in_days  = 30
   enable_key_rotation      = true
   multi_region             = false
@@ -60,7 +60,7 @@ resource "aws_kms_alias" "rds" {
 # KMS Key — S3 / MSK / ElastiCache Encryption
 # ─────────────────────────────────────────────
 resource "aws_kms_key" "s3" {
-  description              = "HomeFix S3 / object storage encryption key"
+  description              = "Ji-Hajoor S3 / object storage encryption key"
   deletion_window_in_days  = 30
   enable_key_rotation      = true
   multi_region             = false
@@ -82,7 +82,7 @@ resource "aws_kms_alias" "s3" {
 # Used by services to encrypt PII columns (email, address, bank account)
 # ─────────────────────────────────────────────
 resource "aws_kms_key" "pii" {
-  description              = "HomeFix field-level PII encryption key (AES-256)"
+  description              = "Ji-Hajoor field-level PII encryption key (AES-256)"
   deletion_window_in_days  = 30
   enable_key_rotation      = true
   multi_region             = false

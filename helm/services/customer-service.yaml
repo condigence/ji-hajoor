@@ -1,4 +1,4 @@
-# customer-service - per-service values for helm/homefix-service.
+# customer-service - per-service values for helm/jihajoor-service.
 # Mirrors the service's entry in docker-compose.core.yml, minus dev-only settings
 # (inline secrets, ddl-auto=update, debug logging, dev seeding/OTP echo).
 # The port must equal the Dockerfile EXPOSE and compose SERVER_PORT.

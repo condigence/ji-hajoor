@@ -141,12 +141,12 @@ export function BankAccountCard() {
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                 {account.verified
                   ? 'Settlements you request are paid into this account.'
-                  : 'HomeFix checks new accounts before paying into them. You can request settlements once this account is verified.'}
+                  : 'Ji-Hajoor checks new accounts before paying into them. You can request settlements once this account is verified.'}
               </Typography>
             </Box>
           ) : (
             <Typography variant="body2" color="text.secondary">
-              Add the bank account your settlements should be paid into. HomeFix verifies it before
+              Add the bank account your settlements should be paid into. Ji-Hajoor verifies it before
               the first payout.
             </Typography>
           )}
@@ -155,7 +155,7 @@ export function BankAccountCard() {
             <Alert severity="success" sx={{ mt: 1.5 }}>
               {save.data.verified
                 ? 'Bank account saved and verified.'
-                : 'Bank account saved. It will show as verified once HomeFix has checked it.'}
+                : 'Bank account saved. It will show as verified once Ji-Hajoor has checked it.'}
             </Alert>
           ) : null}
 

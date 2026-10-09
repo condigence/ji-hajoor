@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "jihajoor-service.fullname" . }}
+  labels:
+    {{- include "jihajoor-service.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    # Same port as the container by default, so <service>:<port> matches compose.
+    - port: {{ .Values.service.port | default (include "jihajoor-service.port" .) }}
+      targetPort: http
+      protocol: TCP
+      name: {{ .Values.service.portName }}
+  selector:
+    {{- include "jihajoor-service.selectorLabels" . | nindent 4 }}

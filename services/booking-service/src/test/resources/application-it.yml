@@ -33,7 +33,7 @@ spring:
     listener:
       auto-startup: false
 
-homefix:
+jihajoor:
   security:
     # The shared auto-configured *servlet* filter chain is disabled for the IT so it does not
     # double up with the in-chain JWT/RBAC filters wired by ItSecurityConfig (which run inside
@@ -64,4 +64,4 @@ homefix:
 logging:
   level:
     org.hibernate.SQL: warn
-    com.homefix.booking: info
+    com.jihajoor.booking: info

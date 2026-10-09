@@ -5,12 +5,12 @@
                              https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.homefix</groupId>
+    <groupId>com.jihajoor</groupId>
     <artifactId>promotion-service</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>HomeFix Promotion / Coupon Service</name>
+    <name>Ji-Hajoor Promotion / Coupon Service</name>
     <description>
         Coupon and promotion management (Requirement 21): Admin coupon CRUD with full attribute
         validation, a checkout-time coupon validation endpoint that returns the applicable discount
@@ -29,7 +29,7 @@
 
         <!-- Dependency versions (aligned with shared modules and the sibling services) -->
         <spring-boot.version>3.2.5</spring-boot.version>
-        <homefix-shared.version>1.0.0-SNAPSHOT</homefix-shared.version>
+        <jihajoor-shared.version>1.0.0-SNAPSHOT</jihajoor-shared.version>
         <jacoco.version>0.8.12</jacoco.version>
         <jqwik.version>1.8.4</jqwik.version>
     </properties>
@@ -47,26 +47,26 @@
     </dependencyManagement>
 
     <dependencies>
-        <!-- ===== HomeFix shared libraries (Tasks 4-6) ===== -->
+        <!-- ===== Ji-Hajoor shared libraries (Tasks 4-6) ===== -->
         <dependency>
-            <groupId>com.homefix.shared</groupId>
-            <artifactId>homefix-shared-security</artifactId>
-            <version>${homefix-shared.version}</version>
+            <groupId>com.jihajoor.shared</groupId>
+            <artifactId>jihajoor-shared-security</artifactId>
+            <version>${jihajoor-shared.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.homefix.shared</groupId>
-            <artifactId>homefix-shared-observability</artifactId>
-            <version>${homefix-shared.version}</version>
+            <groupId>com.jihajoor.shared</groupId>
+            <artifactId>jihajoor-shared-observability</artifactId>
+            <version>${jihajoor-shared.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.homefix.shared</groupId>
-            <artifactId>homefix-shared-resilience</artifactId>
-            <version>${homefix-shared.version}</version>
+            <groupId>com.jihajoor.shared</groupId>
+            <artifactId>jihajoor-shared-resilience</artifactId>
+            <version>${jihajoor-shared.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.homefix.shared</groupId>
-            <artifactId>homefix-shared-outbox</artifactId>
-            <version>${homefix-shared.version}</version>
+            <groupId>com.jihajoor.shared</groupId>
+            <artifactId>jihajoor-shared-outbox</artifactId>
+            <version>${jihajoor-shared.version}</version>
         </dependency>
 
         <!-- ===== Spring Boot starters ===== -->

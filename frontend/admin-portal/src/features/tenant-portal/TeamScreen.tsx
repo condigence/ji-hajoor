@@ -34,7 +34,7 @@ export function TeamScreen() {
   return (
     <ModuleScreen
       title="Team"
-      description="Your agency's providers. Only providers verified by HomeFix can be assigned to requests."
+      description="Your agency's providers. Only providers verified by Ji-Hajoor can be assigned to requests."
       actions={
         <Button
           variant="contained"
@@ -56,7 +56,7 @@ export function TeamScreen() {
               <AddByMobileForm
                 label="Provider's mobile number"
                 submitLabel="Add to team"
-                helperText="They must have signed up in the HomeFix provider app with a provider profile."
+                helperText="They must have signed up in the Ji-Hajoor provider app with a provider profile."
                 onAdd={(mobile) => add.mutateAsync(mobile).then(() => setAdding(false))}
                 isPending={add.isPending}
                 error={add.error}

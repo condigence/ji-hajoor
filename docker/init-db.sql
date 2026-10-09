@@ -1,4 +1,4 @@
--- Postgres init for the local HomeFix stack.
+-- Postgres init for the local Ji-Hajoor stack.
 -- Hibernate ddl-auto=update creates TABLES but not SCHEMAS, and each service sets
 -- hibernate.default_schema to its own name. Create every schema up front so the
 -- services can start against a fresh database.

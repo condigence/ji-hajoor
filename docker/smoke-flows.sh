@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end smoke test across every HomeFix service in the local stack.
+# End-to-end smoke test across every Ji-Hajoor service in the local stack.
 #
 # Each check prints PASS/FAIL with the HTTP status it got, and the script exits
 # non-zero if anything failed, so it works both as a readable report and as a
@@ -10,7 +10,7 @@
 # Prerequisites: the stack is up and `bash docker/seed-pricing.sh` has been run
 # (the Pricing Engine holds parameters in memory in this profile).
 
-AUTH_CONTAINER="${AUTH_CONTAINER:-homefix-core-auth-service-1}"
+AUTH_CONTAINER="${AUTH_CONTAINER:-jihajoor-core-auth-service-1}"
 
 AUTH=http://localhost:8081
 GATEWAY=http://localhost:8080
@@ -101,7 +101,7 @@ login() {
 
 STAMP="$(date +%s)"
 
-printf 'HomeFix end-to-end smoke test\n'
+printf 'Ji-Hajoor end-to-end smoke test\n'
 
 # ---------------------------------------------------------------- readiness --
 section 'Service readiness'

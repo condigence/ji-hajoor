@@ -26,10 +26,10 @@ terraform {
 
   backend "s3" {
     # Configure via -backend-config or terraform.tfvars
-    # bucket         = "homefix-terraform-state"
-    # key            = "homefix/terraform.tfstate"
+    # bucket         = "jihajoor-terraform-state"
+    # key            = "jihajoor/terraform.tfstate"
     # region         = "ap-south-1"
-    # dynamodb_table = "homefix-terraform-locks"
+    # dynamodb_table = "jihajoor-terraform-locks"
     # encrypt        = true
   }
 }
@@ -39,10 +39,10 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "HomeFix"
+      Project     = "Ji-Hajoor"
       Environment = var.environment
       ManagedBy   = "Terraform"
-      Repository  = "homefix-platform"
+      Repository  = "jihajoor-platform"
     }
   }
 }

@@ -1,5 +1,5 @@
 ##############################################################
-# S3 Module — HomeFix
+# S3 Module — Ji-Hajoor
 # Four encrypted buckets: documents, photos, invoices, media.
 # All buckets: versioning, SSE-KMS, lifecycle rules,
 # public access block, and access logging.

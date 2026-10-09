@@ -1,6 +1,6 @@
-# HomeFix — AWS Infrastructure (Terraform)
+# Ji-Hajoor — AWS Infrastructure (Terraform)
 
-Production-grade AWS infrastructure for the HomeFix on-demand home services platform.
+Production-grade AWS infrastructure for the Ji-Hajoor on-demand home services platform.
 
 ## Architecture
 
@@ -40,10 +40,10 @@ Configure the S3 backend in `versions.tf` or via CLI:
 
 ```bash
 terraform init \
-  -backend-config="bucket=homefix-terraform-state" \
-  -backend-config="key=homefix/production/terraform.tfstate" \
+  -backend-config="bucket=jihajoor-terraform-state" \
+  -backend-config="key=jihajoor/production/terraform.tfstate" \
   -backend-config="region=ap-south-1" \
-  -backend-config="dynamodb_table=homefix-terraform-locks" \
+  -backend-config="dynamodb_table=jihajoor-terraform-locks" \
   -backend-config="encrypt=true"
 ```
 
@@ -89,7 +89,7 @@ terraform apply -target=module.iam -target=module.k8s_namespaces
 
 ```bash
 # Update kubeconfig
-aws eks update-kubeconfig --region ap-south-1 --name homefix-production-cluster
+aws eks update-kubeconfig --region ap-south-1 --name jihajoor-production-cluster
 
 # Confirm nodes are Ready
 kubectl get nodes
@@ -124,7 +124,7 @@ Secrets Manager secrets are created with placeholder values. Rotate them before 
 
 ```bash
 aws secretsmanager put-secret-value \
-  --secret-id homefix-production/auth-service \
+  --secret-id jihajoor-production/auth-service \
   --secret-string '{"db_password":"real-password","jwt_secret":"real-secret",...}'
 ```
 

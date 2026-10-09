@@ -1,7 +1,7 @@
 import { createTheme, alpha } from '@mui/material/styles';
 
 /**
- * HomeFix Customer design system.
+ * Ji-Hajoor Customer design system.
  *
  * One typeface (Plus Jakarta Sans, self-hosted via @fontsource so the app works
  * offline and inside the Capacitor shell), a trustworthy blue primary, a single

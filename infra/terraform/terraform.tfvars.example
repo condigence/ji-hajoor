@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────
-# HomeFix Terraform Variables — Example
+# Ji-Hajoor Terraform Variables — Example
 # Copy to terraform.tfvars and fill in real values before running apply.
 # NEVER commit terraform.tfvars (contains sensitive values) to source control.
 # ──────────────────────────────────────────────────────────────────────────
@@ -7,7 +7,7 @@
 # AWS settings
 aws_region   = "ap-south-1"
 environment  = "production"
-project_name = "homefix"
+project_name = "jihajoor"
 
 # VPC
 vpc_cidr              = "10.0.0.0/16"
@@ -45,7 +45,7 @@ rds_instance_class           = "db.r6g.xlarge"
 rds_allocated_storage_gb     = 100
 rds_max_allocated_storage_gb = 500
 rds_engine_version           = "15.5"
-rds_db_name                  = "homefix"
+rds_db_name                  = "jihajoor"
 
 # MSK
 msk_kafka_version        = "3.6.0"
@@ -74,5 +74,5 @@ log_retention_days  = 90
 #      terraform output -raw eks_cluster_name
 # ──────────────────────────────────────────────────────────────────────────
 eks_cluster_endpoint = ""   # e.g. "https://XXXXXXX.gr7.ap-south-1.eks.amazonaws.com"
-eks_cluster_name     = ""   # e.g. "homefix-production-cluster"
+eks_cluster_name     = ""   # e.g. "jihajoor-production-cluster"
 eks_cluster_ca_data  = ""   # base64-encoded CA cert from: terraform output -raw eks_cluster_certificate_authority_data

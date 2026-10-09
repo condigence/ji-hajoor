@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>HomeFix</string>
+        <string>Ji-Hajoor</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -23,11 +23,11 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>HomeFix uses your location to fill in your service address when you choose "Use my current location".</string>
+	<string>Ji-Hajoor uses your location to fill in your service address when you choose "Use my current location".</string>
 	<key>NSCameraUsageDescription</key>
-	<string>HomeFix uses the camera so you can photograph the problem when you book a service.</string>
+	<string>Ji-Hajoor uses the camera so you can photograph the problem when you book a service.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>HomeFix lets you attach photos and videos of the problem from your library when you book a service.</string>
+	<string>Ji-Hajoor lets you attach photos and videos of the problem from your library when you book a service.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

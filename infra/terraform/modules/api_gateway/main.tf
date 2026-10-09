@@ -1,5 +1,5 @@
 ##############################################################
-# API Gateway Module — HomeFix
+# API Gateway Module — Ji-Hajoor
 # AWS API Gateway v2 (HTTP API) with:
 #   - JWT authorizer (Auth Service introspection)
 #   - VPC Link to EKS (NLB)
@@ -25,7 +25,7 @@ resource "aws_cloudwatch_log_group" "api_gateway" {
 resource "aws_apigatewayv2_api" "this" {
   name          = "${var.name_prefix}-http-api"
   protocol_type = "HTTP"
-  description   = "HomeFix Platform — HTTP API Gateway"
+  description   = "Ji-Hajoor Platform — HTTP API Gateway"
 
   # CORS configuration for frontend apps
   cors_configuration {

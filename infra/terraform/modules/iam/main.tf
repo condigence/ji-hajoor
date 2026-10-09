@@ -1,5 +1,5 @@
 ##############################################################
-# IAM Module — HomeFix
+# IAM Module — Ji-Hajoor
 # Service-level IAM roles with IRSA (IAM Roles for Service
 # Accounts) so each microservice has least-privilege access.
 ##############################################################
@@ -86,7 +86,7 @@ resource "aws_iam_role" "service" {
 # ─────────────────────────────────────────────
 resource "aws_iam_policy" "secrets_read" {
   name        = "${var.name_prefix}-secrets-read"
-  description = "Allow reading HomeFix secrets from Secrets Manager"
+  description = "Allow reading Ji-Hajoor secrets from Secrets Manager"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -127,7 +127,7 @@ resource "aws_iam_role_policy_attachment" "secrets_read" {
 # ─────────────────────────────────────────────
 resource "aws_iam_policy" "s3_rw" {
   name        = "${var.name_prefix}-s3-rw"
-  description = "Read/write access to HomeFix S3 buckets"
+  description = "Read/write access to Ji-Hajoor S3 buckets"
 
   policy = jsonencode({
     Version = "2012-10-17"

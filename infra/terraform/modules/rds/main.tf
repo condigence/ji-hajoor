@@ -1,5 +1,5 @@
 ##############################################################
-# RDS Module — HomeFix
+# RDS Module — Ji-Hajoor
 # Multi-AZ PostgreSQL with parameter group, enhanced monitoring,
 # automated backups, and per-service schema creation.
 ##############################################################
@@ -30,7 +30,7 @@ resource "aws_secretsmanager_secret" "rds_master" {
 resource "aws_secretsmanager_secret_version" "rds_master" {
   secret_id = aws_secretsmanager_secret.rds_master.id
   secret_string = jsonencode({
-    username = "homefix_master"
+    username = "jihajoor_master"
     password = random_password.master.result
     engine   = "postgres"
     host     = aws_db_instance.this.address
@@ -45,7 +45,7 @@ resource "aws_secretsmanager_secret_version" "rds_master" {
 resource "aws_db_parameter_group" "this" {
   name        = "${var.name_prefix}-pg15"
   family      = "postgres15"
-  description = "HomeFix PostgreSQL 15 parameter group"
+  description = "Ji-Hajoor PostgreSQL 15 parameter group"
 
   # Enable logical replication for the outbox pattern / CDC
   parameter {
@@ -105,7 +105,7 @@ resource "aws_db_parameter_group" "this" {
 # ─────────────────────────────────────────────
 resource "aws_db_option_group" "this" {
   name                 = "${var.name_prefix}-pg15-options"
-  option_group_description = "HomeFix PostgreSQL 15 option group"
+  option_group_description = "Ji-Hajoor PostgreSQL 15 option group"
   engine_name          = "postgres"
   major_engine_version = "15"
 
@@ -157,7 +157,7 @@ resource "aws_db_instance" "this" {
   instance_class = var.instance_class
 
   db_name  = var.db_name
-  username = "homefix_master"
+  username = "jihajoor_master"
   password = random_password.master.result
 
   allocated_storage     = var.allocated_storage_gb

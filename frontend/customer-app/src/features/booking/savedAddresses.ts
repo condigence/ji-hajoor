@@ -51,7 +51,7 @@ export const useSavedAddressStore = create<SavedAddressState>()(
         });
       },
     }),
-    { name: 'homefix.saved-addresses' },
+    { name: 'jihajoor.saved-addresses' },
   ),
 );
 

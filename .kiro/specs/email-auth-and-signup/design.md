@@ -67,9 +67,9 @@ invite `ADMIN` (403 `SUPER_ADMIN_REQUIRED`).
 (provider-service is the caller).
 
 **Email port**: `EmailSenderPort.send(to, subject, body)` with `FileEmailSenderAdapter` (appends to
-`homefix.email.file-path`, default `/var/log/homefix/dev-mail.log`; Compose mounts it next to the dev SMS
+`jihajoor.email.file-path`, default `/var/log/jihajoor/dev-mail.log`; Compose mounts it next to the dev SMS
 log as `docker/dev-mail/dev-mail.log`) and `LoggingEmailSenderAdapter` (default; logs recipient and
-subject only). Selected by `homefix.email.provider` (`file` | `logging`), mirroring `homefix.sms.provider`.
+subject only). Selected by `jihajoor.email.provider` (`file` | `logging`), mirroring `jihajoor.sms.provider`.
 
 **Codes**: 6 digits from `SecureRandom`, stored hashed in Redis per purpose (`signup`, `reset`, `email-change`)
 with a 10-minute TTL and an attempt counter (max 5); rate limits in Redis per email and per IP (resend ≥ 60 s

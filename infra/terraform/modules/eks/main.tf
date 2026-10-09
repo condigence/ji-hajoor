@@ -1,5 +1,5 @@
 ##############################################################
-# EKS Module — HomeFix
+# EKS Module — Ji-Hajoor
 # Multi-AZ EKS cluster with managed node groups and IRSA.
 ##############################################################
 

@@ -1,0 +1,20 @@
+apiVersion: v2
+name: jihajoor-service
+description: >
+  Shared Helm chart for every Ji-Hajoor Spring Boot service. One release per
+  service, rendered from values-<environment>.yaml plus
+  helm/services/<service>.yaml (port, dependencies, config and secret wiring).
+
+type: application
+version: 1.1.0
+appVersion: "1.0.0"
+
+keywords:
+  - jihajoor
+  - microservice
+  - spring-boot
+
+home: https://github.com/condigence/ji-hajoor
+maintainers:
+  - name: Ji-Hajoor Platform Team
+    email: platform@jihajoor.app

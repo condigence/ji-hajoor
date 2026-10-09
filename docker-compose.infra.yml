@@ -1,10 +1,10 @@
-# HomeFix — containerised Postgres/Redis/Kafka, for machines WITHOUT them installed locally.
+# Ji-Hajoor — containerised Postgres/Redis/Kafka, for machines WITHOUT them installed locally.
 #
 # The default local run (docker-compose.core.yml alone) uses the Postgres, Redis and Kafka
 # installed on the host; see docs/LOCAL_ACCESS.md. Use this file instead when they are not
-# installed. Point the services at these containers with the HOMEFIX_* variables:
+# installed. Point the services at these containers with the JIHAJOOR_* variables:
 #
-#   HOMEFIX_DB_HOST=postgres HOMEFIX_REDIS_HOST=redis HOMEFIX_KAFKA_BOOTSTRAP_SERVERS=kafka:9092 \
+#   JIHAJOOR_DB_HOST=postgres JIHAJOOR_REDIS_HOST=redis JIHAJOOR_KAFKA_BOOTSTRAP_SERVERS=kafka:9092 \
 #     docker compose -f docker-compose.core.yml -f docker-compose.infra.yml up -d --build --wait
 #
 # (or put those three variables in .env). Start postgres/redis/kafka first so the services do
@@ -23,8 +23,8 @@ services:
     # limit of 100 is not enough for 18 of them plus psql sessions.
     command: ["postgres", "-c", "max_connections=300"]
     environment:
-      POSTGRES_DB: homefix
-      POSTGRES_USER: homefix
+      POSTGRES_DB: jihajoor
+      POSTGRES_USER: jihajoor
       POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
     ports:
       - "5533:5432"
@@ -32,7 +32,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U homefix -d homefix"]
+      test: ["CMD-SHELL", "pg_isready -U jihajoor -d jihajoor"]
       interval: 5s
       timeout: 5s
       retries: 20

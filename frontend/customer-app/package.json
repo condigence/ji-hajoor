@@ -1,9 +1,9 @@
 {
-  "name": "@homefix/customer-app",
+  "name": "@jihajoor/customer-app",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "HomeFix Customer App — book verified home services, track jobs, and pay.",
+  "description": "Ji-Hajoor Customer App — book verified home services, track jobs, and pay.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

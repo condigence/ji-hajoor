@@ -6,13 +6,13 @@ interface BrandLogoProps {
   size?: number;
   /** Render for a dark/branded background (splash, hero) instead of white. */
   inverted?: boolean;
-  /** Hide the "HomeFix" wordmark and show the house mark alone. */
+  /** Hide the "Ji-Hajoor" wordmark and show the house mark alone. */
   markOnly?: boolean;
   sx?: SxProps<Theme>;
 }
 
 /**
- * The HomeFix mark: a house whose roof carries a wrench, over the two-tone
+ * The Ji-Hajoor mark: a house whose roof carries a wrench, over the two-tone
  * "Home / Fix" wordmark. Used on the splash, the login header and the app bar
  * so the brand reads the same everywhere.
  */

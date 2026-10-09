@@ -1,5 +1,5 @@
 ##############################################################
-# WAF Module — HomeFix
+# WAF Module — Ji-Hajoor
 # AWS WAFv2 Web ACL for REGIONAL scope (API Gateway).
 # Rules include: OWASP Core Rule Set, Known Bad Inputs,
 # Anonymous IP list, SQL injection, rate limiting.
@@ -21,7 +21,7 @@ resource "aws_cloudwatch_log_group" "waf" {
 # ─────────────────────────────────────────────
 resource "aws_wafv2_web_acl" "this" {
   name        = "${var.name_prefix}-web-acl"
-  description = "HomeFix WAF Web ACL — OWASP Top 10 + rate limiting"
+  description = "Ji-Hajoor WAF Web ACL — OWASP Top 10 + rate limiting"
   scope       = "REGIONAL"
 
   default_action {

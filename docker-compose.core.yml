@@ -1,15 +1,15 @@
-# HomeFix — full local stack: all 20 backend services + all three SPAs.
+# Ji-Hajoor — full local stack: all 20 backend services + all three SPAs.
 #
 # Postgres, Redis and Kafka are NOT containers here: locally the services use the ones
 # installed on this machine, reached from the containers through host.docker.internal
 # (Postgres :5432, Redis :6379, Kafka :9094 — a listener advertised as host.docker.internal).
-# Setup of each is in docs/LOCAL_ACCESS.md. Override with HOMEFIX_DB_HOST / _DB_PORT / _DB_NAME,
-# HOMEFIX_REDIS_HOST / _REDIS_PORT and HOMEFIX_KAFKA_BOOTSTRAP_SERVERS; to run them as containers
+# Setup of each is in docs/LOCAL_ACCESS.md. Override with JIHAJOOR_DB_HOST / _DB_PORT / _DB_NAME,
+# JIHAJOOR_REDIS_HOST / _REDIS_PORT and JIHAJOOR_KAFKA_BOOTSTRAP_SERVERS; to run them as containers
 # instead, add docker-compose.infra.yml (see its header). AWS deployments do not use this file:
 # Helm wires RDS, ElastiCache and MSK per environment (helm/services/*.yaml).
 #
 # Schemas come from each service's Flyway migrations (src/main/resources/db/migration), the
-# same as on AWS; Hibernate only validates. The shared outbox tables ship in homefix-shared-outbox.
+# same as on AWS; Hibernate only validates. The shared outbox tables ship in jihajoor-shared-outbox.
 #
 #   cp .env.example .env            # local-dev secrets; compose refuses to start without it
 #   docker compose -f docker-compose.core.yml up -d --build --wait
@@ -27,9 +27,9 @@
 # Each SPA proxies /api/auth to the Auth Service and /api to the API Gateway.
 # Log in with any Indian mobile number; the dev SMS gateway logs the OTP instead
 # of sending it:
-#   docker logs homefix-core-auth-service-1 | grep "DEV SMS"
+#   docker logs jihajoor-core-auth-service-1 | grep "DEV SMS"
 
-name: homefix-core
+name: jihajoor-core
 
 services:
   auth-service:
@@ -46,12 +46,12 @@ services:
     mem_limit: 448m
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
-      REDIS_HOST: ${HOMEFIX_REDIS_HOST:-host.docker.internal}
-      REDIS_PORT: "${HOMEFIX_REDIS_PORT:-6379}"
+      REDIS_HOST: ${JIHAJOOR_REDIS_HOST:-host.docker.internal}
+      REDIS_PORT: "${JIHAJOOR_REDIS_PORT:-6379}"
       SERVER_PORT: "8081"
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET, see .env.example}
       # Shared service credential for the Auth Service /internal/** endpoints
@@ -66,10 +66,10 @@ services:
       # Dev-only SMS gateway: appends the verification code to a mounted file so
       # a login can be completed without querying container logs. Never outside dev.
       SMS_PROVIDER: file
-      SMS_FILE_PATH: /var/log/homefix/dev-sms.log
+      SMS_FILE_PATH: /var/log/jihajoor/dev-sms.log
       # LOCAL DEV ONLY: echo the OTP to the auth-service log so the flow can be tested
       # without a real SMS gateway. Never enable outside local/dev.
-      HOMEFIX_SMS_LOGOTP: "true"
+      JIHAJOOR_SMS_LOGOTP: "true"
       # LOCAL DEV ONLY: create the test accounts in docs/LOCAL_ACCESS.md at startup,
       # each with a console username and this password, so the portals can be signed
       # in to on a fresh database. Staff roles cannot be self-assigned at registration,
@@ -80,7 +80,7 @@ services:
       - "8081:8081"
     volumes:
       # Host-readable sink for the dev SMS gateway (see SMS_PROVIDER above).
-      - ./docker/dev-sms:/var/log/homefix
+      - ./docker/dev-sms:/var/log/jihajoor
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8081/health/readiness || exit 1"]
       interval: 10s
@@ -105,8 +105,8 @@ services:
       # WebClient now resolves through, so a recreated auth-service is picked
       # up in seconds instead of Docker DNS's 600s record TTL.
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k -Dnetworkaddress.cache.ttl=10 -Dnetworkaddress.cache.negative.ttl=1"
-      REDIS_HOST: ${HOMEFIX_REDIS_HOST:-host.docker.internal}
-      REDIS_PORT: "${HOMEFIX_REDIS_PORT:-6379}"
+      REDIS_HOST: ${JIHAJOOR_REDIS_HOST:-host.docker.internal}
+      REDIS_PORT: "${JIHAJOOR_REDIS_PORT:-6379}"
       SERVER_PORT: "8080"
       HTTPS_ENFORCED: "false"
       AUTH_SERVICE_URI: http://auth-service:8081
@@ -142,12 +142,12 @@ services:
     mem_limit: 448m
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
-      REDIS_HOST: ${HOMEFIX_REDIS_HOST:-host.docker.internal}
-      REDIS_PORT: "${HOMEFIX_REDIS_PORT:-6379}"
+      REDIS_HOST: ${JIHAJOOR_REDIS_HOST:-host.docker.internal}
+      REDIS_PORT: "${JIHAJOOR_REDIS_PORT:-6379}"
       SERVER_PORT: "8085"
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET, see .env.example}
       CATALOG_CACHE: memory
@@ -174,8 +174,8 @@ services:
     mem_limit: 448m
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
       SERVER_PORT: "8082"
@@ -212,12 +212,12 @@ services:
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
       # Admin pricing parameters persist in the 'pricing' schema, so they survive restarts.
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
-      REDIS_HOST: ${HOMEFIX_REDIS_HOST:-host.docker.internal}
-      REDIS_PORT: "${HOMEFIX_REDIS_PORT:-6379}"
+      REDIS_HOST: ${JIHAJOOR_REDIS_HOST:-host.docker.internal}
+      REDIS_PORT: "${JIHAJOOR_REDIS_PORT:-6379}"
       SERVER_PORT: "8086"
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET, see .env.example}
       PRICING_CACHE: memory
@@ -225,7 +225,7 @@ services:
       # which requires the shared service credential.
       PROMOTION_SERVICE_URL: http://promotion-service:8098
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:?set INTERNAL_API_KEY, see .env.example}
-      LOGGING_LEVEL_COM_HOMEFIX_SHARED_SECURITY: DEBUG
+      LOGGING_LEVEL_COM_JIHAJOOR_SHARED_SECURITY: DEBUG
     ports:
       - "8086:8086"
     healthcheck:
@@ -249,8 +249,8 @@ services:
     mem_limit: 448m
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
       SERVER_PORT: "8084"
@@ -269,7 +269,7 @@ services:
       PROVIDER_SERVICE_URL: http://provider-service:8083
       TENANT_ASSIGNMENT_TIMEOUT: PT60M
       # Consumes PaymentCompleted to move a paid booking to PAYMENT_COMPLETED.
-      KAFKA_BOOTSTRAP_SERVERS: ${HOMEFIX_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
+      KAFKA_BOOTSTRAP_SERVERS: ${JIHAJOOR_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
     ports:
       - "8084:8084"
     depends_on:
@@ -298,13 +298,13 @@ services:
     mem_limit: 448m
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
-      REDIS_HOST: ${HOMEFIX_REDIS_HOST:-host.docker.internal}
-      REDIS_PORT: "${HOMEFIX_REDIS_PORT:-6379}"
-      KAFKA_BOOTSTRAP_SERVERS: ${HOMEFIX_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
+      REDIS_HOST: ${JIHAJOOR_REDIS_HOST:-host.docker.internal}
+      REDIS_PORT: "${JIHAJOOR_REDIS_PORT:-6379}"
+      KAFKA_BOOTSTRAP_SERVERS: ${JIHAJOOR_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
       SERVER_PORT: "8087"
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET, see .env.example}
       # Shared service credential for the Booking Service and Customer Service
@@ -339,13 +339,13 @@ services:
     mem_limit: 448m
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
-      REDIS_HOST: ${HOMEFIX_REDIS_HOST:-host.docker.internal}
-      REDIS_PORT: "${HOMEFIX_REDIS_PORT:-6379}"
-      KAFKA_BOOTSTRAP_SERVERS: ${HOMEFIX_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
+      REDIS_HOST: ${JIHAJOOR_REDIS_HOST:-host.docker.internal}
+      REDIS_PORT: "${JIHAJOOR_REDIS_PORT:-6379}"
+      KAFKA_BOOTSTRAP_SERVERS: ${JIHAJOOR_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
       SERVER_PORT: "8092"
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET, see .env.example}
       LOCATION_STORE: redis
@@ -372,8 +372,8 @@ services:
     mem_limit: 448m
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
       SERVER_PORT: "8083"
@@ -419,8 +419,8 @@ services:
     mem_limit: 448m
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
       SERVER_PORT: "8094"
@@ -452,12 +452,12 @@ services:
     mem_limit: 448m
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
-      REDIS_HOST: ${HOMEFIX_REDIS_HOST:-host.docker.internal}
-      REDIS_PORT: "${HOMEFIX_REDIS_PORT:-6379}"
+      REDIS_HOST: ${JIHAJOOR_REDIS_HOST:-host.docker.internal}
+      REDIS_PORT: "${JIHAJOOR_REDIS_PORT:-6379}"
       SERVER_PORT: "8088"
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET, see .env.example}
       # Base64 AES-256 data key for the local KMS adapter (no default any more).
@@ -505,13 +505,13 @@ services:
     mem_limit: 448m
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
-      REDIS_HOST: ${HOMEFIX_REDIS_HOST:-host.docker.internal}
-      REDIS_PORT: "${HOMEFIX_REDIS_PORT:-6379}"
-      KAFKA_BOOTSTRAP_SERVERS: ${HOMEFIX_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
+      REDIS_HOST: ${JIHAJOOR_REDIS_HOST:-host.docker.internal}
+      REDIS_PORT: "${JIHAJOOR_REDIS_PORT:-6379}"
+      KAFKA_BOOTSTRAP_SERVERS: ${JIHAJOOR_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
       SERVER_PORT: "8089"
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET, see .env.example}
       NOTIFICATION_SERVICE_URL: http://notification-service:8090
@@ -538,11 +538,11 @@ services:
     mem_limit: 448m
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
-      KAFKA_BOOTSTRAP_SERVERS: ${HOMEFIX_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
+      KAFKA_BOOTSTRAP_SERVERS: ${JIHAJOOR_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
       SERVER_PORT: "8090"
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET, see .env.example}
       PREFERENCE_SERVICE_URL: http://customer-service:8082
@@ -573,13 +573,13 @@ services:
     mem_limit: 448m
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
-      REDIS_HOST: ${HOMEFIX_REDIS_HOST:-host.docker.internal}
-      REDIS_PORT: "${HOMEFIX_REDIS_PORT:-6379}"
-      KAFKA_BOOTSTRAP_SERVERS: ${HOMEFIX_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
+      REDIS_HOST: ${JIHAJOOR_REDIS_HOST:-host.docker.internal}
+      REDIS_PORT: "${JIHAJOOR_REDIS_PORT:-6379}"
+      KAFKA_BOOTSTRAP_SERVERS: ${JIHAJOOR_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
       SERVER_PORT: "8091"
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET, see .env.example}
     ports:
@@ -605,11 +605,11 @@ services:
     mem_limit: 448m
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
-      KAFKA_BOOTSTRAP_SERVERS: ${HOMEFIX_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
+      KAFKA_BOOTSTRAP_SERVERS: ${JIHAJOOR_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
       SERVER_PORT: "8093"
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET, see .env.example}
     ports:
@@ -635,13 +635,13 @@ services:
     mem_limit: 448m
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
-      REDIS_HOST: ${HOMEFIX_REDIS_HOST:-host.docker.internal}
-      REDIS_PORT: "${HOMEFIX_REDIS_PORT:-6379}"
-      KAFKA_BOOTSTRAP_SERVERS: ${HOMEFIX_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
+      REDIS_HOST: ${JIHAJOOR_REDIS_HOST:-host.docker.internal}
+      REDIS_PORT: "${JIHAJOOR_REDIS_PORT:-6379}"
+      KAFKA_BOOTSTRAP_SERVERS: ${JIHAJOOR_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
       SERVER_PORT: "8097"
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET, see .env.example}
     ports:
@@ -667,12 +667,12 @@ services:
     mem_limit: 448m
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
-      REDIS_HOST: ${HOMEFIX_REDIS_HOST:-host.docker.internal}
-      REDIS_PORT: "${HOMEFIX_REDIS_PORT:-6379}"
+      REDIS_HOST: ${JIHAJOOR_REDIS_HOST:-host.docker.internal}
+      REDIS_PORT: "${JIHAJOOR_REDIS_PORT:-6379}"
       SERVER_PORT: "8098"
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET, see .env.example}
       # Shared service credential for the Promotion Service /internal/** endpoints
@@ -701,8 +701,8 @@ services:
     mem_limit: 448m
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
       SERVER_PORT: "8095"
@@ -755,11 +755,11 @@ services:
     mem_limit: 448m
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
-      DB_URL: jdbc:postgresql://${HOMEFIX_DB_HOST:-host.docker.internal}:${HOMEFIX_DB_PORT:-5432}/${HOMEFIX_DB_NAME:-homefix}
-      DB_USERNAME: homefix
+      DB_URL: jdbc:postgresql://${JIHAJOOR_DB_HOST:-host.docker.internal}:${JIHAJOOR_DB_PORT:-5432}/${JIHAJOOR_DB_NAME:-jihajoor}
+      DB_USERNAME: jihajoor
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD, see .env.example}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
-      KAFKA_BOOTSTRAP_SERVERS: ${HOMEFIX_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
+      KAFKA_BOOTSTRAP_SERVERS: ${JIHAJOOR_KAFKA_BOOTSTRAP_SERVERS:-host.docker.internal:9094}
       SERVER_PORT: "8099"
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET, see .env.example}
     ports:

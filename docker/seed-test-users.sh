@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Seeds a fixed set of test users into the local HomeFix stack, one per role.
+# Seeds a fixed set of test users into the local Ji-Hajoor stack, one per role.
 #
 # Customers and providers are created through the real public OTP flow, so the
 # accounts are indistinguishable from ones a user would create. Privileged roles
@@ -60,7 +60,7 @@ register() {
 
 json_field() { printf '%s' "$1" | sed "s/.*\"$2\":\"\([^\"]*\)\".*/\1/"; }
 
-printf 'Seeding HomeFix test users\n\n'
+printf 'Seeding Ji-Hajoor test users\n\n'
 : > "${OUT_FILE}"
 printf '%-22s %-16s %-38s %s\n' 'MOBILE' 'ROLE' 'USER ID' 'NOTE' | tee -a "${OUT_FILE}"
 printf '%s\n' '---------------------------------------------------------------------------------------------------' | tee -a "${OUT_FILE}"

@@ -1,11 +1,11 @@
 ##############################################################
-# MSK Module — HomeFix
+# MSK Module — Ji-Hajoor
 # Amazon MSK (Kafka) cluster with TLS, KMS encryption,
 # CloudWatch logging, and all required application topics.
 ##############################################################
 
 locals {
-  # All Kafka topics required by HomeFix microservices
+  # All Kafka topics required by Ji-Hajoor microservices
   # Each topic also gets a dead-letter queue (DLQ) topic
   application_topics = [
     "booking-created",
@@ -47,7 +47,7 @@ resource "aws_cloudwatch_log_group" "msk" {
 resource "aws_msk_configuration" "this" {
   name              = "${var.name_prefix}-msk-config"
   kafka_versions    = [var.kafka_version]
-  description       = "HomeFix MSK Kafka broker configuration"
+  description       = "Ji-Hajoor MSK Kafka broker configuration"
 
   server_properties = <<-EOT
     auto.create.topics.enable=false
@@ -174,7 +174,7 @@ resource "aws_secretsmanager_secret" "msk_scram" {
 resource "aws_secretsmanager_secret_version" "msk_scram" {
   secret_id = aws_secretsmanager_secret.msk_scram.id
   secret_string = jsonencode({
-    username = "homefix-kafka-client"
+    username = "jihajoor-kafka-client"
     password = random_password.msk_scram.result
   })
 }

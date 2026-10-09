@@ -3,7 +3,7 @@
  */
 
 /**
- * Format a numeric amount as currency. Defaults to INR since HomeFix is an
+ * Format a numeric amount as currency. Defaults to INR since Ji-Hajoor is an
  * India-first platform, but honours whatever currency the backend returns.
  */
 export function formatCurrency(amount: number, currency = 'INR'): string {

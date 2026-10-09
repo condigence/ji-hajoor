@@ -3,7 +3,7 @@
 ## Overview
 
 This design implements [requirements.md](requirements.md). It adds Tenants (service agencies) to the one
-HomeFix marketplace and routes bookings that automatic matching could not place to the Tenants covering
+Ji-Hajoor marketplace and routes bookings that automatic matching could not place to the Tenants covering
 them, where a Tenant_Admin assigns one of the Tenant's Providers. It also completes the Android and iOS
 builds of the customer and provider apps.
 
@@ -240,7 +240,7 @@ lost optimistic lock or a booking that moved on answers 409 `BOOKING_NOT_ASSIGNA
 (Req 8.1, 8.2).
 
 **Sweeper**: `@Scheduled` every 60 s; selects `AWAITING_ASSIGNMENT` bookings whose
-`queued_for_assignment_at` is older than `homefix.booking.tenant-assignment-timeout` (default `PT60M`) and
+`queued_for_assignment_at` is older than `jihajoor.booking.tenant-assignment-timeout` (default `PT60M`) and
 transitions each to `SEARCHING_FAILED` through the transition service; the optimistic lock makes concurrent
 instances safe (Req 7.3).
 
@@ -450,7 +450,7 @@ was checked against the code on 2026-10-03; requirement-level changes are also r
 
 - **Sweeper also fails unanswered assignments.** `AssignmentTimeoutSweeper` selects bookings in
   `AWAITING_ASSIGNMENT` *or* `PROVIDER_ASSIGNED` whose `queued_for_assignment_at` is older than
-  `homefix.booking.tenant-assignment-timeout` (`TENANT_ASSIGNMENT_TIMEOUT`, default `PT60M`), at most 100
+  `jihajoor.booking.tenant-assignment-timeout` (`TENANT_ASSIGNMENT_TIMEOUT`, default `PT60M`), at most 100
   per pass, each in its own transaction. A `PROVIDER_ASSIGNED` booking is passed through
   `AWAITING_ASSIGNMENT` (audited "did not confirm before the assignment deadline") and then failed, so no new
   state-machine edge was needed. The Provider stays on the booking, so the cancellation notice reaches
@@ -492,7 +492,7 @@ was checked against the code on 2026-10-03; requirement-level changes are also r
 
 **Configuration**
 
-- booking-service selects its `TenantDirectoryPort` with `homefix.booking.tenant-directory-client`
+- booking-service selects its `TenantDirectoryPort` with `jihajoor.booking.tenant-directory-client`
   (`TENANT_DIRECTORY_CLIENT`): `http` (default) calls provider-service's `/internal/tenants/**`; `stub` knows
   no Tenants, which disables the fallback (an unplaced booking fails exactly as before) and makes every
   booking-service Tenant endpoint answer 404 `TENANT_NOT_FOUND`. The HTTP adapter never degrades a failure to an empty

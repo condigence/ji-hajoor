@@ -2,8 +2,8 @@ spring:
   application:
     name: outbox-processor
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/homefix}
-    username: ${DB_USERNAME:homefix}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/jihajoor}
+    username: ${DB_USERNAME:jihajoor}
     # Required: no default, so the service fails fast when DB_PASSWORD is not set.
     password: ${DB_PASSWORD}
   jpa:
@@ -11,7 +11,7 @@ spring:
       ddl-auto: validate
     open-in-view: false
   # The relay owns no schema of its own; it reads the shared outbox tables, which the
-  # R__homefix_outbox_tables migration in homefix-shared-outbox creates. History lives beside them.
+  # R__jihajoor_outbox_tables migration in jihajoor-shared-outbox creates. History lives beside them.
   flyway:
     schemas: outbox
     default-schema: outbox
@@ -40,7 +40,7 @@ spring:
 server:
   port: ${SERVER_PORT:8099}
 
-homefix:
+jihajoor:
   outbox-processor:
     # Number of due PENDING rows claimed per poll cycle.
     batch-size: ${OUTBOX_BATCH_SIZE:100}

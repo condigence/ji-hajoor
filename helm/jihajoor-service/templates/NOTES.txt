@@ -1,0 +1,14 @@
+{{ include "jihajoor-service.fullname" . }} deployed to namespace {{ .Release.Namespace }} ({{ .Values.environment }}).
+
+Image:      {{ .Values.image.repository }}:{{ .Values.image.tag }}
+Replicas:   {{ if .Values.autoscaling.enabled }}autoscaled {{ .Values.autoscaling.minReplicas }}–{{ .Values.autoscaling.maxReplicas }}{{ else }}{{ .Values.replicaCount }}{{ end }}
+Service:    {{ include "jihajoor-service.fullname" . }}:{{ .Values.service.port | default (include "jihajoor-service.port" .) }} ({{ .Values.service.type }})
+Secret:     {{ include "jihajoor-service.secretName" . }} (must already exist in {{ .Release.Namespace }})
+
+Check rollout:
+  kubectl rollout status deployment/{{ include "jihajoor-service.fullname" . }} -n {{ .Release.Namespace }}
+
+Health endpoints (via port-forward):
+  kubectl port-forward svc/{{ include "jihajoor-service.fullname" . }} {{ include "jihajoor-service.port" . }}:{{ .Values.service.port | default (include "jihajoor-service.port" .) }} -n {{ .Release.Namespace }}
+  curl http://localhost:{{ include "jihajoor-service.port" . }}{{ .Values.probes.liveness.path }}
+  curl http://localhost:{{ include "jihajoor-service.port" . }}{{ .Values.probes.readiness.path }}

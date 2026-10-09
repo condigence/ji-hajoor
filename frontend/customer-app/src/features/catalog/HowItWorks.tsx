@@ -27,7 +27,7 @@ const STEPS = [
 export function HowItWorks() {
   return (
     <Box component="section" aria-labelledby="how-it-works-title">
-      <SectionHeading id="how-it-works-title" title="How HomeFix works" />
+      <SectionHeading id="how-it-works-title" title="How Ji-Hajoor works" />
       <Box
         component="ol"
         sx={{
