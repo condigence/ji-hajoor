@@ -1,0 +1,11 @@
+.git
+**/target
+**/node_modules
+**/dist
+**/bin
+frontend
+docs
+helm
+infra
+.kiro
+*.md
