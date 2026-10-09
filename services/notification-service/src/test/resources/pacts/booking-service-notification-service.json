@@ -1,0 +1,74 @@
+{
+  "consumer": {
+    "name": "booking-service"
+  },
+  "messages": [
+    {
+      "contents": {
+        "bookingId": "e2490de5-5bd3-43d5-b7c4-526e33f71304",
+        "reference": "HF-2024-000123",
+        "customerId": "5b1e7c2a-9d34-4f0e-8a61-3c2d9e4b7f10"
+      },
+      "description": "a booking-lifecycle notification event",
+      "generators": {
+        "body": {
+          "$.bookingId": {
+            "type": "Uuid"
+          },
+          "$.customerId": {
+            "type": "Uuid"
+          }
+        }
+      },
+      "matchingRules": {
+        "body": {
+          "$.bookingId": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "regex",
+                "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              }
+            ]
+          },
+          "$.reference": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "type"
+              }
+            ]
+          },
+          "$.customerId": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "regex",
+                "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              }
+            ]
+          }
+        }
+      },
+      "metaData": {
+        "contentType": "application/json"
+      },
+      "providerStates": [
+        {
+          "name": "a booking-lifecycle event is emitted for a customer"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "pact-jvm": {
+      "version": "4.6.21"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "notification-service"
+  }
+}

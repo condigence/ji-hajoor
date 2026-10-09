@@ -1,0 +1,161 @@
+name: CD — Production Promotion
+
+# Promotes images CI already built and pushed to production. Manual only: there
+# is no automatic promotion after CI, and nothing is rebuilt here — production
+# runs exactly the image (tag = commit SHA) that passed CI.
+#
+# Gates, in order, before anything is deployed:
+#   1. image_tag is a full commit SHA reachable from main;
+#   2. the CI workflow has a successful run on main for that SHA (which includes
+#      the staging deploy whenever STAGING_DEPLOY_ENABLED is on);
+#   3. the "production" GitHub environment's protection rules (configure
+#      required reviewers there);
+#   4. preflight in deploy-services.yml: every image exists in ECR, the namespace
+#      and every "<service>-secrets" Secret exist with the keys the chart reads.
+# Each service is then `helm upgrade --install --atomic`ed and health-checked
+# through its Service; a failed health check rolls that release back.
+#
+# ── Infrastructure this needs and the repository does NOT provide ──
+#   GitHub environment "production" with variables:
+#     AWS_REGION               e.g. ap-south-1
+#     AWS_DEPLOY_ROLE_ARN      IAM role trusted for this repo + environment via
+#                              GitHub OIDC (token.actions.githubusercontent.com),
+#                              with ecr:DescribeImages and EKS cluster access
+#                              (access entry / aws-auth) to deploy into the namespace
+#     ECR_REGISTRY             <account>.dkr.ecr.<region>.amazonaws.com
+#     EKS_CLUSTER_NAME         infra/terraform names it "<project>-<env>-cluster"
+#     K8S_NAMESPACE            namespace the releases go into (must exist)
+#     REDIS_HOST, REDIS_PORT   only if a deployed service needs Redis
+#     KAFKA_BOOTSTRAP_SERVERS  only if a deployed service needs Kafka
+#   ECR repositories named exactly after each service (auth-service, ...).
+#   One Kubernetes Secret per service, "<service>-secrets", in K8S_NAMESPACE,
+#   holding the keys listed in helm/services/<service>.yaml (db_host, db_port,
+#   db_name, db_username, db_password, jwt_secret, ...). Populate them from AWS
+#   Secrets Manager (e.g. External Secrets Operator); never commit them.
+#   A database schema for every service (no migrations exist yet).
+# The same list applies to the "staging" environment used by ci.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Full 40-character commit SHA on main whose CI run pushed the images'
+        required: true
+      services:
+        description: 'Comma-separated directory names under services/, or "all"'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Verify promotion
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      services: ${{ steps.services.outputs.json }}
+    env:
+      IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+      REQUESTED: ${{ github.event.inputs.services }}
+    steps:
+      - name: Checkout the commit being promoted
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: The tag is a commit on main
+        run: |
+          if ! [[ "${IMAGE_TAG}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::image_tag must be a full 40-character lowercase commit SHA."
+            exit 1
+          fi
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "${IMAGE_TAG}" origin/main; then
+            echo "::error::${IMAGE_TAG} is not on main. Only main is promoted to production."
+            exit 1
+          fi
+
+      - name: CI succeeded for that commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          count=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?branch=main&head_sha=${IMAGE_TAG}&status=success" \
+            --jq '.total_count')
+          if [ "${count}" -lt 1 ]; then
+            echo "::error::No successful CI run on main for ${IMAGE_TAG}; its images were not built, tested and pushed."
+            exit 1
+          fi
+          echo "Found ${count} successful CI run(s) for ${IMAGE_TAG}."
+
+      - name: Resolve services
+        id: services
+        run: |
+          # Resolve against the promoted commit's tree, so the list and the Helm
+          # values match the images being deployed.
+          git checkout --quiet "${IMAGE_TAG}"
+          mapfile -t all < <(for d in services/*/; do [ -f "${d}pom.xml" ] && basename "${d}"; done)
+          if [ "${REQUESTED}" = "all" ]; then
+            selected=("${all[@]}")
+          else
+            selected=()
+            IFS=',' read -ra wanted <<< "${REQUESTED}"
+            for w in "${wanted[@]}"; do
+              w=$(echo "${w}" | xargs)
+              [ -z "${w}" ] && continue
+              if [ ! -f "services/${w}/pom.xml" ]; then
+                echo "::error::Unknown service '${w}'. Known: ${all[*]}"
+                exit 1
+              fi
+              selected+=("${w}")
+            done
+          fi
+          if [ "${#selected[@]}" -eq 0 ]; then
+            echo "::error::No services selected."
+            exit 1
+          fi
+          json=$(printf '%s\n' "${selected[@]}" | sort -u | jq -R . | jq -cs .)
+          echo "json=${json}" >> "$GITHUB_OUTPUT"
+          echo "Promoting ${json} at ${IMAGE_TAG}" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Production
+    needs: plan
+    uses: ./.github/workflows/deploy-services.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      environment: production
+      services: ${{ needs.plan.outputs.services }}
+      image-tag: ${{ github.event.inputs.image_tag }}
+
+  release:
+    name: Record release
+    needs: [plan, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: production-${{ github.run_number }}
+          target_commitish: ${{ github.event.inputs.image_tag }}
+          name: Production ${{ github.run_number }}
+          body: |
+            **Commit / image tag**: `${{ github.event.inputs.image_tag }}`
+            **Services**: `${{ needs.plan.outputs.services }}`
+            **Environment**: production
+            **Promoted by**: @${{ github.actor }}
+          draft: false
+          prerelease: false

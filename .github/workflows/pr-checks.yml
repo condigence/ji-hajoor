@@ -1,0 +1,115 @@
+name: PR Checks — Lint, Test, Coverage, Image
+
+# For every pull request into main or release/**:
+#   - lint the workflows and the Helm chart (always);
+#   - build, test, coverage-gate and image-build the services the PR touches —
+#     or all of them when shared/ or the build workflow changes, since every
+#     service compiles against the shared libraries.
+# Nothing is pushed or deployed. "PR Gate" is the single required status check.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release/**'
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+
+# Cancel in-flight runs for the same PR when a new commit is pushed.
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  detect-changes:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      services: ${{ steps.changes.outputs.services }}
+      has_services: ${{ steps.changes.outputs.has_services }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed service directories
+        id: changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed_files=$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")
+          mapfile -t all < <(for d in services/*/; do [ -f "${d}pom.xml" ] && basename "${d}"; done)
+          if grep -qE '^(shared/|\.github/workflows/build-services\.yml$)' <<< "${changed_files}"; then
+            echo "shared/ or the build workflow changed: building every service."
+            selected=("${all[@]}")
+          else
+            selected=()
+            mapfile -t touched < <(grep -E '^services/[^/]+/' <<< "${changed_files}" | cut -d'/' -f2 | sort -u)
+            for svc in "${touched[@]}"; do
+              # A deleted service has no pom.xml left to build.
+              [ -f "services/${svc}/pom.xml" ] && selected+=("${svc}")
+            done
+          fi
+          if [ "${#selected[@]}" -eq 0 ]; then
+            echo "services=[]" >> "$GITHUB_OUTPUT"
+            echo "has_services=false" >> "$GITHUB_OUTPUT"
+            echo "No backend service changes."
+          else
+            json=$(printf '%s\n' "${selected[@]}" | jq -R . | jq -cs .)
+            echo "services=${json}" >> "$GITHUB_OUTPUT"
+            echo "has_services=true" >> "$GITHUB_OUTPUT"
+            echo "Services to build: ${json}"
+          fi
+
+  lint:
+    name: Lint
+    uses: ./.github/workflows/lint-delivery.yml
+
+  build:
+    name: Build
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has_services == 'true'
+    uses: ./.github/workflows/build-services.yml
+    with:
+      services: ${{ needs.detect-changes.outputs.services }}
+      image-tag: ${{ github.event.pull_request.head.sha }}
+      min-line-coverage: ${{ fromJSON(vars.MIN_LINE_COVERAGE || '80') }}
+      push-images: false
+
+  # ─────────────────────────────────────────────
+  # Final status check (branch protection target)
+  # ─────────────────────────────────────────────
+  pr-gate:
+    name: PR Gate — All Checks Passed
+    runs-on: ubuntu-latest
+    needs:
+      - detect-changes
+      - lint
+      - build
+    if: always()
+    steps:
+      - name: Evaluate gate
+        env:
+          DETECT: ${{ needs.detect-changes.result }}
+          LINT: ${{ needs.lint.result }}
+          BUILD: ${{ needs.build.result }}
+        run: |
+          echo "detect-changes : ${DETECT}"
+          echo "lint           : ${LINT}"
+          echo "build          : ${BUILD}"
+          # build is skipped when no service changed; anything else must succeed.
+          [ "${DETECT}" = "success" ] || { echo "Change detection did not succeed."; exit 1; }
+          [ "${LINT}" = "success" ] || { echo "Lint did not succeed."; exit 1; }
+          case "${BUILD}" in
+            success|skipped) ;;
+            *) echo "Build did not succeed."; exit 1 ;;
+          esac
+          echo "All checks passed — PR is eligible for merge."
