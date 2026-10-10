@@ -83,15 +83,21 @@ public class RegistrationService {
                             + " OTP requests per hour exceeded for this number.", retryAfter);
         }
 
-        String code = codeGenerator.generate(otpProperties.getLength());
+        String fixedCode = otpProperties.activeFixedCode();
+        String code = fixedCode != null ? fixedCode : codeGenerator.generate(otpProperties.getLength());
 
-        // Send FIRST; only persist the pending session if delivery succeeds (Requirement 1.16).
-        try {
-            smsGateway.sendOtp(mobileNumber, code, otpProperties.getTtl());
-        } catch (SmsDeliveryException ex) {
-            log.warn("OTP SMS delivery failed; no pending session created");
-            throw new RegistrationException(HttpStatus.BAD_GATEWAY, "SMS_DELIVERY_FAILED",
-                    "Failed to deliver OTP to the supplied mobile number.");
+        if (fixedCode != null) {
+            // Temporary test mode: no SMS; the caller already knows the code.
+            log.warn("TEST OTP MODE: fixed code issued, SMS not sent");
+        } else {
+            // Send FIRST; only persist the pending session if delivery succeeds (Requirement 1.16).
+            try {
+                smsGateway.sendOtp(mobileNumber, code, otpProperties.getTtl());
+            } catch (SmsDeliveryException ex) {
+                log.warn("OTP SMS delivery failed; no pending session created");
+                throw new RegistrationException(HttpStatus.BAD_GATEWAY, "SMS_DELIVERY_FAILED",
+                        "Failed to deliver OTP to the supplied mobile number.");
+            }
         }
 
         String codeHash = codeGenerator.hash(code, mobileNumber);
@@ -158,6 +164,7 @@ public class RegistrationService {
         UserAccount account = userRepository.findByMobileNumber(mobileNumber)
                 .map(existing -> {
                     AccountDisabledException.requireActive(existing);
+                    refuseStaffInTestOtpMode(existing);
                     existing.addRole(role);
                     return userRepository.save(existing);
                 })
@@ -166,6 +173,22 @@ public class RegistrationService {
         List<String> roles = account.getRoles().stream().map(Enum::name).sorted().toList();
         TokenPair tokens = tokenService.issueTokens(account.getId().toString(), roles);
         return new VerificationResult(account.getId().toString(), roles, tokens);
+    }
+
+    /**
+     * In test OTP mode anyone can pass the code check, so it must never open a staff account:
+     * those keep signing in with username and password.
+     */
+    private void refuseStaffInTestOtpMode(UserAccount account) {
+        if (otpProperties.activeFixedCode() == null) {
+            return;
+        }
+        boolean staff = account.getRoles().stream().anyMatch(r -> !r.isSelfAssignable());
+        if (staff) {
+            log.warn("TEST OTP MODE: refused OTP sign-in for a staff account");
+            throw new RegistrationException(HttpStatus.FORBIDDEN, "OTP_TEST_MODE_STAFF",
+                    "Staff accounts sign in with username and password.");
+        }
     }
 
     /**

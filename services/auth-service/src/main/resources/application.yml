@@ -58,6 +58,9 @@ jihajoor:
       lockout: 30m
       max-requests-per-window: 5
       rate-limit-window: 1h
+      # TEMPORARY TEST MODE: every OTP is this code and no SMS is sent; staff accounts are
+      # refused (they use username/password). Unset it once SMS delivery works.
+      fixed-code: ${OTP_FIXED_CODE:}
     # Username/password sign-in. The lockout mirrors the OTP flow so both
     # authentication surfaces resist brute force identically (Requirement 1.3).
     password:

@@ -338,4 +338,58 @@ class RegistrationServiceTest {
         verify(userRepository, never()).save(any(UserAccount.class));
         verify(tokenService, never()).issueTokens(anyString(), anyList());
     }
+
+    // ----- Temporary fixed-code test mode -----
+
+    @Test
+    void fixedCodeMode_acceptsTheFixedCodeWithoutSendingSms() {
+        otpProperties.setFixedCode("123456");
+        stubUserCreation();
+
+        service.requestOtp(PHONE, "CUSTOMER");
+        assertThat(smsGateway.sentMessages()).isEmpty();
+
+        VerificationResult result = service.verifyOtp(PHONE, "123456");
+        assertThat(result.roles()).containsExactly("CUSTOMER");
+    }
+
+    @Test
+    void fixedCodeMode_wrongCodeIsStillRejected() {
+        otpProperties.setFixedCode("123456");
+
+        service.requestOtp(PHONE, "CUSTOMER");
+
+        assertThatThrownBy(() -> service.verifyOtp(PHONE, "654321"))
+                .isInstanceOf(RegistrationException.class)
+                .satisfies(ex -> assertThat(((RegistrationException) ex).getErrorCode())
+                        .isEqualTo("OTP_INCORRECT"));
+    }
+
+    @Test
+    void fixedCodeMode_neverOpensAStaffAccount() {
+        otpProperties.setFixedCode("123456");
+        UserAccount admin = UserAccount.createVerified(PHONE, Role.SUPER_ADMIN);
+        when(userRepository.findByMobileNumber(PHONE)).thenReturn(Optional.of(admin));
+
+        service.requestOtp(PHONE, "CUSTOMER");
+
+        assertThatThrownBy(() -> service.verifyOtp(PHONE, "123456"))
+                .isInstanceOf(RegistrationException.class)
+                .satisfies(ex -> {
+                    RegistrationException re = (RegistrationException) ex;
+                    assertThat(re.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(re.getErrorCode()).isEqualTo("OTP_TEST_MODE_STAFF");
+                });
+        assertThat(admin.getRoles()).containsExactly(Role.SUPER_ADMIN);
+        verify(tokenService, never()).issueTokens(anyString(), anyList());
+    }
+
+    @Test
+    void fixedCodeMode_ignoresANonNumericValue() {
+        otpProperties.setFixedCode("abc");
+
+        service.requestOtp(PHONE, "CUSTOMER");
+
+        assertThat(smsGateway.sentMessages()).hasSize(1);
+    }
 }

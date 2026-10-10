@@ -41,6 +41,13 @@ public class OtpProperties {
     /** Rate-limit sliding window for OTP requests. Default 1 hour (Requirement 23.4). */
     private Duration rateLimitWindow = Duration.ofHours(1);
 
+    /**
+     * TEMPORARY TEST MODE. When set, every OTP is this code and no SMS is sent, so sign-in works
+     * while the SMS gateway is unavailable. Accounts holding a staff role are refused in this mode
+     * (they sign in with username and password). Leave unset in normal operation.
+     */
+    private String fixedCode;
+
     public Duration getTtl() {
         return ttl;
     }
@@ -87,5 +94,22 @@ public class OtpProperties {
 
     public void setRateLimitWindow(Duration rateLimitWindow) {
         this.rateLimitWindow = rateLimitWindow;
+    }
+
+    public String getFixedCode() {
+        return fixedCode;
+    }
+
+    public void setFixedCode(String fixedCode) {
+        this.fixedCode = fixedCode;
+    }
+
+    /** The fixed test code, or null when test mode is off or the value is not numeric. */
+    public String activeFixedCode() {
+        if (fixedCode == null || fixedCode.isBlank()) {
+            return null;
+        }
+        String code = fixedCode.trim();
+        return code.matches("\\d{4,10}") ? code : null;
     }
 }

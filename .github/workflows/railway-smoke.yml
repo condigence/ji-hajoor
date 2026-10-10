@@ -100,6 +100,7 @@ jobs:
             -e BOOTSTRAP_ADMIN_USERNAME="$ADMIN_USER" \
             -e BOOTSTRAP_ADMIN_PASSWORD="$ADMIN_PASS" \
             -e BOOTSTRAP_ADMIN_MOBILE="$ADMIN_MOBILE" \
+            -e OTP_FIXED_CODE=123456 \
             jh/auth-service
           docker run -d --name admin-service --network "$NET" \
             -e PORT=8095 \
@@ -183,6 +184,25 @@ jobs:
             http://localhost:3000/api/admin/dashboard)
           echo "GET /api/admin/dashboard -> HTTP $code"; head -c 600 dash.json; echo
           test "$code" = 200
+
+      - name: Customer OTP sign-up with the fixed test code
+        run: |
+          post() { curl -sS -o out.json -w '%{http_code}' -H 'Content-Type: application/json' \
+                     -H 'X-Forwarded-Proto: https' -d "$2" "http://localhost:3000/api$1"; }
+          code=$(post /auth/register/otp '{"mobileNumber":"+919812345678","role":"CUSTOMER"}')
+          echo "request OTP -> HTTP $code"; cat out.json; echo; test "$code" = 202
+          code=$(post /auth/register/verify '{"mobileNumber":"+919812345678","otp":"123456"}')
+          echo "verify 123456 -> HTTP $code"; cat out.json; echo; test "$code" = 200
+          jq -e '.roles == ["CUSTOMER"]' out.json >/dev/null
+
+      - name: Fixed test code never opens the admin account
+        run: |
+          post() { curl -sS -o out.json -w '%{http_code}' -H 'Content-Type: application/json' \
+                     -H 'X-Forwarded-Proto: https' -d "$2" "http://localhost:3000/api$1"; }
+          code=$(post /auth/register/otp "{\"mobileNumber\":\"$ADMIN_MOBILE\",\"role\":\"CUSTOMER\"}")
+          echo "request OTP for admin number -> HTTP $code"; test "$code" = 202
+          code=$(post /auth/register/verify "{\"mobileNumber\":\"$ADMIN_MOBILE\",\"otp\":\"123456\"}")
+          echo "verify for admin number -> HTTP $code"; cat out.json; echo; test "$code" = 403
 
       - name: Restart keeps the admin and its password
         run: |
