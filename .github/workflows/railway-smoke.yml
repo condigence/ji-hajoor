@@ -192,7 +192,7 @@ jobs:
           code=$(post /auth/register/otp '{"mobileNumber":"+919812345678","role":"CUSTOMER"}')
           echo "request OTP -> HTTP $code"; cat out.json; echo; test "$code" = 202
           code=$(post /auth/register/verify '{"mobileNumber":"+919812345678","otp":"123456"}')
-          echo "verify 123456 -> HTTP $code"; cat out.json; echo; test "$code" = 200
+          echo "verify 123456 -> HTTP $code"; cat out.json; echo; test "$code" = 201
           jq -e '.roles == ["CUSTOMER"]' out.json >/dev/null
 
       - name: Fixed test code never opens the admin account
