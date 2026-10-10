@@ -75,12 +75,19 @@ S=""; for _ in $(seq 1 20); do S="$(status)"; [ "$S" = PROVIDER_ACCEPTED ] && br
 echo "== Provider does the job"
 B="$GATEWAY/bookings/$BOOKING_ID"
 c="$(code -X POST -H "$P" "$B/on-the-way")"; [ "$c" = 200 ] && ok "on the way" || bad "on the way" "HTTP $c"
+# The customer app opens the live stream with the token in the URL (browser EventSource
+# cannot send headers); open it first, then the provider's update must arrive on it.
+curl -sSN --max-time 12 -H 'X-Forwarded-Proto: https' -H 'Accept: text/event-stream' \
+  "$GATEWAY/locations/$BOOKING_ID/stream?access_token=$TOKEN" > /tmp/stream.txt 2>/dev/null &
+STREAM_PID=$!
+sleep 3
 c="$(code -X POST -H "$P" -H "$JSON" -d '{"latitude":25.5590,"longitude":84.6630}' "$GATEWAY/locations/$BOOKING_ID")"
 [ "$c" = 202 ] && ok "provider shares location" || bad "provider shares location" "HTTP $c"
 api -H "$C" "$GATEWAY/locations/$BOOKING_ID" | grep -q '"latitude":25.559' && ok "customer sees live location" || bad "customer sees live location" "no snapshot"
-# Browser EventSource sends the token in the URL; the gateway must accept it on the stream.
-c="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 -H 'X-Forwarded-Proto: https' "$GATEWAY/locations/$BOOKING_ID/stream?access_token=$TOKEN" || true)"
-[ "$c" = 200 ] && ok "live tracking stream opens with ?access_token" || bad "live tracking stream opens" "HTTP $c"
+for _ in $(seq 1 8); do grep -q '25.559' /tmp/stream.txt && break; sleep 1; done
+kill "$STREAM_PID" 2>/dev/null; wait "$STREAM_PID" 2>/dev/null
+grep -q '25.559' /tmp/stream.txt && ok "live tracking stream delivers the update (token in URL)" \
+  || bad "live tracking stream delivers the update" "stream got: $(head -c 300 /tmp/stream.txt)"
 c="$(code -X POST -H "$P" "$B/arrived")"; [ "$c" = 200 ] && ok "arrived" || bad "arrived" "HTTP $c"
 printf '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==' | base64 -d > /tmp/photo.jpg
 photo() { code -X POST -H "$P" -F "type=$1" -F "file=@/tmp/photo.jpg;type=image/jpeg;filename=$1.jpg" "$B/photos"; }
