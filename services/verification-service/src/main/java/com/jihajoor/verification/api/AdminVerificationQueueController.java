@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -43,10 +44,18 @@ public class AdminVerificationQueueController {
     private final VerificationService verificationService;
     private final ProviderDirectoryPort providerDirectory;
     private final CallerIdentity callerIdentity;
+    /**
+     * True (the default) while no background-check vendor is integrated: the portal's Approve then
+     * completes the whole review in one step. False hands the check to the external workflow.
+     */
+    private final boolean manualBackgroundCheck;
 
     public AdminVerificationQueueController(VerificationService verificationService,
                                             ProviderDirectoryPort providerDirectory,
-                                            CallerIdentity callerIdentity) {
+                                            CallerIdentity callerIdentity,
+                                            @Value("${jihajoor.verification.manual-background-check:true}")
+                                            boolean manualBackgroundCheck) {
+        this.manualBackgroundCheck = manualBackgroundCheck;
         this.verificationService = verificationService;
         this.providerDirectory = providerDirectory;
         this.callerIdentity = callerIdentity;
@@ -96,7 +105,13 @@ public class AdminVerificationQueueController {
                                        @Valid @RequestBody VerificationDecisionRequest request) {
         UUID admin = callerIdentity.requireCallerId();
         switch (request.decision()) {
-            case APPROVE -> verificationService.markDocumentsVerified(providerId, admin, request.reason());
+            case APPROVE -> {
+                if (manualBackgroundCheck) {
+                    verificationService.approveAfterManualReview(providerId, admin, request.reason());
+                } else {
+                    verificationService.markDocumentsVerified(providerId, admin, request.reason());
+                }
+            }
             case REJECT -> verificationService.reject(providerId, admin, request.reason());
         }
         return ResponseEntity.noContent().build();

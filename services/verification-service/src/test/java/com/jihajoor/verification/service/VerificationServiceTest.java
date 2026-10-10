@@ -523,4 +523,48 @@ class VerificationServiceTest {
             assertThat(service.statusesAmong(List.of())).isEmpty();
         }
     }
+
+    // ============================= Manual one-step approval =========================
+
+    @Nested
+    class ManualApproval {
+
+        @Test
+        void fromSubmittedDocuments_reachesApprovedAndCanTakeJobs() {
+            stubStorage();
+            UUID providerId = UUID.randomUUID();
+            UUID admin = UUID.randomUUID();
+            service.submitDocuments(providerId, allRequiredDocuments(), providerId);
+
+            Verification v = service.approveAfterManualReview(providerId, admin, null);
+
+            assertThat(v.getStatus()).isEqualTo(VerificationStatus.APPROVED);
+            assertThat(service.canReceiveJobAssignment(providerId)).isTrue();
+            verifyNoInteractions(backgroundCheck);
+        }
+
+        @Test
+        void fromPendingBackgroundCheck_reachesApproved() {
+            stubStorage();
+            UUID providerId = UUID.randomUUID();
+            UUID admin = UUID.randomUUID();
+            service.submitDocuments(providerId, allRequiredDocuments(), providerId);
+            service.markDocumentsVerified(providerId, admin, "docs ok");
+
+            Verification v = service.approveAfterManualReview(providerId, admin, null);
+
+            assertThat(v.getStatus()).isEqualTo(VerificationStatus.APPROVED);
+        }
+
+        @Test
+        void withoutSubmittedDocuments_isRefused() {
+            UUID providerId = UUID.randomUUID();
+            repository.save(Verification.create(providerId));
+
+            assertThatThrownBy(() -> service.approveAfterManualReview(providerId, UUID.randomUUID(), null))
+                    .isInstanceOf(VerificationException.class);
+            assertThat(repository.findByProviderId(providerId).orElseThrow().getStatus())
+                    .isEqualTo(VerificationStatus.PENDING);
+        }
+    }
 }

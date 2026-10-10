@@ -48,8 +48,7 @@ svc() {
 
 svc auth-service 8081 -e REDIS_URL="$REDIS" -e OTP_FIXED_CODE=123456 \
   -e BOOTSTRAP_ADMIN_USERNAME=owner -e BOOTSTRAP_ADMIN_PASSWORD=ci-admin-password-1 \
-  -e BOOTSTRAP_ADMIN_MOBILE=+919999999999 \
-  -e DEV_SEED_ENABLED=true -e DEV_SEED_PASSWORD=ci-dev-seed-pass
+  -e BOOTSTRAP_ADMIN_MOBILE=+919999999999
 svc catalog-service 8085 -e REDIS_URL="$REDIS" -e CATALOG_CACHE=memory
 svc customer-service 8082 -e KMS_PROVIDER=local -e KMS_LOCAL_DATA_KEY="$KMS" -e GEOCODING_PROVIDER=noop \
   -e BOOKING_SERVICE_URL=http://booking-service:8084
@@ -120,6 +119,4 @@ docker run --rm --network "$NET" -e DATABASE_URL="$DB" \
   -e AUTH_URL=http://auth-service:8081 -e PRICING_URL=http://pricing-engine:8086 \
   -e ADMIN_USERNAME=owner -e ADMIN_PASSWORD=ci-admin-password-1 jh/seed
 
-# CI only: a dispatchable test provider (the dev-seeded +919000000011) in Ara.
-docker exec -i postgres psql -U postgres -d railway -v ON_ERROR_STOP=1 -q < docker/seed-provider-profiles.sql
 echo "stack ready"

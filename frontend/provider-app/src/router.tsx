@@ -11,6 +11,7 @@ import { JobDetailsScreen } from '@features/jobs/JobDetailsScreen';
 import { ActiveJobScreen } from '@features/jobs/ActiveJobScreen';
 import { JobCompletionScreen } from '@features/jobs/JobCompletionScreen';
 import { EarningsScreen } from '@features/earnings/EarningsScreen';
+import { OnboardingScreen } from '@features/onboarding/OnboardingScreen';
 
 /**
  * Provider App routes. Screen set follows Requirement 28.8:
@@ -35,6 +36,14 @@ export const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <DashboardScreen />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/onboarding',
+    element: (
+      <RequireAuth>
+        <OnboardingScreen />
       </RequireAuth>
     ),
   },

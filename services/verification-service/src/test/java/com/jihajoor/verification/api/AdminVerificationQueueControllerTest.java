@@ -54,7 +54,10 @@ import io.jsonwebtoken.security.Keys;
  */
 @WebMvcTest(controllers = AdminVerificationQueueController.class, properties = {
         "jihajoor.security.jwt-secret=" + AdminVerificationQueueControllerTest.JWT_SECRET,
-        "jihajoor.verification.internal-api-key=unused-internal-key"
+        "jihajoor.verification.internal-api-key=unused-internal-key",
+        // These tests cover the vendor-backed workflow; the manual one-step approval is covered
+        // by VerificationServiceTest.ManualApproval.
+        "jihajoor.verification.manual-background-check=false"
 })
 @Import({WebSecurityConfig.class, VerificationRbacConfig.class, CallerIdentity.class,
         GlobalExceptionHandler.class})

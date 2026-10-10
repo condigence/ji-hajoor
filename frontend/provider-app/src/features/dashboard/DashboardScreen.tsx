@@ -1,9 +1,10 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Alert, Avatar, Box, Skeleton, Stack, Typography } from '@mui/material';
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import { AppShell } from '@components/AppShell';
 import { QueryStateView } from '@components/QueryStateView';
 import { useAuthStore } from '@stores/authStore';
+import { useMyProfile } from '@features/onboarding/hooks';
 import { EarningsSummaryCard } from './EarningsSummaryCard';
 import { readDashboardNotice } from '@features/jobs/assignmentNotice';
 import { isAwaitingProviderAnswer } from '@features/jobs/status';
@@ -31,6 +32,8 @@ export function DashboardScreen() {
 
   const summary = useEarningsSummary();
   const activeJobs = useActiveJobs();
+  // A provider without a profile cannot be offered jobs; send them to set one up first.
+  const profile = useMyProfile();
 
   const openJob = (bookingId: string) => navigate(`/jobs/${bookingId}`);
   const openOffer = (bookingId: string) => navigate(`/jobs/${bookingId}/request`);
@@ -49,6 +52,10 @@ export function DashboardScreen() {
     (job) => !isAwaitingProviderAnswer(job.status),
   );
   const jobCount = runningJobs.length;
+
+  if (profile.data === null) {
+    return <Navigate to="/onboarding" replace />;
+  }
 
   return (
     <AppShell title="Dashboard" branded>

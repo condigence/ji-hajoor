@@ -144,6 +144,33 @@ public class VerificationService {
     }
 
     /**
+     * One-step approval for deployments without a background-check vendor: the admin's review in
+     * the portal stands in for the external check. From {@code DOCUMENT_SUBMITTED} (or a check
+     * left {@code BACKGROUND_CHECK_PENDING}) it walks the normal state machine to {@code APPROVED},
+     * recording every transition against the acting admin, in one transaction so a provider is
+     * never left half-approved. Any other starting state is refused by the state machine (409).
+     */
+    @Transactional
+    public Verification approveAfterManualReview(UUID providerId, UUID adminId, String reason) {
+        Verification verification = require(providerId);
+        if (verification.getStatus() == VerificationStatus.DOCUMENT_SUBMITTED) {
+            verification.transitionTo(VerificationStatus.DOCUMENT_VERIFIED, adminId,
+                    reason == null ? "Admin verified documents" : reason);
+            verification.recordBackgroundCheckStarted(Instant.now());
+            verification.transitionTo(VerificationStatus.BACKGROUND_CHECK_PENDING, adminId,
+                    "Background check: manual review by admin");
+        }
+        if (verification.getStatus() == VerificationStatus.BACKGROUND_CHECK_PENDING) {
+            verification.recordBackgroundCheckResult("Manual review by admin " + adminId);
+            verification.transitionTo(VerificationStatus.BACKGROUND_CHECK_COMPLETED, adminId,
+                    "Background check completed (manual review)");
+        }
+        verification.transitionTo(VerificationStatus.APPROVED, adminId,
+                reason == null ? "Admin approved provider" : reason);
+        return fullyLoaded(repository.save(verification));
+    }
+
+    /**
      * Approves a provider with {@code BACKGROUND_CHECK_COMPLETED} status, enabling job
      * assignments (Requirement 5.7). Also used to reinstate a {@code SUSPENDED} provider
      * (Requirement 5.1: {@code SUSPENDED → APPROVED}).

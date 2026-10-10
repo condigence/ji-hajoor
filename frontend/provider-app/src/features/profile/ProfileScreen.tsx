@@ -16,6 +16,7 @@ import {
 } from '@mui/material';
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import VerifiedUserRoundedIcon from '@mui/icons-material/VerifiedUserRounded';
+import HandymanRoundedIcon from '@mui/icons-material/HandymanRounded';
 import AccountBalanceWalletRoundedIcon from '@mui/icons-material/AccountBalanceWalletRounded';
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
@@ -103,6 +104,13 @@ export function ProfileScreen() {
 
         <Card>
           <List disablePadding>
+            <ProfileLink
+              icon={<HandymanRoundedIcon />}
+              label="Services & area"
+              caption="What you offer and how far you travel"
+              onClick={() => navigate('/onboarding')}
+            />
+            <Divider component="li" />
             <ProfileLink
               icon={<VerifiedUserRoundedIcon />}
               label="Verification"
