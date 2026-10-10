@@ -6,12 +6,33 @@ jobs:
   live:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe the deployed site
+      - name: Customer flow on the live customer app
         run: |
-          U=https://ji-hajoor-production.up.railway.app
+          U=https://customer-app-production-38b7.up.railway.app
           H='Content-Type: application/json'
-          curl -s -o /dev/null $U/
-          curl -s -o /dev/null -H "$H" -d '{"mobileNumber":"+919000000077","role":"CUSTOMER"}' $U/api/auth/register/otp
-          curl -s -o /dev/null -H "$H" -d '{"mobileNumber":"+919000000077","otp":"123456"}' $U/api/auth/register/verify
-          curl -s -o /dev/null -H "$H" -d '{"mobileNumber":"+919999999999","role":"CUSTOMER"}' $U/api/auth/register/otp
-          curl -s -o /dev/null -H "$H" -d '{"mobileNumber":"+919999999999","otp":"123456"}' $U/api/auth/register/verify
+          note() { echo "::warning title=$1::$2"; }
+          note home "$(curl -s -o /dev/null -w '%{http_code}' $U/)"
+          note provider-app "$(curl -s -o /dev/null -w '%{http_code}' https://provider-app-production-40b1.up.railway.app/)"
+          M=+919000000088
+          note otp "$(curl -s -o /dev/null -w '%{http_code}' -H "$H" -d "{\"mobileNumber\":\"$M\",\"role\":\"CUSTOMER\"}" $U/api/auth/register/otp)"
+          S=$(curl -s -H "$H" -d "{\"mobileNumber\":\"$M\",\"otp\":\"123456\"}" $U/api/auth/register/verify)
+          T=$(echo "$S" | jq -r .accessToken); ID=$(echo "$S" | jq -r .userId)
+          note signin "$([ "$T" != null ] && echo ok || echo "$S" | head -c 200)"
+          A="Authorization: Bearer $T"
+          AD=$(curl -s -H "$A" -H "$H" -d '{"label":"Home","lat":25.5571,"lng":84.6612}' $U/api/customers/$ID/addresses)
+          AID=$(echo "$AD" | jq -r .addressId); note address "$(echo "$AD" | head -c 150)"
+          C=$(curl -s -H "$A" $U/api/catalog/categories)
+          note catalog "$(echo "$C" | jq -r '[.. | objects | select(has("name")) | .name] | join(", ")' | head -c 400)"
+          CAT=$(echo "$C" | jq -r '.. | objects | select(.name? == "Plumbing") | .id' | head -1)
+          SUB=$(echo "$C" | jq -r '.. | objects | select(.name? == "Tap / Faucet Repair") | .id' | head -1)
+          note estimate "$(curl -s -H "$A" -H "$H" -d "{\"subcategoryId\":\"$SUB\",\"emergency\":false}" $U/api/pricing/estimate | head -c 300)"
+          AT=$(date -u -d '+6 hours' +%Y-%m-%dT%H:%M:%SZ)
+          B=$(curl -s -H "$A" -H "$H" -d "{\"addressId\":\"$AID\",\"categoryId\":\"$CAT\",\"subcategoryId\":\"$SUB\",\"emergency\":false,\"scheduledAt\":\"$AT\",\"description\":\"Live check - please ignore\"}" $U/api/bookings)
+          REF=$(echo "$B" | jq -r .reference); BID=$(echo "$B" | jq -r .bookingId)
+          note booking "$(echo "$B" | head -c 250)"
+          note confirm "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "$A" $U/api/bookings/$REF/confirmation)"
+          sleep 8
+          note status-after-8s "$(curl -s -H "$A" $U/api/bookings/$BID | jq -r .status)"
+          note history "$(curl -s -o /dev/null -w '%{http_code}' -H "$A" $U/api/bookings/history)"
+          note cancel "$(curl -s -w ' %{http_code}' -H "$A" -H "$H" -d '{"reason":"live check"}' $U/api/bookings/$REF/cancellation | head -c 200)"
+          note status-final "$(curl -s -H "$A" $U/api/bookings/$BID | jq -r .status)"
