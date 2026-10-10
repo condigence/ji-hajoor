@@ -84,12 +84,10 @@ public class RegistrationService {
         }
 
         String code = codeGenerator.generate(otpProperties.getLength());
-        String message = "Your Ji-Hajoor verification code is " + code
-                + ". It expires in " + otpProperties.getTtl().toMinutes() + " minutes.";
 
         // Send FIRST; only persist the pending session if delivery succeeds (Requirement 1.16).
         try {
-            smsGateway.send(mobileNumber, message);
+            smsGateway.sendOtp(mobileNumber, code, otpProperties.getTtl());
         } catch (SmsDeliveryException ex) {
             log.warn("OTP SMS delivery failed; no pending session created");
             throw new RegistrationException(HttpStatus.BAD_GATEWAY, "SMS_DELIVERY_FAILED",

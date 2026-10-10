@@ -95,7 +95,13 @@ jihajoor:
     # behind SmsGatewayPort without touching the OTP flow.
     #   log  - record that a message would be sent (default)
     #   file - LOCAL DEV ONLY: append the message, including the code, to a file
+    #   msg91 - MSG91 OTP API (India); needs the two msg91 settings below
     provider: ${SMS_PROVIDER:log}
+    msg91:
+      auth-key: ${MSG91_AUTH_KEY:}
+      # MSG91 OTP template id, linked to the DLT-approved template whose text is
+      # "Your Ji-Hajoor verification code is ##OTP##. It expires in 5 minutes."
+      otp-template-id: ${MSG91_OTP_TEMPLATE_ID:}
     # Sink for the 'file' provider. Mounted to the host in the local compose file
     # so a developer can read the code without querying container logs.
     file-path: ${SMS_FILE_PATH:/var/log/jihajoor/dev-sms.log}
