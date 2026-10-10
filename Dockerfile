@@ -36,8 +36,10 @@ FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 RUN groupadd -r app && useradd -r -g app app
 COPY --from=build /app.jar app.jar
+# Maps PORT / DATABASE_URL / REDIS_URL (Railway & co.) onto the services' own
+# settings, then runs the jar. Explicitly set variables always win.
+COPY deploy/entrypoint.sh /app/entrypoint.sh
+RUN chmod 755 /app/entrypoint.sh
 USER app
 EXPOSE 8080
-# Railway (and most PaaS) tell the app which port to listen on via $PORT; every
-# service reads SERVER_PORT, so map one onto the other when PORT is set.
-ENTRYPOINT ["sh", "-c", "if [ -n \"$PORT\" ]; then export SERVER_PORT=\"$PORT\"; fi; exec java -XX:MaxRAMPercentage=75.0 $JAVA_OPTS -jar /app/app.jar"]
+ENTRYPOINT ["/app/entrypoint.sh"]

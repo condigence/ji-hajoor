@@ -70,6 +70,13 @@ jihajoor:
     dev-seed:
       enabled: ${DEV_SEED_ENABLED:false}
       password: ${DEV_SEED_PASSWORD:}
+    # First platform administrator of a fresh deployment (BootstrapAdminSeeder). Off unless a
+    # username is set; only ever creates, never changes an existing account. Remove the
+    # variables after the first sign-in.
+    bootstrap-admin:
+      username: ${BOOTSTRAP_ADMIN_USERNAME:}
+      password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+      mobile: ${BOOTSTRAP_ADMIN_MOBILE:}
     # Social login (Google, Apple) OIDC settings (Requirement 1.5, 23.10).
     # Audience is this platform's OAuth client / Services ID; injected from Secrets Manager.
     # Audience has no default: a blank audience would disable the ID-token 'aud' check.
