@@ -1,0 +1,20 @@
+name: Live check (temporary)
+on:
+  push:
+    branches: ["railway/live-check"]
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe the deployed site
+        run: |
+          U=https://ji-hajoor-production.up.railway.app
+          echo "home:              $(curl -s -o /dev/null -w '%{http_code}' $U/)"
+          echo "login page:        $(curl -s -o /dev/null -w '%{http_code}' $U/login)"
+          echo "admin api, no token: $(curl -s -o /dev/null -w '%{http_code}' $U/api/admin/users)"
+          echo "wrong password:"
+          curl -s -w '\nHTTP %{http_code}\n' -H 'Content-Type: application/json' \
+            -d '{"username":"admin","password":"definitely-not-it"}' $U/api/auth/login/password
+          echo "unknown user:"
+          curl -s -w '\nHTTP %{http_code}\n' -H 'Content-Type: application/json' \
+            -d '{"username":"nobody-here","password":"definitely-not-it"}' $U/api/auth/login/password
