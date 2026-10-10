@@ -67,7 +67,8 @@ jobs:
           for s in $SERVICES; do
             docker build -q -f ci-jars/Dockerfile --build-arg JAR="$s.jar" -t "jh/$s" . >/dev/null
           done
-          docker build -q -f deploy/seed/Dockerfile -t jh/seed . >/dev/null
+          cmp docker/seed-catalog.sql deploy/seed/seed-catalog.sql || { echo '::error::deploy/seed/seed-catalog.sql differs from docker/seed-catalog.sql'; exit 1; }
+          docker build -q -t jh/seed deploy/seed >/dev/null
           docker build -q -t jh/customer-app frontend/customer-app >/dev/null
           docker build -q -t jh/provider-app frontend/provider-app >/dev/null
           docker images | grep '^jh/'

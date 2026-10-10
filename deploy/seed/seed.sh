@@ -37,14 +37,21 @@ if [ -z "$MISSING" ]; then
 fi
 
 echo "seed: signing in as $ADMIN_USERNAME"
+# Retry only while auth-service is unreachable or starting (connection error / 5xx).
+# A rejected password must stop at once: retrying it would lock the account.
+LOGIN="$(jq -n --arg u "$ADMIN_USERNAME" --arg p "$ADMIN_PASSWORD" '{username:$u,password:$p}')"
 i=0
-until TOKEN="$(curl -fsS -H 'Content-Type: application/json' \
-      -d "$(jq -n --arg u "$ADMIN_USERNAME" --arg p "$ADMIN_PASSWORD" '{username:$u,password:$p}')" \
-      "$AUTH_URL/auth/login/password" | jq -er .accessToken)"; do
-  i=$((i + 1)); [ "$i" -gt 60 ] && { echo "seed: admin sign-in failed" >&2; exit 1; }
-  sleep 5
+while :; do
+  status="$(curl -sS -o /tmp/login.json -w '%{http_code}' -H 'Content-Type: application/json' \
+            -d "$LOGIN" "$AUTH_URL/auth/login/password" 2>/dev/null || true)"
+  status="${status:-000}"
+  case "$status" in
+    200) break ;;
+    000|5*) i=$((i + 1)); [ "$i" -gt 60 ] && { echo "seed: auth-service unreachable" >&2; exit 1; }; sleep 5 ;;
+    *) echo "seed: admin sign-in refused (HTTP $status): $(cat /tmp/login.json)" >&2; exit 1 ;;
+  esac
 done
-
+TOKEN="$(jq -er .accessToken /tmp/login.json)"
 
 echo "$MISSING" | while read -r id base; do
   [ -z "$id" ] && continue

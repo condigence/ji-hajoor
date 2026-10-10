@@ -47,7 +47,7 @@ svc() {
 }
 
 svc auth-service 8081 -e REDIS_URL="$REDIS" -e OTP_FIXED_CODE=123456 \
-  -e BOOTSTRAP_ADMIN_USERNAME=admin -e BOOTSTRAP_ADMIN_PASSWORD=ci-admin-password-1 \
+  -e BOOTSTRAP_ADMIN_USERNAME=owner -e BOOTSTRAP_ADMIN_PASSWORD=ci-admin-password-1 \
   -e BOOTSTRAP_ADMIN_MOBILE=+919999999999 \
   -e DEV_SEED_ENABLED=true -e DEV_SEED_PASSWORD=ci-dev-seed-pass
 svc catalog-service 8085 -e REDIS_URL="$REDIS" -e CATALOG_CACHE=memory
@@ -113,12 +113,12 @@ done
 # Starter data, exactly as on Railway.
 docker run --name seed --network "$NET" -e DATABASE_URL="$DB" \
   -e AUTH_URL=http://auth-service:8081 -e PRICING_URL=http://pricing-engine:8086 \
-  -e ADMIN_USERNAME=admin -e ADMIN_PASSWORD=ci-admin-password-1 jh/seed \
+  -e ADMIN_USERNAME=owner -e ADMIN_PASSWORD=ci-admin-password-1 jh/seed \
   || { printf '::error title=seed::%s\n' "$(docker logs seed 2>&1 | tail -8 | sed ':a;N;$!ba;s/\n/%0A/g')"; exit 1; }
 # Running it twice must change nothing.
 docker run --rm --network "$NET" -e DATABASE_URL="$DB" \
   -e AUTH_URL=http://auth-service:8081 -e PRICING_URL=http://pricing-engine:8086 \
-  -e ADMIN_USERNAME=admin -e ADMIN_PASSWORD=ci-admin-password-1 jh/seed
+  -e ADMIN_USERNAME=owner -e ADMIN_PASSWORD=ci-admin-password-1 jh/seed
 
 # CI only: a dispatchable test provider (the dev-seeded +919000000011) in Ara.
 docker exec -i postgres psql -U postgres -d railway -v ON_ERROR_STOP=1 -q < docker/seed-provider-profiles.sql
