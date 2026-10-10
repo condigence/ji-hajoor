@@ -15,7 +15,11 @@ import org.springframework.web.util.UriUtils;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
+import java.net.URI;
 import java.util.List;
+import java.util.regex.Pattern;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.web.util.UriComponentsBuilder;
 
 /**
  * Validates the bearer token on every routed request by calling the Auth Service
@@ -76,7 +80,9 @@ public class JwtIntrospectionGatewayFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        String token = bearerToken(exchange);
+        String headerToken = bearerToken(exchange);
+        String queryToken = headerToken == null ? streamQueryToken(exchange, path) : null;
+        String token = headerToken != null ? headerToken : queryToken;
         if (token == null) {
             return unauthorized(exchange);
         }
@@ -86,9 +92,49 @@ public class JwtIntrospectionGatewayFilter implements GlobalFilter, Ordered {
                     if (!result.active()) {
                         return unauthorized(exchange);
                     }
-                    exchange.getAttributes().put(INTROSPECTION_ATTR, result);
-                    return chain.filter(exchange);
+                    ServerWebExchange forwarded = queryToken == null
+                            ? exchange
+                            : exchange.mutate().request(moveTokenToHeader(exchange.getRequest(), queryToken)).build();
+                    forwarded.getAttributes().put(INTROSPECTION_ATTR, result);
+                    return chain.filter(forwarded);
                 });
+    }
+
+    /**
+     * Browser EventSource (SSE) and WebSocket connections cannot set an Authorization header, so
+     * the apps pass the access token as {@code ?access_token=}. That is accepted only on the
+     * long-lived realtime paths, never on ordinary API calls.
+     */
+    private static final List<Pattern> QUERY_TOKEN_PATHS = List.of(
+            Pattern.compile("^/locations/[^/]+/stream$"),
+            Pattern.compile("^/chat/channels/[^/]+/ws$"));
+
+    static boolean acceptsQueryToken(String rawPath) {
+        String path = normalise(rawPath);
+        return path != null && QUERY_TOKEN_PATHS.stream().anyMatch(p -> p.matcher(path).matches());
+    }
+
+    private static String streamQueryToken(ServerWebExchange exchange, String path) {
+        if (!acceptsQueryToken(path)) {
+            return null;
+        }
+        String token = exchange.getRequest().getQueryParams().getFirst("access_token");
+        return StringUtils.hasText(token) ? token.trim() : null;
+    }
+
+    /**
+     * Forwards the query token as a normal bearer header (what the downstream services read) and
+     * drops it from the URL, so it does not reach downstream access logs.
+     */
+    private static ServerHttpRequest moveTokenToHeader(ServerHttpRequest request, String token) {
+        URI withoutToken = UriComponentsBuilder.fromUri(request.getURI())
+                .replaceQueryParam("access_token")
+                .build(true)
+                .toUri();
+        return request.mutate()
+                .uri(withoutToken)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .build();
     }
 
     private Mono<Void> unauthorized(ServerWebExchange exchange) {

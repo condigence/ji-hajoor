@@ -158,7 +158,7 @@ docker compose -f docker-compose.core.yml up -d --build --wait
 ```
 
 The `customer-app` image (`Dockerfile`) builds the bundle with the default
-`/api` base and serves it from nginx on <http://localhost:5173>. `nginx.conf`
+`/api` base and serves it from nginx on <http://localhost:5173>. `nginx/default.conf.template`
 proxies `/api/auth/*` to `auth-service:8081` and everything else under `/api/`
 to `api-gateway:8080`, with WebSocket/SSE support, long-lived caching for
 `/assets/` and no caching for `index.html`. The build copies the app directory,

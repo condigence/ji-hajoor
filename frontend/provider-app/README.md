@@ -150,7 +150,7 @@ docker compose -f docker-compose.core.yml up -d --build --wait
 ```
 
 The `provider-app` image (`Dockerfile`) builds the bundle with the default
-`/api` base and serves it from nginx on <http://localhost:5174>. `nginx.conf`
+`/api` base and serves it from nginx on <http://localhost:5174>. `nginx/default.conf.template`
 proxies `/api/auth/*` to `auth-service:8081` and everything else under `/api/`
 to `api-gateway:8080`. The build copies the app directory, so keep native
 (absolute) URLs out of a local `.env` when building the image.

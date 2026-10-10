@@ -1,0 +1,95 @@
+name: Booking flow
+
+# Runs the customer booking stack the way it is deployed on Railway (one
+# Postgres, password-protected Redis, single-node Kafka, Railway-style
+# variables, deploy/entrypoint.sh) and drives a booking end to end through the
+# gateway: sign-in, address, catalog, price, booking, dispatch, job, payment.
+
+on:
+  push:
+    branches: [main, "railway/**"]
+    paths:
+      - deploy/**
+      - shared/**
+      - services/**
+      - frontend/customer-app/**
+      - frontend/provider-app/**
+      - docker/seed-*.sql
+      - .github/workflows/booking-flow.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: booking-flow-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SERVICES: >-
+        auth-service catalog-service customer-service pricing-engine booking-service
+        dispatch-engine provider-service verification-service location-service
+        payment-service notification-service outbox-processor admin-service api-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build jars
+        run: |
+          for lib in shared/*/; do mvn -B -q -f "$lib/pom.xml" -DskipTests install; done
+          mkdir -p ci-jars
+          for s in $SERVICES; do
+            mvn -B -q -f "services/$s/pom.xml" -DskipTests package
+            cp "services/$s/target/$s-1.0.0-SNAPSHOT.jar" "ci-jars/$s.jar"
+          done
+
+      - name: Build images (runtime identical to the Railway image)
+        run: |
+          cat > ci-jars/Dockerfile <<'EOF'
+          FROM eclipse-temurin:21-jre-jammy
+          WORKDIR /app
+          RUN groupadd -r app && useradd -r -g app app
+          ARG JAR
+          COPY ci-jars/${JAR} app.jar
+          COPY deploy/entrypoint.sh /app/entrypoint.sh
+          RUN chmod 755 /app/entrypoint.sh
+          USER app
+          ENTRYPOINT ["/app/entrypoint.sh"]
+          EOF
+          for s in $SERVICES; do
+            docker build -q -f ci-jars/Dockerfile --build-arg JAR="$s.jar" -t "jh/$s" . >/dev/null
+          done
+          docker build -q -f deploy/seed/Dockerfile -t jh/seed . >/dev/null
+          docker build -q -t jh/customer-app frontend/customer-app >/dev/null
+          docker build -q -t jh/provider-app frontend/provider-app >/dev/null
+          docker images | grep '^jh/'
+
+      - name: Start the stack and seed it
+        run: bash deploy/ci/run-stack.sh
+
+      - name: Book, dispatch, run and pay for a job
+        run: bash deploy/ci/booking-flow.sh
+
+      - name: Service errors as annotations
+        if: failure()
+        run: |
+          for c in $SERVICES; do
+            e="$(docker logs "$c" 2>&1 | grep -E ' ERROR |Exception|Caused by' | grep -v 'DEBUG' | tail -6 | cut -c1-240 | sed ':a;N;$!ba;s/\n/%0A/g')"
+            [ -n "$e" ] && printf '::warning title=%s errors::%s\n' "$c" "$e"
+          done
+          true
+
+      - name: Container logs
+        if: always()
+        run: |
+          for c in $SERVICES customer-app provider-app kafka; do
+            echo "::group::$c"; docker logs "$c" 2>&1 | tail -120; echo "::endgroup::"
+          done
