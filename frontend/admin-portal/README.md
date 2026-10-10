@@ -158,9 +158,25 @@ docker compose -f docker-compose.core.yml up -d --build --wait
 ```
 
 The `admin-portal` image (`Dockerfile`) builds the bundle with the default
-`/api` base and serves it from nginx on <http://localhost:5175>. `nginx.conf`
-proxies `/api/auth/*` to `auth-service:8081` and everything else under `/api/`
-to `api-gateway:8080`.
+`/api` base and serves it from nginx on <http://localhost:5175>.
+`nginx/default.conf.template` proxies `/api/auth/*` to `auth-service:8081` and
+everything else under `/api/` to `api-gateway:8080`. Those targets and the
+listen port come from environment variables at container start (defaults in
+`docker-entrypoint.d/15-ji-hajoor-env.envsh`).
+
+## Deploying on Railway
+
+`/` is the public Ji-Hajoor home page; staff sign in at `/login`.
+
+1. Create a service from this repo and set **Root Directory** to
+   `frontend/admin-portal` (it picks up `railway.json` and the `Dockerfile`).
+2. Add a variable pointing at the API gateway, either its private address
+   `API_GATEWAY_URL=http://${{api-gateway.RAILWAY_PRIVATE_DOMAIN}}:${{api-gateway.PORT}}`
+   (replace `api-gateway` with your gateway service's name) or its public URL
+   `API_GATEWAY_URL=https://<gateway>.up.railway.app`.
+   `/api/auth/*` goes to the same place, as the gateway routes `/auth/**`;
+   set `AUTH_SERVICE_URL` only to send it elsewhere.
+3. Generate a public domain under **Settings → Networking**.
 
 ## Layout conventions
 

@@ -48,7 +48,7 @@ export default defineConfig(({ mode }) => {
           // here; without `ws` the upgrade handshake is answered with a 400.
           ws: true,
           // The gateway routes "/admin/**" etc. with no "/api" prefix; strip the
-          // mount point exactly as nginx.conf does, or every call 404s in dev.
+          // mount point exactly as nginx/default.conf.template does, or every call 404s in dev.
           rewrite: (path) => path.replace(/^\/api/, ''),
         },
       },

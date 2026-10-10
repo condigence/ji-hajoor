@@ -1,6 +1,5 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { PlaceholderScreen } from '@components/PlaceholderScreen';
-import { HomeRedirect } from '@components/HomeRedirect';
 import { RequireAuth } from '@components/RequireAuth';
 import {
   ADMIN_ROLES,
@@ -12,6 +11,7 @@ import {
   SUPPORT_ROLES,
   TENANT_ROLES,
 } from '@config/roles';
+import { HomeScreen } from '@features/home/HomeScreen';
 import { LoginScreen } from '@features/auth/LoginScreen';
 import { DashboardScreen } from '@features/dashboard/DashboardScreen';
 import { UserManagementScreen } from '@features/users/UserManagementScreen';
@@ -54,7 +54,8 @@ import { JobsScreen } from '@features/tenant-portal/JobsScreen';
  *   above answers Forbidden for them, and platform staff — who administer no
  *   Tenant — are kept out of these
  *
- * `/` resolves to the user's landing module (HomeRedirect), so staff without
+ * `/` is the public home page for visitors; a signed-in user is sent on to
+ * their landing module (HomeRedirect), so staff without
  * the Dashboard never start on a Forbidden screen. Unauthorized-but-
  * authenticated users get a Forbidden screen, mirroring the backend's 403,
  * rather than being bounced to login.
@@ -62,11 +63,7 @@ import { JobsScreen } from '@features/tenant-portal/JobsScreen';
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: (
-      <RequireAuth>
-        <HomeRedirect />
-      </RequireAuth>
-    ),
+    element: <HomeScreen />,
   },
   {
     path: '/login',

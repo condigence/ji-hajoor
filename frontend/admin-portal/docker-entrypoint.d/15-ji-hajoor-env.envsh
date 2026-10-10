@@ -1,0 +1,44 @@
+#!/bin/sh
+# Sourced by the nginx image's entrypoint before it renders
+# /etc/nginx/templates/*.template, so these exports reach envsubst.
+
+# Port to listen on: Railway (and most PaaS) set PORT; 80 otherwise.
+export PORT="${PORT:-80}"
+
+# Also listen on IPv6 when the container has it: Railway's private network
+# is IPv6-only. Skipped otherwise, since binding [::] there would fail.
+if [ -f /proc/net/if_inet6 ]; then
+  export NGINX_LISTEN_V6="listen [::]:${PORT};"
+else
+  export NGINX_LISTEN_V6=""
+fi
+
+# Where API calls go. Defaults match the docker compose service names.
+# On Railway set API_GATEWAY_URL to the gateway, e.g.
+#   http://${{api-gateway.RAILWAY_PRIVATE_DOMAIN}}:${{api-gateway.PORT}}
+# or its public https URL. AUTH_SERVICE_URL defaults to the gateway, which
+# also routes /auth/**.
+if [ -z "${API_GATEWAY_URL:-}" ]; then
+  export API_GATEWAY_URL="http://api-gateway:8080"
+  export AUTH_SERVICE_URL="${AUTH_SERVICE_URL:-http://auth-service:8081}"
+else
+  export AUTH_SERVICE_URL="${AUTH_SERVICE_URL:-$API_GATEWAY_URL}"
+fi
+# proxy_pass needs a bare origin: drop any trailing slash.
+API_GATEWAY_URL="${API_GATEWAY_URL%/}"
+AUTH_SERVICE_URL="${AUTH_SERVICE_URL%/}"
+
+# DNS server nginx uses to resolve the upstreams at request time.
+if [ -z "${NGINX_RESOLVER:-}" ]; then
+  ns="$(awk '/^nameserver/ {print $2; exit}' /etc/resolv.conf)"
+  case "$ns" in
+    *:*) ns="[$ns]" ;;   # IPv6 addresses must be bracketed
+  esac
+  NGINX_RESOLVER="${ns:-127.0.0.11}"
+fi
+export NGINX_RESOLVER
+
+# Substitute only our variables; nginx's own $vars must survive untouched.
+export NGINX_ENVSUBST_FILTER='^(PORT|NGINX_LISTEN_V6|NGINX_RESOLVER|API_GATEWAY_URL|AUTH_SERVICE_URL)$'
+
+echo "ji-hajoor: listening on ${PORT}; /api -> ${API_GATEWAY_URL}; /api/auth -> ${AUTH_SERVICE_URL}; resolver ${NGINX_RESOLVER}"

@@ -15,7 +15,7 @@ interface BrandLogoProps {
 
 /**
  * The Ji-Hajoor mark: a house whose roof carries a wrench, over the two-tone
- * "Home / Fix" wordmark, optionally badged "Provider". Used on the splash, the
+ * "Ji / Hajoor" wordmark, optionally badged "Provider". Used on the splash, the
  * login header and the app bar so the brand reads the same everywhere.
  */
 export function BrandLogo({
@@ -85,12 +85,12 @@ export function BrandLogo({
               color: inverted ? '#FFFFFF' : 'text.primary',
             }}
           >
-            Home
+            Ji-
             <Box
               component="span"
               sx={{ color: inverted ? 'rgba(255,255,255,0.75)' : 'primary.main' }}
             >
-              Fix
+              Hajoor
             </Box>
           </Typography>
           {showRole ? (

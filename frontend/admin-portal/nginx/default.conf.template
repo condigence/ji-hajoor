@@ -1,17 +1,35 @@
-# admin-portal SPA + reverse proxy for local Docker slice.
+# admin-portal SPA + reverse proxy.
+#
+# This is an nginx *template*: at container start the official nginx image runs
+# envsubst on it, filling in ${PORT}, ${NGINX_RESOLVER}, ${API_GATEWAY_URL} and
+# ${AUTH_SERVICE_URL} (defaults live in docker-entrypoint.d/15-ji-hajoor-env.envsh).
+# Only those names are substituted (NGINX_ENVSUBST_FILTER), so nginx's own
+# $variables are left alone. Locally (docker compose) the defaults point at the
+# compose service names; on Railway set API_GATEWAY_URL to the gateway's URL.
 #
 # The SPA's axios client uses baseURL="/api" and calls paths like
 # "/auth/register/otp" and "/bookings/...". So the browser hits
 # "/api/auth/register/otp". We strip only the leading "/api" and preserve the
 # rest of the path so it maps to the service route (e.g. auth "/auth/register/otp",
 # gateway "/bookings/**").
+# The scheme the visitor actually used. Behind an edge proxy (Railway, an AWS
+# ALB) TLS ends before nginx, so $scheme is "http"; passing that on would make
+# the gateway's HTTPS enforcement answer every API call with a redirect.
+map $http_x_forwarded_proto $forwarded_proto {
+    default $http_x_forwarded_proto;
+    ''      $scheme;
+}
+
 server {
-    listen 80;
+    listen ${PORT};
+    ${NGINX_LISTEN_V6}
     server_name _;
 
-    # Docker's embedded DNS. Required for the variable-based proxy_pass below:
-    # nginx only re-resolves an upstream when a resolver is configured.
-    resolver 127.0.0.11 valid=10s ipv6=off;
+    # The container's own DNS server (read from /etc/resolv.conf at start-up):
+    # Docker's embedded DNS locally, Railway's private-network DNS there.
+    # Required for the variable-based proxy_pass below: nginx only re-resolves
+    # an upstream when a resolver is configured.
+    resolver ${NGINX_RESOLVER} valid=10s;
     root /usr/share/nginx/html;
     index index.html;
 
@@ -67,12 +85,16 @@ server {
         # nginx is restarted -- which "docker compose up" triggers routinely.
         # Naming the upstream in a variable forces re-resolution against Docker's
         # embedded DNS, so a recreated backend is picked up within the TTL.
-        set $auth_upstream http://auth-service:8081;
+        set $auth_upstream ${AUTH_SERVICE_URL};
         rewrite ^/api/auth/(.*)$ /auth/$1 break;
         proxy_pass $auth_upstream;
-        proxy_set_header Host $host;
+        # The upstream's own host name: a Railway public domain is routed by Host.
+        proxy_set_header Host $proxy_host;
+        proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        # An https:// upstream needs SNI to get the right certificate.
+        proxy_ssl_server_name on;
         # WebSocket (chat) and SSE (live location) both need HTTP/1.1 with the
         # Upgrade hop-by-hop headers forwarded, and response buffering off or
         # nginx holds each event until its buffer fills.
@@ -86,12 +108,16 @@ server {
     # "/api/bookings/123" -> gateway "/bookings/123".
     location /api/ {
         # Same re-resolution fix as /api/auth/ above.
-        set $gateway_upstream http://api-gateway:8080;
+        set $gateway_upstream ${API_GATEWAY_URL};
         rewrite ^/api/(.*)$ /$1 break;
         proxy_pass $gateway_upstream;
-        proxy_set_header Host $host;
+        # The upstream's own host name: a Railway public domain is routed by Host.
+        proxy_set_header Host $proxy_host;
+        proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        # An https:// upstream needs SNI to get the right certificate.
+        proxy_ssl_server_name on;
         # WebSocket (chat) and SSE (live location) both need HTTP/1.1 with the
         # Upgrade hop-by-hop headers forwarded, and response buffering off or
         # nginx holds each event until its buffer fills.
