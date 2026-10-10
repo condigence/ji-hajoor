@@ -15,6 +15,7 @@ on:
       - shared/**
       - services/auth-service/**
       - services/api-gateway/**
+      - services/admin-service/**
       - frontend/admin-portal/**
       - .github/workflows/railway-smoke.yml
   pull_request:
@@ -24,6 +25,7 @@ on:
       - shared/**
       - services/auth-service/**
       - services/api-gateway/**
+      - services/admin-service/**
       - frontend/admin-portal/**
       - .github/workflows/railway-smoke.yml
   workflow_dispatch:
@@ -70,6 +72,7 @@ jobs:
         run: |
           docker build -q --build-arg SERVICE=auth-service -t jh/auth-service .
           docker build -q --build-arg SERVICE=api-gateway  -t jh/api-gateway .
+          docker build -q --build-arg SERVICE=admin-service -t jh/admin-service .
           docker build -q -t jh/admin-portal frontend/admin-portal
 
       - name: Start Postgres and password-protected Redis
@@ -84,7 +87,7 @@ jobs:
             sleep 2
           done
 
-      - name: Start auth-service, api-gateway, admin-portal
+      - name: Start auth-service, admin-service, api-gateway, admin-portal
         run: |
           JWT_SECRET="$(openssl rand -hex 32)"
           REDIS_URL='redis://default:redis-secret@redis:6379'
@@ -98,8 +101,14 @@ jobs:
             -e BOOTSTRAP_ADMIN_PASSWORD="$ADMIN_PASS" \
             -e BOOTSTRAP_ADMIN_MOBILE="$ADMIN_MOBILE" \
             jh/auth-service
+          docker run -d --name admin-service --network "$NET" \
+            -e PORT=8095 \
+            -e DATABASE_URL='postgresql://postgres:pg-p%40ss%2Fword@postgres:5432/railway' \
+            -e JWT_SECRET="$JWT_SECRET" \
+            jh/admin-service
           docker run -d --name api-gateway --network "$NET" \
             -e PORT=8080 \
+            -e ADMIN_SERVICE_URI=http://admin-service:8095 \
             -e REDIS_URL="$REDIS_URL" \
             -e JWT_SECRET="$JWT_SECRET" \
             -e AUTH_SERVICE_URI=http://auth-service:8081 \
@@ -125,6 +134,7 @@ jobs:
             echo "::error::$1 not healthy in time"; docker logs "$1" | tail -80; return 1
           }
           wait_for auth-service http://auth-service:8081/health
+          wait_for admin-service http://admin-service:8095/health
           wait_for api-gateway  http://api-gateway:8080/health
           wait_for admin-portal http://admin-portal:3000/
 
@@ -166,6 +176,14 @@ jobs:
             http://localhost:3000/api/admin/users)
           echo "without token -> HTTP $code"; test "$code" = 401
 
+      - name: Dashboard loads after sign-in (admin-service)
+        run: |
+          code=$(curl -sS -o dash.json -w '%{http_code}' \
+            -H "Authorization: Bearer $(cat token.txt)" -H 'X-Forwarded-Proto: https' \
+            http://localhost:3000/api/admin/dashboard)
+          echo "GET /api/admin/dashboard -> HTTP $code"; head -c 600 dash.json; echo
+          test "$code" = 200
+
       - name: Restart keeps the admin and its password
         run: |
           docker restart auth-service
@@ -183,6 +201,6 @@ jobs:
       - name: Container logs
         if: always()
         run: |
-          for c in auth-service api-gateway admin-portal; do
+          for c in auth-service admin-service api-gateway admin-portal; do
             echo "::group::$c"; docker logs "$c" 2>&1 | tail -150; echo "::endgroup::"
           done
