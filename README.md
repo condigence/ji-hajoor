@@ -82,6 +82,24 @@ Production targets AWS: Terraform provisions the platform (EKS, RDS PostgreSQL, 
 and each of the five deployables is deployed to EKS with the Helm chart in [`helm/`](helm/), configured through
 per-environment values and Secrets. See [`infra/terraform/README.md`](infra/terraform/README.md).
 
+### Railway
+
+The live Ji-Hajoor environment runs on Railway from this repository's `main` branch:
+
+| Railway service | Source | Key variables |
+|---|---|---|
+| `identity-app`, `jobs-app`, `money-app`, `engagement-app`, `api-gateway` | root [`Dockerfile`](Dockerfile) | `APP` (which deployable to build), `PORT` (first hosted service's port: 8081 / 8084 / 8088 / 8095 / 8080), `JAVA_OPTS` (heap cap) |
+| `ji-hajoor` (Admin Portal), `customer-app`, `provider-app` | `frontend/<app>` | `API_GATEWAY_URL` (gateway's private URL) |
+| `seed` | `deploy/seed` | run-once: starter catalog, pricing, and the app URLs in `config.app_config` |
+| `Postgres`, `Redis`, `kafka` | images | — |
+
+- The apps get `DATABASE_URL`, `REDIS_URL` and `KAFKA_BOOTSTRAP_SERVERS` from Railway references; [`deploy/entrypoint.sh`](deploy/entrypoint.sh) maps them onto the Spring settings.
+- Secrets (`JWT_SECRET`, `INTERNAL_API_KEY`, `KMS_*`, webhook and simulator secrets) are shared variables.
+- Services find each other at `http://${{<app>.RAILWAY_PRIVATE_DOMAIN}}:<service port>`, using the port table above.
+- SMS settings live on `identity-app`: `SMS_PROVIDER=msg91`, `MSG91_AUTH_KEY` and `MSG91_OTP_TEMPLATE_ID`. `OTP_FIXED_CODE` puts sign-in into test mode: every OTP is that code and no SMS is sent. Remove it to go live.
+- Runtime settings (app URLs and other `jihajoor.*` keys) live in the `config.app_config` table and can be changed without a redeploy. Environment variables override them.
+- The "Booking flow" workflow ([`deploy/ci`](deploy/ci)) runs this same layout in Docker and drives a full booking through it on every push.
+
 ## Documentation
 
 - [Architecture and diagrams](docs/ARCHITECTURE.md)
