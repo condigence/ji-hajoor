@@ -5,6 +5,8 @@
 #   AUTH_URL         e.g. http://auth-service.railway.internal:8081
 #   PRICING_URL      e.g. http://pricing-engine.railway.internal:8086
 #   ADMIN_USERNAME / ADMIN_PASSWORD   a staff account with the ADMIN role
+# Optional, written to the platform settings table (config.app_config) when set:
+#   CUSTOMER_APP_URL, PROVIDER_APP_URL, ADMIN_PORTAL_URL   the apps' public addresses
 set -eu
 
 : "${DATABASE_URL:?DATABASE_URL is required}"
@@ -17,10 +19,21 @@ q() { psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "$1"; }
 
 echo "seed: waiting for catalog and pricing tables"
 i=0
-until [ "$(q "SELECT count(*) FROM information_schema.tables WHERE (table_schema, table_name) IN (('catalog','service_category'),('catalog','service_subcategory_skill_tag'),('pricing','pricing_parameters'))" 2>/dev/null || echo 0)" = "3" ]; do
+until [ "$(q "SELECT count(*) FROM information_schema.tables WHERE (table_schema, table_name) IN (('catalog','service_category'),('catalog','service_subcategory_skill_tag'),('pricing','pricing_parameters'),('config','app_config'))" 2>/dev/null || echo 0)" = "4" ]; do
   i=$((i + 1)); [ "$i" -gt 120 ] && { echo "seed: tables never appeared" >&2; exit 1; }
   sleep 5
 done
+
+# Public app addresses: invitation links and the customer app's provider link read these.
+set_url() {
+  [ -n "$2" ] || return 0
+  q "UPDATE config.app_config SET config_value = '$(printf '%s' "$2" | sed "s/'/''/g")', updated_at = now()
+     WHERE config_key = '$1' AND config_value IS DISTINCT FROM '$(printf '%s' "$2" | sed "s/'/''/g")'" >/dev/null
+  echo "seed: $1 = $2"
+}
+set_url jihajoor.apps.customer-app-url "${CUSTOMER_APP_URL:-}"
+set_url jihajoor.apps.provider-app-url "${PROVIDER_APP_URL:-}"
+set_url jihajoor.apps.admin-portal-url "${ADMIN_PORTAL_URL:-}"
 
 if [ "$(q 'SELECT count(*) FROM catalog.service_category')" = "0" ]; then
   echo "seed: catalog empty, loading starter catalog"

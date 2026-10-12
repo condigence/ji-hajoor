@@ -1,11 +1,12 @@
 #!/bin/sh
-# Container entrypoint for every backend service built by the root Dockerfile.
+# Container entrypoint for every backend deployable built by the root Dockerfile.
 #
 # Translates the variables a PaaS hands out (Railway, Render, Heroku-style) into
 # the settings the Spring services read, then starts the jar. Anything already
 # set explicitly wins, so the docker-compose / Kubernetes setups are unaffected.
 #
-#   PORT          -> SERVER_PORT
+#   PORT          -> SERVER_PORT (the gateway; a multi-service app gives each
+#                    of its services its own fixed port, which wins over this)
 #   DATABASE_URL  -> DB_URL (JDBC form), DB_USERNAME, DB_PASSWORD
 #                    postgres[ql]://user:password@host:port/database[?params]
 #   REDIS_URL     -> SPRING_DATA_REDIS_URL (carries host, port and password)
@@ -53,4 +54,6 @@ db_target="${DB_URL:-<not set>}"
 redis_target="${SPRING_DATA_REDIS_URL:-redis://${REDIS_HOST:-localhost}:${REDIS_PORT:-6379}}"
 echo "ji-hajoor: port ${SERVER_PORT:-default}; database ${db_target%%\?*}; redis ${redis_target#*@}"
 
-exec java -XX:MaxRAMPercentage=75.0 ${JAVA_OPTS:-} -jar /app/app.jar "$@"
+# Serial GC and small thread stacks suit several low-traffic services sharing one
+# JVM; set JAVA_OPTS (e.g. -Xmx900m) to cap the heap below the container size.
+exec java -XX:MaxRAMPercentage=75 -XX:+UseSerialGC -Xss512k ${JAVA_OPTS:-} -jar /app/app.jar "$@"

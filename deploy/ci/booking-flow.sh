@@ -50,10 +50,18 @@ c="$(code -X POST -H "$P" -F "GOVERNMENT_ID=@/tmp/photo.jpg;type=image/jpeg" -F 
 ASESSION="$(api -X POST -H "$JSON" -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}" "$GATEWAY/auth/login/password")"
 ATOKEN="$(jq -r '.accessToken // empty' <<<"$ASESSION")"
 [ -n "$ATOKEN" ] && ok "admin signed in" || die "admin signed in" "$(head -c 200 <<<"$ASESSION")"
+c="$(code -X POST -H "$JSON" -d "{\"username\":\"$ADMIN_USER\",\"password\":\"wrong-password\"}" "$GATEWAY/auth/login/password")"
+[ "$c" = 401 ] && ok "a wrong admin password is refused" || bad "a wrong admin password is refused" "HTTP $c"
 A="Authorization: Bearer $ATOKEN"
+c="$(code -H "$A" "$GATEWAY/admin/users")"; [ "$c" = 200 ] && ok "admin users list (identity-app via gateway)" || bad "admin users list" "HTTP $c"
+c="$(code -H "$A" "$GATEWAY/admin/dashboard")"; [ "$c" = 200 ] && ok "admin dashboard (engagement-app)" || bad "admin dashboard" "HTTP $c"
+c="$(code "$GATEWAY/admin/users")"; [ "$c" = 401 ] && ok "admin API refuses a missing token" || bad "admin API refuses a missing token" "HTTP $c"
 api -H "$A" "$GATEWAY/admin/verification/queue" | grep -q "$PROVIDER_ID" && ok "provider waits in the admin verification queue" || bad "provider in verification queue" "not listed"
 c="$(code -X POST -H "$A" -H "$JSON" -d '{"decision":"APPROVE"}' "$GATEWAY/admin/verification/$PROVIDER_ID/decision")"
-[ "$c" = 204 ] && ok "admin approved the provider (one step)" || die "admin approved the provider" "HTTP $c"
+[ "$c" = 204 ] && ok "admin approved the documents" || die "admin approved the documents" "HTTP $c"
+api -H "$A" "$GATEWAY/admin/verification/background-checks" | grep -q "$PROVIDER_ID" && ok "provider waits for the background check" || bad "provider in background-check queue" "not listed"
+c="$(code -X POST -H "$A" -H "$JSON" -d '{"outcome":"PASSED","result":"CI: identity and records checked"}' "$GATEWAY/admin/verification/$PROVIDER_ID/background-check")"
+[ "$c" = 204 ] && ok "admin recorded a passed background check" || die "admin recorded the background check" "HTTP $c"
 VS="$(api -H "$P" "$GATEWAY/verifications/$PROVIDER_ID" | jq -r '.status // empty')"
 [ "$VS" = APPROVED ] && ok "provider is APPROVED" || die "provider is APPROVED" "status $VS"
 
@@ -140,7 +148,11 @@ FAILED_EVENTS="$(docker exec postgres psql -U postgres -d railway -tAc "SELECT c
 [ "$FAILED_EVENTS" = 0 ] && ok "no failed outbox events" || bad "no failed outbox events" "$FAILED_EVENTS failed"
 
 echo "== The apps are served and proxy to the gateway"
-for app in 3001 3002; do
+curl -sS "http://localhost:3000/" | grep -q '<div id="root">' && ok "admin portal home page serves" || bad "admin portal home page serves" "no app shell"
+api "$GATEWAY/" | grep -q '"UP"' && ok "gateway root answers" || bad "gateway root answers" "no status"
+c="$(curl -sS -o /tmp/cfg.json -w '%{http_code}' -H 'X-Forwarded-Proto: https' "http://localhost:3001/api/config/client")"
+grep -q 'localhost:3002' /tmp/cfg.json && ok "client settings carry the provider app address" || bad "client settings" "HTTP $c: $(head -c 200 /tmp/cfg.json)"
+for app in 3000 3001 3002; do
   c="$(curl -sS -o /dev/null -w '%{http_code}' "http://localhost:$app/")"; [ "$c" = 200 ] && ok "app on :$app serves" || bad "app on :$app serves" "HTTP $c"
   c="$(curl -sS -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: https' -H "$C" "http://localhost:$app/api/bookings/history")"
   [ "$c" = 200 ] && ok "app on :$app reaches the API" || bad "app on :$app reaches the API" "HTTP $c"

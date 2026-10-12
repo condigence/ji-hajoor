@@ -19,7 +19,9 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+
 import com.jihajoor.admin.audit.AdminAction;
 import com.jihajoor.admin.audit.AuditLogService;
 import com.jihajoor.admin.rbac.AdminAuthorization;
@@ -53,7 +55,7 @@ class SystemConfigurationControllerTest {
     void setUp() {
         auditStore = new InMemoryAuditLogStore();
         settingStore = new InMemorySystemSettingStore();
-        AuditLogService auditLog = new AuditLogService(auditStore, new ObjectMapper(), Clock.systemUTC());
+        AuditLogService auditLog = new AuditLogService(auditStore, new JsonMapper(), Clock.systemUTC());
         SystemConfigurationController controller = new SystemConfigurationController(
                 new SystemConfigService(settingStore, auditLog, Clock.systemUTC()), new AdminAuthorization());
         mockMvc = MockMvcBuilders.standaloneSetup(controller)

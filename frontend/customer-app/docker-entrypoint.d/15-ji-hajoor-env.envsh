@@ -20,7 +20,7 @@ fi
 # also routes /auth/**.
 if [ -z "${API_GATEWAY_URL:-}" ]; then
   export API_GATEWAY_URL="http://api-gateway:8080"
-  export AUTH_SERVICE_URL="${AUTH_SERVICE_URL:-http://auth-service:8081}"
+  export AUTH_SERVICE_URL="${AUTH_SERVICE_URL:-http://identity-app:8081}"
 else
   export AUTH_SERVICE_URL="${AUTH_SERVICE_URL:-$API_GATEWAY_URL}"
 fi

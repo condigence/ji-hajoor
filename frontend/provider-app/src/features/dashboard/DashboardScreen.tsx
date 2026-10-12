@@ -1,10 +1,10 @@
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import { Alert, Avatar, Box, Skeleton, Stack, Typography } from '@mui/material';
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import { AppShell } from '@components/AppShell';
 import { QueryStateView } from '@components/QueryStateView';
 import { useAuthStore } from '@stores/authStore';
-import { useMyProfile } from '@features/onboarding/hooks';
+import { ProfileCompletionPrompt } from '@features/profile/ProfileCompletionPrompt';
 import { EarningsSummaryCard } from './EarningsSummaryCard';
 import { readDashboardNotice } from '@features/jobs/assignmentNotice';
 import { isAwaitingProviderAnswer } from '@features/jobs/status';
@@ -14,7 +14,8 @@ import { PendingOffersSection } from './PendingOffersSection';
 import { useActiveJobs, useEarningsSummary } from './hooks';
 
 /**
- * Provider Dashboard (Requirement 28.8): open job offers (polled, shown only
+ * Provider Dashboard (Requirement 28.8): a "complete your profile" prompt
+ * while dispatch cannot match the provider yet, open job offers (polled, shown only
  * while there are any), the earnings summary (wallet balance + today's
  * earnings), and the active job list with status indicators. Mobile-first
  * single-column layout inside the shared AppShell.
@@ -32,11 +33,9 @@ export function DashboardScreen() {
 
   const summary = useEarningsSummary();
   const activeJobs = useActiveJobs();
-  // A provider without a profile cannot be offered jobs; send them to set one up first.
-  const profile = useMyProfile();
 
-  const openJob = (bookingId: string) => navigate(`/jobs/${bookingId}`);
-  const openOffer = (bookingId: string) => navigate(`/jobs/${bookingId}/request`);
+  const openJob = (bookingId: string) => void navigate(`/jobs/${bookingId}`);
+  const openOffer = (bookingId: string) => void navigate(`/jobs/${bookingId}/request`);
 
   const initials = (displayName ?? '')
     .split(' ')
@@ -53,19 +52,26 @@ export function DashboardScreen() {
   );
   const jobCount = runningJobs.length;
 
-  if (profile.data === null) {
-    return <Navigate to="/onboarding" replace />;
-  }
-
   return (
     <AppShell title="Dashboard" branded>
       <Stack spacing={2}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
+        <Stack
+          direction="row"
+          spacing={1.5}
+          sx={{
+            alignItems: 'center',
+          }}
+        >
           <Avatar sx={{ width: 46, height: 46, bgcolor: 'primary.main' }}>
             {initials || <PersonRoundedIcon />}
           </Avatar>
           <Box>
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: 'text.secondary',
+              }}
+            >
               {greeting()}
             </Typography>
             <Typography variant="h6" component="p">
@@ -78,21 +84,39 @@ export function DashboardScreen() {
           <Alert
             severity="info"
             role="status"
-            onClose={() => navigate(location.pathname, { replace: true, state: null })}
+            onClose={() => void navigate(location.pathname, { replace: true, state: null })}
           >
             {notice}
           </Alert>
         ) : null}
 
+        <ProfileCompletionPrompt />
+
         <PendingOffersSection onOpen={openOffer} />
 
         {assignedJobs.length > 0 ? (
           <Stack spacing={1.5}>
-            <Stack direction="row" justifyContent="space-between" alignItems="baseline">
-              <Typography variant="subtitle1" fontWeight={700}>
+            <Stack
+              direction="row"
+              sx={{
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+              }}
+            >
+              <Typography
+                variant="subtitle1"
+                sx={{
+                  fontWeight: 700,
+                }}
+              >
                 Assigned to you
               </Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'text.secondary',
+                }}
+              >
                 {assignedJobs.length} waiting for your answer
               </Typography>
             </Stack>
@@ -117,15 +141,27 @@ export function DashboardScreen() {
 
         <Stack
           direction="row"
-          justifyContent="space-between"
-          alignItems="baseline"
-          sx={{ pt: 0.5 }}
+          sx={{
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+            pt: 0.5,
+          }}
         >
-          <Typography variant="subtitle1" fontWeight={700}>
+          <Typography
+            variant="subtitle1"
+            sx={{
+              fontWeight: 700,
+            }}
+          >
             Active jobs
           </Typography>
           {jobCount > 0 ? (
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+              }}
+            >
               {jobCount} in progress
             </Typography>
           ) : null}

@@ -1,0 +1,2 @@
+org.springframework.boot.EnvironmentPostProcessor=\
+com.jihajoor.shared.config.AppConfigEnvironmentPostProcessor

@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.jihajoor.verification.backgroundcheck.BackgroundCheckPort;
 import com.jihajoor.verification.config.VerificationProperties;
 import com.jihajoor.verification.dispatch.DispatchPoolPort;
+import com.jihajoor.verification.domain.BackgroundCheckQueueRow;
 import com.jihajoor.verification.domain.DocumentType;
 import com.jihajoor.verification.domain.Verification;
 import com.jihajoor.verification.domain.VerificationDocument;
@@ -45,6 +46,10 @@ import com.jihajoor.verification.storage.DocumentStoragePort;
  */
 @Service
 public class VerificationService {
+
+    /** The background-check step: started, or result recorded but not yet decided. */
+    private static final Set<VerificationStatus> BACKGROUND_CHECK_STAGE = EnumSet.of(
+            VerificationStatus.BACKGROUND_CHECK_PENDING, VerificationStatus.BACKGROUND_CHECK_COMPLETED);
 
     private final VerificationRepository repository;
     private final DocumentStoragePort documentStorage;
@@ -140,33 +145,6 @@ public class VerificationService {
         verification.recordBackgroundCheckResult(result);
         verification.transitionTo(VerificationStatus.BACKGROUND_CHECK_COMPLETED, actorId,
                 "Background check completed");
-        return fullyLoaded(repository.save(verification));
-    }
-
-    /**
-     * One-step approval for deployments without a background-check vendor: the admin's review in
-     * the portal stands in for the external check. From {@code DOCUMENT_SUBMITTED} (or a check
-     * left {@code BACKGROUND_CHECK_PENDING}) it walks the normal state machine to {@code APPROVED},
-     * recording every transition against the acting admin, in one transaction so a provider is
-     * never left half-approved. Any other starting state is refused by the state machine (409).
-     */
-    @Transactional
-    public Verification approveAfterManualReview(UUID providerId, UUID adminId, String reason) {
-        Verification verification = require(providerId);
-        if (verification.getStatus() == VerificationStatus.DOCUMENT_SUBMITTED) {
-            verification.transitionTo(VerificationStatus.DOCUMENT_VERIFIED, adminId,
-                    reason == null ? "Admin verified documents" : reason);
-            verification.recordBackgroundCheckStarted(Instant.now());
-            verification.transitionTo(VerificationStatus.BACKGROUND_CHECK_PENDING, adminId,
-                    "Background check: manual review by admin");
-        }
-        if (verification.getStatus() == VerificationStatus.BACKGROUND_CHECK_PENDING) {
-            verification.recordBackgroundCheckResult("Manual review by admin " + adminId);
-            verification.transitionTo(VerificationStatus.BACKGROUND_CHECK_COMPLETED, adminId,
-                    "Background check completed (manual review)");
-        }
-        verification.transitionTo(VerificationStatus.APPROVED, adminId,
-                reason == null ? "Admin approved provider" : reason);
         return fullyLoaded(repository.save(verification));
     }
 
@@ -292,6 +270,60 @@ public class VerificationService {
     @Transactional(readOnly = true)
     public List<VerificationQueueRow> reviewQueue(int limit) {
         return repository.findQueue(VerificationStatus.DOCUMENT_SUBMITTED, PageRequest.of(0, limit));
+    }
+
+    /**
+     * Providers whose background check was started and who await the admin's decision
+     * ({@code BACKGROUND_CHECK_PENDING} or {@code BACKGROUND_CHECK_COMPLETED}), oldest check first.
+     */
+    @Transactional(readOnly = true)
+    public List<BackgroundCheckQueueRow> backgroundCheckQueue(int limit) {
+        return repository.findBackgroundCheckQueue(BACKGROUND_CHECK_STAGE, PageRequest.of(0, limit));
+    }
+
+    /**
+     * Records the background-check result an admin received and decides in one step
+     * (Requirement 5.6-5.8): {@code BACKGROUND_CHECK_PENDING → BACKGROUND_CHECK_COMPLETED}, then
+     * {@code APPROVED} (the provider may take jobs) or {@code REJECTED} (the provider is notified with
+     * the reason). A provider whose result was already recorded is only decided, with the result
+     * replaced by this one.
+     *
+     * <p>No background-check vendor is integrated yet ({@code LoggingBackgroundCheckAdapter}), so this
+     * is how a check is completed: the admin runs it outside the platform and records the outcome.
+     *
+     * @throws VerificationException 400 {@code VALIDATION_ERROR} without a result, or rejecting
+     *         without a reason; 404 for an unknown provider; 409 {@code INVALID_STATE_TRANSITION}
+     *         when the provider is not at the background-check step
+     */
+    @Transactional
+    public Verification decideBackgroundCheck(UUID providerId, UUID adminId, boolean passed, String result,
+                                              String reason) {
+        if (result == null || result.isBlank()) {
+            throw VerificationException.validation("The background check result is required");
+        }
+        if (!passed && (reason == null || reason.isBlank())) {
+            throw VerificationException.validation("A rejection reason is required");
+        }
+        Verification verification = require(providerId);
+        if (!BACKGROUND_CHECK_STAGE.contains(verification.getStatus())) {
+            throw new VerificationException(HttpStatus.CONFLICT, "INVALID_STATE_TRANSITION",
+                    "This provider is not waiting on a background check",
+                    List.of("currentState=" + verification.getStatus()));
+        }
+        verification.recordBackgroundCheckResult(result.strip());
+        if (verification.getStatus() == VerificationStatus.BACKGROUND_CHECK_PENDING) {
+            verification.transitionTo(VerificationStatus.BACKGROUND_CHECK_COMPLETED, adminId,
+                    "Background check result recorded by admin");
+        }
+        if (passed) {
+            verification.transitionTo(VerificationStatus.APPROVED, adminId,
+                    reason == null || reason.isBlank() ? "Background check passed" : reason.strip());
+            return fullyLoaded(repository.save(verification));
+        }
+        verification.transitionTo(VerificationStatus.REJECTED, adminId, reason.strip());
+        Verification saved = fullyLoaded(repository.save(verification));
+        notification.notifyRejected(providerId, reason.strip());
+        return saved;
     }
 
     /**

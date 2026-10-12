@@ -6,7 +6,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.jihajoor.gateway.auth.IntrospectionResult;
 import com.jihajoor.gateway.support.GatewayErrorWriter;
 import org.junit.jupiter.api.Test;
@@ -30,7 +30,7 @@ class JwtIntrospectionGatewayFilterQueryTokenTest {
             token -> Mono.just(GOOD.equals(token)
                     ? new IntrospectionResult(true, "user-1", List.of("CUSTOMER"), Instant.now().plusSeconds(600))
                     : IntrospectionResult.inactive()),
-            new GatewayErrorWriter(new ObjectMapper()));
+            new GatewayErrorWriter(new JsonMapper()));
 
     private final AtomicReference<ServerWebExchange> forwarded = new AtomicReference<>();
     private final GatewayFilterChain chain = exchange -> {

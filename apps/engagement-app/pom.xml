@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.jihajoor</groupId>
+        <artifactId>jihajoor-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>engagement-app</artifactId>
+    <packaging>jar</packaging>
+    <name>Ji-Hajoor Engagement application</name>
+    <description>
+        Deployable: Engagement and operations: notifications, complaints, reviews, the admin back end, reporting and the outbox relay. Each service runs in its own Spring context inside this one
+        JVM (see jihajoor-service-host).
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.jihajoor.shared</groupId>
+            <artifactId>jihajoor-service-host</artifactId>
+            <version>${jihajoor.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.jihajoor</groupId>
+            <artifactId>outbox-processor</artifactId>
+            <version>${jihajoor.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.jihajoor</groupId>
+            <artifactId>notification-service</artifactId>
+            <version>${jihajoor.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.jihajoor</groupId>
+            <artifactId>complaint-service</artifactId>
+            <version>${jihajoor.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.jihajoor</groupId>
+            <artifactId>rating-review-service</artifactId>
+            <version>${jihajoor.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.jihajoor</groupId>
+            <artifactId>admin-service</artifactId>
+            <version>${jihajoor.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.jihajoor</groupId>
+            <artifactId>reporting-service</artifactId>
+            <version>${jihajoor.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.jihajoor.app.EngagementApplication</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

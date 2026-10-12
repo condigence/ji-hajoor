@@ -1,6 +1,6 @@
 package com.jihajoor.gateway.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.jihajoor.gateway.auth.CachingTokenIntrospector;
 import com.jihajoor.gateway.auth.TokenIntrospector;
 import com.jihajoor.gateway.auth.WebClientTokenIntrospector;

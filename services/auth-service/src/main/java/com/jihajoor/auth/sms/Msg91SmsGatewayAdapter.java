@@ -1,8 +1,8 @@
 package com.jihajoor.auth.sms;
 
 import java.time.Duration;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,16 +34,14 @@ public class Msg91SmsGatewayAdapter implements SmsGatewayPort {
     private static final Logger log = LoggerFactory.getLogger(Msg91SmsGatewayAdapter.class);
 
     private final RestClient client;
-    private final ObjectMapper objectMapper = new ObjectMapper();
     private final String authKey;
     private final String templateId;
 
     @Autowired
-    public Msg91SmsGatewayAdapter(RestClient.Builder builder,
-                                  @Value("${jihajoor.sms.msg91.base-url:https://control.msg91.com}") String baseUrl,
+    public Msg91SmsGatewayAdapter(@Value("${jihajoor.sms.msg91.base-url:https://control.msg91.com}") String baseUrl,
                                   @Value("${jihajoor.sms.msg91.auth-key:}") String authKey,
                                   @Value("${jihajoor.sms.msg91.otp-template-id:}") String templateId) {
-        this(builder.baseUrl(baseUrl).requestFactory(timeouts()).build(), authKey, templateId);
+        this(RestClient.builder().baseUrl(baseUrl).requestFactory(timeouts()).build(), authKey, templateId);
     }
 
     Msg91SmsGatewayAdapter(RestClient client, String authKey, String templateId) {
@@ -97,13 +95,13 @@ public class Msg91SmsGatewayAdapter implements SmsGatewayPort {
             throw new SmsDeliveryException("SMS gateway unavailable", ex);
         }
 
-        JsonNode json = parse(body);
-        if (json == null || !"success".equalsIgnoreCase(json.path("type").asText())) {
+        if (!"success".equalsIgnoreCase(field(body, "type"))) {
             String detail = describe(body);
             log.warn("MSG91 did not accept OTP send: {}", detail);
             throw new SmsDeliveryException("SMS gateway rejected the message: " + detail);
         }
-        log.info("SMS dispatch accepted by MSG91 (request {})", json.path("request_id").asText("?"));
+        String requestId = field(body, "request_id");
+        log.info("SMS dispatch accepted by MSG91 (request {})", requestId == null ? "?" : requestId);
     }
 
     /**
@@ -115,22 +113,24 @@ public class Msg91SmsGatewayAdapter implements SmsGatewayPort {
         throw new SmsDeliveryException("MSG91 gateway only sends DLT-approved OTP templates");
     }
 
-    private JsonNode parse(String body) {
-        if (body == null || body.isBlank()) {
+    /**
+     * One top-level string field of MSG91's small JSON reply ({@code type}, {@code message},
+     * {@code request_id}); null when absent. A full JSON parser is not needed for three flat keys.
+     */
+    static String field(String body, String name) {
+        if (body == null) {
             return null;
         }
-        try {
-            return objectMapper.readTree(body);
-        } catch (Exception e) {
-            return null;
-        }
+        Matcher m = Pattern.compile("\"" + Pattern.quote(name) + "\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
+                .matcher(body);
+        return m.find() ? m.group(1) : null;
     }
 
     /** The provider's error message, never the request (which carries the key and code). */
     private String describe(String body) {
-        JsonNode json = parse(body);
-        if (json != null && json.hasNonNull("message")) {
-            return json.get("message").asText();
+        String message = field(body, "message");
+        if (message != null) {
+            return message;
         }
         if (body == null || body.isBlank()) {
             return "empty response";

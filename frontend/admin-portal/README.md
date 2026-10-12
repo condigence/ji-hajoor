@@ -2,7 +2,7 @@
 
 Desktop-first administrative web application for the Ji-Hajoor platform, and the
 home of the **Tenant Portal** used by service agencies. Built with the same
-stack as the Customer and Provider apps (React + TypeScript + Vite, React
+stack as the Customer and Provider apps (React 19 + TypeScript 6 + Vite 8, React
 Router, TanStack Query, Zustand, Material UI, React Hook Form + Zod), but laid
 out for large screens with a persistent sidebar rather than a mobile-first
 bottom nav (Requirement 28.3). It is a web app only; it has no Android or iOS
@@ -12,7 +12,9 @@ build.
 
 Only staff accounts get into the shell (`STAFF_ROLES` in `src/config/roles.ts`):
 `ADMIN`, `SUPER_ADMIN`, `FINANCE_ADMIN`, `DISPATCHER`, `SUPPORT_AGENT` and
-`TENANT_ADMIN`. A `CUSTOMER` or `SERVICE_PROVIDER` session is refused.
+`TENANT_ADMIN`. Any other signed-in account is sent to `/agency`: the agency
+application form, or the status of its application (pending, approved — sign in
+again to open the Tenant Portal — or rejected with the reason).
 
 Every module is role-gated twice with the same role set: the sidebar only lists
 modules the user may open, and the route guard (`RequireAuth roles=…` in
@@ -61,9 +63,16 @@ grouping is presentational only; a new module must be added to both
 - **Provider Management**, **Service Categories**, **Pricing Configuration**,
   **Coupons**, **Notification Templates**, **Reports**, **Audit Logs** — the
   operational modules of Requirement 19.2.
-- **Verification Queue** (Requirement 19.3) — providers in `DOCUMENT_SUBMITTED`
-  oldest first, with an inline document viewer that renders PDFs in an embedded
-  frame.
+- **Verification Queue** (Requirement 19.3) — two tabs, one per admin step.
+  **Document review**: providers in `DOCUMENT_SUBMITTED`, oldest first, with an
+  inline document viewer that renders PDFs in an embedded frame; **Accept
+  documents** starts the background check. **Background check**: providers whose
+  check has started; the admin records the result and chooses **Passed —
+  approve** (eligible for jobs) or **Failed — reject** (with a reason the provider
+  sees). No background-check vendor is integrated, so this is how a check completes.
+- **Users** also has an **Invitations** tab (invite staff by email, revoke), and
+  **Tenants** a **Pending applications** tab (approve or reject self-registered
+  agencies).
 - **Booking Management** — search and filter bookings, force-cancel an
   in-flight booking with a reason.
 - **Payments & Refunds** — transactions with full or partial refunds up to the
@@ -106,8 +115,14 @@ use the Tenants module instead.
 
 ## Signing in
 
-The login screen offers **Password** (selected by default; staff accounts with
-provisioned credentials) and **OTP** (mobile number + code). Locally, the
+The login screen offers **Password** (selected by default; the field takes an
+**email or a username**) and **OTP** (mobile number + code), plus "Forgot
+password?" and **Register your agency** (`/agency/register`: create an account
+with an emailed code, then apply). Staff join by invitation: a super admin or
+admin invites them under Users → Invitations, and the emailed link opens
+`/invite/:token`, where they set their own password. Locally, codes and
+invitation links are in `docker/dev-mail/dev-mail.log`. Each seeded account
+also signs in by email as `<username>@jihajoor.local`. Locally, the
 seeded accounts in [`docs/LOCAL_ACCESS.md`](../../docs/LOCAL_ACCESS.md) section 3
 all use `JiHajoor@2026`: `admin`, `superadmin`, `finance`, `dispatcher`,
 `support` and `tenantadmin` (the demo agency "Ara Home Services").
@@ -158,25 +173,9 @@ docker compose -f docker-compose.core.yml up -d --build --wait
 ```
 
 The `admin-portal` image (`Dockerfile`) builds the bundle with the default
-`/api` base and serves it from nginx on <http://localhost:5175>.
-`nginx/default.conf.template` proxies `/api/auth/*` to `auth-service:8081` and
-everything else under `/api/` to `api-gateway:8080`. Those targets and the
-listen port come from environment variables at container start (defaults in
-`docker-entrypoint.d/15-ji-hajoor-env.envsh`).
-
-## Deploying on Railway
-
-`/` is the public Ji-Hajoor home page; staff sign in at `/login`.
-
-1. Create a service from this repo and set **Root Directory** to
-   `frontend/admin-portal` (it picks up `railway.json` and the `Dockerfile`).
-2. Add a variable pointing at the API gateway, either its private address
-   `API_GATEWAY_URL=http://${{api-gateway.RAILWAY_PRIVATE_DOMAIN}}:${{api-gateway.PORT}}`
-   (replace `api-gateway` with your gateway service's name) or its public URL
-   `API_GATEWAY_URL=https://<gateway>.up.railway.app`.
-   `/api/auth/*` goes to the same place, as the gateway routes `/auth/**`;
-   set `AUTH_SERVICE_URL` only to send it elsewhere.
-3. Generate a public domain under **Settings → Networking**.
+`/api` base and serves it from nginx on <http://localhost:5175>. `nginx/default.conf.template`
+proxies `/api/auth/*` to `identity-app:8081` (auth-service) and everything else under `/api/`
+to `api-gateway:8080`.
 
 ## Layout conventions
 
@@ -215,7 +214,8 @@ src/
   components/   # AppShell, guards, data table, state views
   config/       # env, roles, navigation, sections, nav filtering
   features/
-    auth/          # Login (password + OTP)
+    auth/          # Login (email/username password + OTP), reset, invitation acceptance
+    agency/        # Register your agency, application status
     dashboard/     # Live metrics
     users/ providers/ verification/ categories/ pricing/ coupons/
     bookings/ dispatch/ complaints/ reviews/ payments/ reports/

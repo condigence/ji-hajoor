@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter } from 'react-router';
 import { PlaceholderScreen } from '@components/PlaceholderScreen';
 import { RequireAuth } from '@components/RequireAuth';
 import {
@@ -13,6 +13,9 @@ import {
 } from '@config/roles';
 import { HomeScreen } from '@features/home/HomeScreen';
 import { LoginScreen } from '@features/auth/LoginScreen';
+import { AcceptInvitationScreen } from '@features/auth/AcceptInvitationScreen';
+import { RegisterAgencyScreen } from '@features/agency/RegisterAgencyScreen';
+import { AgencyApplicationScreen } from '@features/agency/AgencyApplicationScreen';
 import { DashboardScreen } from '@features/dashboard/DashboardScreen';
 import { UserManagementScreen } from '@features/users/UserManagementScreen';
 import { ProviderManagementScreen } from '@features/providers/ProviderManagementScreen';
@@ -57,8 +60,15 @@ import { JobsScreen } from '@features/tenant-portal/JobsScreen';
  * `/` is the public home page for visitors; a signed-in user is sent on to
  * their landing module (HomeRedirect), so staff without
  * the Dashboard never start on a Forbidden screen. Unauthorized-but-
- * authenticated users get a Forbidden screen, mirroring the backend's 403,
+ * authenticated staff get a Forbidden screen, mirroring the backend's 403,
  * rather than being bounced to login.
+ *
+ * A session with no staff role at all is an agency applicant's (email-auth
+ * Requirement 5.5): every guarded route sends it to `/agency`, its application
+ * status page, instead. Three routes stand outside the console:
+ * - `/agency/register`: "Register your agency", step 1 — an account (public);
+ * - `/agency`: the application form or status (any signed-in account);
+ * - `/invite/:token`: accept a staff invitation (public, Requirement 6.3).
  */
 export const router = createBrowserRouter([
   {
@@ -68,6 +78,22 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginScreen />,
+  },
+  {
+    path: '/agency/register',
+    element: <RegisterAgencyScreen />,
+  },
+  {
+    path: '/agency',
+    element: (
+      <RequireAuth>
+        <AgencyApplicationScreen />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/invite/:token',
+    element: <AcceptInvitationScreen />,
   },
   {
     path: '/dashboard',

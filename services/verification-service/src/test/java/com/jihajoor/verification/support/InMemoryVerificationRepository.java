@@ -68,6 +68,23 @@ public class InMemoryVerificationRepository implements VerificationRepository {
                 .toList();
     }
 
+    /** Same filter and ordering as the JPQL: oldest background check first. */
+    @Override
+    public List<com.jihajoor.verification.domain.BackgroundCheckQueueRow> findBackgroundCheckQueue(
+            java.util.Collection<com.jihajoor.verification.domain.VerificationStatus> statuses, Pageable page) {
+        return store.values().stream()
+                .filter(v -> statuses.contains(v.getStatus()))
+                .map(v -> new com.jihajoor.verification.domain.BackgroundCheckQueueRow(v.getProviderId(),
+                        v.getStatus(), v.getBackgroundCheckStartedAt(), v.getBackgroundCheckResult(),
+                        (long) v.getDocuments().size()))
+                .sorted(java.util.Comparator.comparing(
+                                com.jihajoor.verification.domain.BackgroundCheckQueueRow::startedAt,
+                                java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder()))
+                        .thenComparing(com.jihajoor.verification.domain.BackgroundCheckQueueRow::providerId))
+                .limit(page.getPageSize())
+                .toList();
+    }
+
     @Override
     public List<com.jihajoor.verification.domain.VerificationStatusView> findStatusesByProviderIds(
             java.util.Collection<UUID> providerIds) {

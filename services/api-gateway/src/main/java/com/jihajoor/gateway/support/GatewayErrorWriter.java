@@ -1,6 +1,6 @@
 package com.jihajoor.gateway.support;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.jihajoor.gateway.filter.CorrelationIdGatewayFilter;
 import com.jihajoor.shared.observability.error.ErrorResponseDto;
 import org.springframework.core.io.buffer.DataBuffer;

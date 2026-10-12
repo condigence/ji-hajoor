@@ -6,7 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.jihajoor.booking.event.PaymentCompletedEvent;
 import com.jihajoor.booking.service.BookingPaymentService;
 import com.jihajoor.booking.service.BookingPaymentService.CompletionOutcome;

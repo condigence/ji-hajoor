@@ -1,6 +1,6 @@
 package com.jihajoor.dispatch.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.jihajoor.dispatch.domain.BookingNotSearchableException;
 import com.jihajoor.dispatch.domain.DispatchRequest;
 import com.jihajoor.dispatch.domain.UnresolvableBookingException;

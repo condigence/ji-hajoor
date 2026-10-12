@@ -1,6 +1,6 @@
 package com.jihajoor.invoice.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.jihajoor.invoice.event.PaymentCompletedEvent;
 import com.jihajoor.invoice.service.InvoiceService;
 import com.jihajoor.shared.outbox.kafka.DlqForwarder;

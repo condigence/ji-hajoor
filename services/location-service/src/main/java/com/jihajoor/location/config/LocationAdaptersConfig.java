@@ -2,13 +2,16 @@ package com.jihajoor.location.config;
 
 import java.util.UUID;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
+import com.jihajoor.location.booking.BookingParticipantsPort;
+import com.jihajoor.location.booking.HttpBookingParticipantsAdapter;
 import com.jihajoor.location.domain.Coordinates;
 import com.jihajoor.location.eta.EtaCalculatorPort;
 import com.jihajoor.location.eta.HaversineEtaCalculatorAdapter;
@@ -16,6 +19,7 @@ import com.jihajoor.location.store.LocationStorePort;
 import com.jihajoor.location.store.RedisLocationStoreAdapter;
 import com.jihajoor.location.subscription.InMemorySubscriberRegistry;
 import com.jihajoor.location.subscription.SubscriberRegistryPort;
+import com.jihajoor.shared.resilience.ResilienceFactory;
 
 /**
  * Wires the mockable Location Service abstractions to their runtime adapters (Requirement 10).
@@ -25,6 +29,8 @@ import com.jihajoor.location.subscription.SubscriberRegistryPort;
  *       {@code jihajoor.location.store=memory} (tests supply their own fake).</li>
  *   <li>{@link SubscriberRegistryPort} → in-memory concurrent registry.</li>
  *   <li>{@link EtaCalculatorPort} → haversine estimator over a destination resolver.</li>
+ *   <li>{@link BookingParticipantsPort} → the Booking Service's internal payment-facts endpoint,
+ *       with the shared {@code INTERNAL_API_KEY}; used for the ownership checks.</li>
  * </ul>
  *
  * <p>Each bean is {@code @ConditionalOnMissingBean} so tests (and future production adapters)
@@ -41,6 +47,15 @@ public class LocationAdaptersConfig {
                                            ObjectMapper objectMapper,
                                            LocationProperties properties) {
         return new RedisLocationStoreAdapter(redisTemplate, objectMapper, properties);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public BookingParticipantsPort bookingParticipants(
+            ResilienceFactory resilienceFactory,
+            @Value("${jihajoor.location.booking-service-url:http://booking-service:8084}") String baseUrl,
+            @Value("${jihajoor.location.internal-api-key:}") String internalApiKey) {
+        return new HttpBookingParticipantsAdapter(resilienceFactory, baseUrl, internalApiKey);
     }
 
     @Bean

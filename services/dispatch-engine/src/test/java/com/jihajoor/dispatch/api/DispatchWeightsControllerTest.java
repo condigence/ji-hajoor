@@ -1,6 +1,7 @@
 package com.jihajoor.dispatch.api;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.jihajoor.dispatch.domain.MatchingWeights;
 import com.jihajoor.dispatch.domain.MatchingWeightsStore;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,7 +24,7 @@ class DispatchWeightsControllerTest {
 
     private MatchingWeightsStore store;
     private MockMvc mockMvc;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = new JsonMapper();
 
     @BeforeEach
     void setUp() {

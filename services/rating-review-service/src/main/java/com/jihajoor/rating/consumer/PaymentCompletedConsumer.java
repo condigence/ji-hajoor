@@ -1,6 +1,6 @@
 package com.jihajoor.rating.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.jihajoor.rating.event.PaymentCompletedEvent;
 import com.jihajoor.rating.service.ReviewService;
 import com.jihajoor.shared.outbox.kafka.DlqForwarder;

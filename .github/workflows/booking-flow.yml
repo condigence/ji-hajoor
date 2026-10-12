@@ -7,13 +7,15 @@ name: Booking flow
 
 on:
   push:
-    branches: [main, "railway/**"]
+    branches: [main, "railway/**", "sync/**"]
     paths:
+      - Dockerfile
+      - pom.xml
       - deploy/**
       - shared/**
       - services/**
-      - frontend/customer-app/**
-      - frontend/provider-app/**
+      - apps/**
+      - frontend/**
       - docker/seed-*.sql
       - .github/workflows/booking-flow.yml
   workflow_dispatch:
@@ -26,64 +28,76 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  railway-images:
+    name: Railway image ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [identity-app, jobs-app, money-app, engagement-app, api-gateway]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image exactly as Railway does
+        run: docker build -q --build-arg APP=${{ matrix.app }} -t jh/${{ matrix.app }} . >/dev/null
+
   flow:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      SERVICES: >-
-        auth-service catalog-service customer-service pricing-engine booking-service
-        dispatch-engine provider-service verification-service location-service
-        payment-service notification-service outbox-processor admin-service api-gateway
+      DEPLOYABLES: identity-app jobs-app money-app engagement-app api-gateway
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
           cache: maven
 
-      - name: Build jars
+      - name: Build the deployables
         run: |
-          for lib in shared/*/; do mvn -B -q -f "$lib/pom.xml" -DskipTests install; done
+          mvn -B -q -DskipTests package \
+            -pl apps/identity-app,apps/jobs-app,apps/money-app,apps/engagement-app,services/api-gateway -am
           mkdir -p ci-jars
-          for s in $SERVICES; do
-            mvn -B -q -f "services/$s/pom.xml" -DskipTests package
-            cp "services/$s/target/$s-1.0.0-SNAPSHOT.jar" "ci-jars/$s.jar"
-          done
+          for a in identity-app jobs-app money-app engagement-app; do cp "apps/$a/target/$a-1.0.0-SNAPSHOT.jar" "ci-jars/$a.jar"; done
+          cp services/api-gateway/target/api-gateway-1.0.0-SNAPSHOT.jar ci-jars/api-gateway.jar
 
       - name: Build images (runtime identical to the Railway image)
         run: |
           cat > ci-jars/Dockerfile <<'EOF'
-          FROM eclipse-temurin:21-jre-jammy
-          WORKDIR /app
-          RUN groupadd -r app && useradd -r -g app app
+          FROM eclipse-temurin:25-jre-alpine AS extract
           ARG JAR
-          COPY ci-jars/${JAR} app.jar
+          COPY ci-jars/${JAR} /app.jar
+          RUN cd / && java -Djarmode=tools -jar /app.jar extract --destination /extracted
+          FROM eclipse-temurin:25-jre-alpine
+          RUN addgroup -S app && adduser -S -u 999 -G app app
+          WORKDIR /app
+          COPY --from=extract /extracted/lib/ lib/
+          COPY --from=extract /extracted/app.jar app.jar
           COPY deploy/entrypoint.sh /app/entrypoint.sh
           RUN chmod 755 /app/entrypoint.sh
           USER app
           ENTRYPOINT ["/app/entrypoint.sh"]
           EOF
-          for s in $SERVICES; do
-            docker build -q -f ci-jars/Dockerfile --build-arg JAR="$s.jar" -t "jh/$s" . >/dev/null
+          for a in $DEPLOYABLES; do
+            docker build -q -f ci-jars/Dockerfile --build-arg JAR="$a.jar" -t "jh/$a" . >/dev/null
           done
           cmp docker/seed-catalog.sql deploy/seed/seed-catalog.sql || { echo '::error::deploy/seed/seed-catalog.sql differs from docker/seed-catalog.sql'; exit 1; }
           docker build -q -t jh/seed deploy/seed >/dev/null
-          docker build -q -t jh/customer-app frontend/customer-app >/dev/null
-          docker build -q -t jh/provider-app frontend/provider-app >/dev/null
+          for w in admin-portal customer-app provider-app; do docker build -q -t "jh/$w" "frontend/$w" >/dev/null; done
           docker images | grep '^jh/'
 
       - name: Start the stack and seed it
         run: bash deploy/ci/run-stack.sh
 
-      - name: Book, dispatch, run and pay for a job
+      - name: Sign up a provider, book, dispatch, run and pay for a job
         run: bash deploy/ci/booking-flow.sh
 
       - name: Service errors as annotations
         if: failure()
         run: |
-          for c in $SERVICES; do
-            e="$(docker logs "$c" 2>&1 | grep -E ' ERROR |Exception|Caused by' | grep -v 'DEBUG' | tail -6 | cut -c1-240 | sed ':a;N;$!ba;s/\n/%0A/g')"
+          for c in $DEPLOYABLES; do
+            e="$(docker logs "$c" 2>&1 | grep -E ' ERROR |"ERROR"|Exception|Caused by' | tail -8 | cut -c1-240 | sed ':a;N;$!ba;s/\n/%0A/g')"
             [ -n "$e" ] && printf '::warning title=%s errors::%s\n' "$c" "$e"
           done
           true
@@ -91,6 +105,6 @@ jobs:
       - name: Container logs
         if: always()
         run: |
-          for c in $SERVICES customer-app provider-app kafka; do
-            echo "::group::$c"; docker logs "$c" 2>&1 | tail -120; echo "::endgroup::"
+          for c in $DEPLOYABLES admin-portal customer-app provider-app kafka; do
+            echo "::group::$c"; docker logs "$c" 2>&1 | tail -150; echo "::endgroup::"
           done

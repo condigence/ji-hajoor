@@ -4,7 +4,7 @@ import java.time.Clock;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.jihajoor.chat.config.ChatProperties;
 import com.jihajoor.chat.service.ChatService;
 import com.jihajoor.shared.outbox.kafka.DlqForwarder;

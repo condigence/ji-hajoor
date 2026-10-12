@@ -5,7 +5,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -13,9 +12,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.jihajoor.verification.api.dto.BackgroundCheckDecisionRequest;
+import com.jihajoor.verification.api.dto.BackgroundCheckQueueEntryResponse;
 import com.jihajoor.verification.api.dto.VerificationDecisionRequest;
 import com.jihajoor.verification.api.dto.VerificationDocumentResponse;
 import com.jihajoor.verification.api.dto.VerificationQueueEntryResponse;
+import com.jihajoor.verification.domain.BackgroundCheckQueueRow;
 import com.jihajoor.verification.domain.VerificationQueueRow;
 import com.jihajoor.verification.provider.ProviderDirectoryPort;
 import com.jihajoor.verification.provider.ProviderDirectoryPort.ProviderSummary;
@@ -44,18 +46,10 @@ public class AdminVerificationQueueController {
     private final VerificationService verificationService;
     private final ProviderDirectoryPort providerDirectory;
     private final CallerIdentity callerIdentity;
-    /**
-     * True (the default) while no background-check vendor is integrated: the portal's Approve then
-     * completes the whole review in one step. False hands the check to the external workflow.
-     */
-    private final boolean manualBackgroundCheck;
 
     public AdminVerificationQueueController(VerificationService verificationService,
                                             ProviderDirectoryPort providerDirectory,
-                                            CallerIdentity callerIdentity,
-                                            @Value("${jihajoor.verification.manual-background-check:true}")
-                                            boolean manualBackgroundCheck) {
-        this.manualBackgroundCheck = manualBackgroundCheck;
+                                            CallerIdentity callerIdentity) {
         this.verificationService = verificationService;
         this.providerDirectory = providerDirectory;
         this.callerIdentity = callerIdentity;
@@ -77,6 +71,38 @@ public class AdminVerificationQueueController {
         return ResponseEntity.ok(rows.stream()
                 .map(row -> VerificationQueueEntryResponse.from(row, summaries.get(row.providerId())))
                 .toList());
+    }
+
+    /**
+     * {@code GET /admin/verification/background-checks} — providers whose documents were accepted and
+     * whose background check awaits a result and decision ({@code BACKGROUND_CHECK_PENDING} or
+     * {@code BACKGROUND_CHECK_COMPLETED}), oldest check first, at most {@value #QUEUE_LIMIT}.
+     */
+    @GetMapping("/background-checks")
+    public ResponseEntity<List<BackgroundCheckQueueEntryResponse>> backgroundChecks() {
+        List<BackgroundCheckQueueRow> rows = verificationService.backgroundCheckQueue(QUEUE_LIMIT);
+        Map<UUID, ProviderSummary> summaries = rows.isEmpty()
+                ? Map.of()
+                : providerDirectory.summariesOf(rows.stream().map(BackgroundCheckQueueRow::providerId).toList());
+        return ResponseEntity.ok(rows.stream()
+                .map(row -> BackgroundCheckQueueEntryResponse.from(row, summaries.get(row.providerId())))
+                .toList());
+    }
+
+    /**
+     * {@code POST /admin/verification/{providerId}/background-check} — record the result of the
+     * background check and decide: {@code PASSED} approves the provider for jobs, {@code FAILED}
+     * rejects them with the reason (required, shown to the provider). 409
+     * {@code INVALID_STATE_TRANSITION} when the provider is not at this step. Answers 204.
+     */
+    @PostMapping("/{providerId}/background-check")
+    public ResponseEntity<Void> decideBackgroundCheck(@PathVariable("providerId") UUID providerId,
+                                                      @Valid @RequestBody BackgroundCheckDecisionRequest request) {
+        UUID admin = callerIdentity.requireCallerId();
+        verificationService.decideBackgroundCheck(providerId, admin,
+                request.outcome() == BackgroundCheckDecisionRequest.Outcome.PASSED, request.result(),
+                request.reason());
+        return ResponseEntity.noContent().build();
     }
 
     /**
@@ -105,13 +131,7 @@ public class AdminVerificationQueueController {
                                        @Valid @RequestBody VerificationDecisionRequest request) {
         UUID admin = callerIdentity.requireCallerId();
         switch (request.decision()) {
-            case APPROVE -> {
-                if (manualBackgroundCheck) {
-                    verificationService.approveAfterManualReview(providerId, admin, request.reason());
-                } else {
-                    verificationService.markDocumentsVerified(providerId, admin, request.reason());
-                }
-            }
+            case APPROVE -> verificationService.markDocumentsVerified(providerId, admin, request.reason());
             case REJECT -> verificationService.reject(providerId, admin, request.reason());
         }
         return ResponseEntity.noContent().build();

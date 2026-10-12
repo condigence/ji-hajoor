@@ -1,34 +1,24 @@
 name: Railway smoke test
 
-# Builds the exact images Railway builds (root Dockerfile per backend service,
-# frontend/admin-portal/Dockerfile for the portal), runs them the way Railway
-# does — PORT, DATABASE_URL and REDIS_URL injected, Redis behind a password —
-# and signs in as the bootstrap admin through portal -> gateway -> auth-service.
-# A green run means the Railway deployment of these three services can work.
+# Unit tests for the Ji-Hajoor additions in auth-service (MSG91, test OTP mode,
+# first-admin bootstrap) and api-gateway (realtime query token, root route).
+# The full stack, Railway-style, is exercised by the "Booking flow" workflow.
 
 on:
   push:
-    branches: [main, "railway/**"]
+    branches: [main, "railway/**", "sync/**"]
     paths:
-      - Dockerfile
-      - deploy/**
+      - pom.xml
       - shared/**
       - services/auth-service/**
       - services/api-gateway/**
-      - services/admin-service/**
-      - services/verification-service/**
-      - frontend/admin-portal/**
       - .github/workflows/railway-smoke.yml
   pull_request:
     paths:
-      - Dockerfile
-      - deploy/**
+      - pom.xml
       - shared/**
       - services/auth-service/**
       - services/api-gateway/**
-      - services/admin-service/**
-      - services/verification-service/**
-      - frontend/admin-portal/**
       - .github/workflows/railway-smoke.yml
   workflow_dispatch:
 
@@ -41,7 +31,7 @@ concurrency:
 
 jobs:
   unit-tests:
-    name: auth, gateway, verification unit tests
+    name: auth-service and api-gateway unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -49,182 +39,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
           cache: maven
-      - name: Install shared libraries
-        run: for lib in shared/*/; do mvn -B -q -f "$lib/pom.xml" -DskipTests install; done
-      - name: Test auth-service
-        run: mvn -B -f services/auth-service/pom.xml test
-      - name: Test api-gateway
-        run: mvn -B -f services/api-gateway/pom.xml test
-      - name: Test verification-service
-        run: mvn -B -f services/verification-service/pom.xml test
-
-  smoke:
-    name: Portal -> gateway -> auth sign-in
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    env:
-      NET: jh
-      ADMIN_USER: owner
-      ADMIN_PASS: smoke-test-password-123
-      ADMIN_MOBILE: '+919876543210'
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build images (as Railway does)
-        run: |
-          docker build -q --build-arg SERVICE=auth-service -t jh/auth-service .
-          docker build -q --build-arg SERVICE=api-gateway  -t jh/api-gateway .
-          docker build -q --build-arg SERVICE=admin-service -t jh/admin-service .
-          docker build -q -t jh/admin-portal frontend/admin-portal
-
-      - name: Start Postgres and password-protected Redis
-        run: |
-          docker network create "$NET"
-          docker run -d --name postgres --network "$NET" \
-            -e POSTGRES_PASSWORD='pg-p@ss/word' -e POSTGRES_DB=railway postgres:16-alpine
-          docker run -d --name redis --network "$NET" redis:7-alpine \
-            redis-server --requirepass redis-secret
-          for i in $(seq 1 30); do
-            docker exec postgres pg_isready -U postgres -d railway >/dev/null 2>&1 && break
-            sleep 2
-          done
-
-      - name: Start auth-service, admin-service, api-gateway, admin-portal
-        run: |
-          JWT_SECRET="$(openssl rand -hex 32)"
-          REDIS_URL='redis://default:redis-secret@redis:6379'
-          # Password URL-encoded exactly as Railway's DATABASE_URL would carry it.
-          docker run -d --name auth-service --network "$NET" \
-            -e PORT=8081 \
-            -e DATABASE_URL='postgresql://postgres:pg-p%40ss%2Fword@postgres:5432/railway' \
-            -e REDIS_URL="$REDIS_URL" \
-            -e JWT_SECRET="$JWT_SECRET" \
-            -e BOOTSTRAP_ADMIN_USERNAME="$ADMIN_USER" \
-            -e BOOTSTRAP_ADMIN_PASSWORD="$ADMIN_PASS" \
-            -e BOOTSTRAP_ADMIN_MOBILE="$ADMIN_MOBILE" \
-            -e OTP_FIXED_CODE=123456 \
-            jh/auth-service
-          docker run -d --name admin-service --network "$NET" \
-            -e PORT=8095 \
-            -e DATABASE_URL='postgresql://postgres:pg-p%40ss%2Fword@postgres:5432/railway' \
-            -e JWT_SECRET="$JWT_SECRET" \
-            jh/admin-service
-          docker run -d --name api-gateway --network "$NET" \
-            -e PORT=8080 \
-            -e ADMIN_SERVICE_URI=http://admin-service:8095 \
-            -e REDIS_URL="$REDIS_URL" \
-            -e JWT_SECRET="$JWT_SECRET" \
-            -e AUTH_SERVICE_URI=http://auth-service:8081 \
-            -e AUTH_INTROSPECT_URI=http://auth-service:8081/auth/introspect \
-            jh/api-gateway
-          docker run -d --name admin-portal --network "$NET" -p 3000:3000 \
-            -e PORT=3000 \
-            -e API_GATEWAY_URL=http://api-gateway:8080 \
-            jh/admin-portal
-
-      - name: Wait for services to be healthy
-        run: |
-          wait_for() {
-            for i in $(seq 1 90); do
-              if docker run --rm --network "$NET" curlimages/curl:8.10.1 -fsS "$2" >/dev/null 2>&1; then
-                echo "$1 is up"; return 0
-              fi
-              if [ "$(docker inspect -f '{{.State.Running}}' "$1")" != "true" ]; then
-                echo "::error::$1 exited"; docker logs "$1" | tail -80; return 1
-              fi
-              sleep 3
-            done
-            echo "::error::$1 not healthy in time"; docker logs "$1" | tail -80; return 1
-          }
-          wait_for auth-service http://auth-service:8081/health
-          wait_for admin-service http://admin-service:8095/health
-          wait_for api-gateway  http://api-gateway:8080/health
-          wait_for admin-portal http://admin-portal:3000/
-
-      - name: Home page and gateway root answer
-        run: |
-          curl -fsS http://localhost:3000/ | grep -q '<div id="root">'
-          curl -fsS -o /dev/null -w 'portal /login -> %{http_code}\n' http://localhost:3000/login
-          docker run --rm --network "$NET" curlimages/curl:8.10.1 -fsS -H 'X-Forwarded-Proto: https' \
-            http://api-gateway:8080/ | tee /dev/stderr | grep -q '"UP"'
-
-      - name: Sign in through the portal as the bootstrap admin
-        run: |
-          # Railway's edge terminates TLS and sends X-Forwarded-Proto: https.
-          code=$(curl -sS -o login.json -w '%{http_code}' \
-            -H 'Content-Type: application/json' -H 'X-Forwarded-Proto: https' \
-            -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}" \
-            http://localhost:3000/api/auth/login/password)
-          echo "login -> HTTP $code"; cat login.json; echo
-          test "$code" = 200
-          jq -e '.roles | index("SUPER_ADMIN")' login.json >/dev/null
-          jq -r .accessToken login.json > token.txt
-
-      - name: Wrong password is rejected
-        run: |
-          code=$(curl -sS -o /dev/null -w '%{http_code}' \
-            -H 'Content-Type: application/json' -H 'X-Forwarded-Proto: https' \
-            -d "{\"username\":\"$ADMIN_USER\",\"password\":\"not-the-password\"}" \
-            http://localhost:3000/api/auth/login/password)
-          echo "bad login -> HTTP $code"; test "$code" = 401
-
-      - name: Token works on a protected admin API (gateway introspection)
-        run: |
-          code=$(curl -sS -o users.json -w '%{http_code}' \
-            -H "Authorization: Bearer $(cat token.txt)" -H 'X-Forwarded-Proto: https' \
-            http://localhost:3000/api/admin/users)
-          echo "GET /api/admin/users -> HTTP $code"; head -c 600 users.json; echo
-          test "$code" = 200
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: https' \
-            http://localhost:3000/api/admin/users)
-          echo "without token -> HTTP $code"; test "$code" = 401
-
-      - name: Dashboard loads after sign-in (admin-service)
-        run: |
-          code=$(curl -sS -o dash.json -w '%{http_code}' \
-            -H "Authorization: Bearer $(cat token.txt)" -H 'X-Forwarded-Proto: https' \
-            http://localhost:3000/api/admin/dashboard)
-          echo "GET /api/admin/dashboard -> HTTP $code"; head -c 600 dash.json; echo
-          test "$code" = 200
-
-      - name: Customer OTP sign-up with the fixed test code
-        run: |
-          post() { curl -sS -o out.json -w '%{http_code}' -H 'Content-Type: application/json' \
-                     -H 'X-Forwarded-Proto: https' -d "$2" "http://localhost:3000/api$1"; }
-          code=$(post /auth/register/otp '{"mobileNumber":"+919812345678","role":"CUSTOMER"}')
-          echo "request OTP -> HTTP $code"; cat out.json; echo; test "$code" = 202
-          code=$(post /auth/register/verify '{"mobileNumber":"+919812345678","otp":"123456"}')
-          echo "verify 123456 -> HTTP $code"; cat out.json; echo; test "$code" = 201
-          jq -e '.roles == ["CUSTOMER"]' out.json >/dev/null
-
-      - name: Fixed test code never opens the admin account
-        run: |
-          post() { curl -sS -o out.json -w '%{http_code}' -H 'Content-Type: application/json' \
-                     -H 'X-Forwarded-Proto: https' -d "$2" "http://localhost:3000/api$1"; }
-          code=$(post /auth/register/otp "{\"mobileNumber\":\"$ADMIN_MOBILE\",\"role\":\"CUSTOMER\"}")
-          echo "request OTP for admin number -> HTTP $code"; test "$code" = 202
-          code=$(post /auth/register/verify "{\"mobileNumber\":\"$ADMIN_MOBILE\",\"otp\":\"123456\"}")
-          echo "verify for admin number -> HTTP $code"; cat out.json; echo; test "$code" = 403
-
-      - name: Restart keeps the admin and its password
-        run: |
-          docker restart auth-service
-          for i in $(seq 1 60); do
-            docker run --rm --network "$NET" curlimages/curl:8.10.1 -fsS http://auth-service:8081/health >/dev/null 2>&1 && break
-            sleep 3
-          done
-          code=$(curl -sS -o /dev/null -w '%{http_code}' \
-            -H 'Content-Type: application/json' -H 'X-Forwarded-Proto: https' \
-            -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}" \
-            http://localhost:3000/api/auth/login/password)
-          echo "login after restart -> HTTP $code"; test "$code" = 200
-          docker logs auth-service 2>&1 | grep -c "BOOTSTRAP ADMIN: created" | grep -qx 1
-
-      - name: Container logs
-        if: always()
-        run: |
-          for c in auth-service admin-service api-gateway admin-portal; do
-            echo "::group::$c"; docker logs "$c" 2>&1 | tail -150; echo "::endgroup::"
-          done
+      - name: Test auth-service and api-gateway
+        run: mvn -B test -pl services/auth-service,services/api-gateway -am

@@ -11,8 +11,8 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.UUID;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.jihajoor.chat.config.ChatProperties;
 import com.jihajoor.chat.delivery.MessageDeliveryPort;
 import com.jihajoor.chat.domain.ChatChannel;

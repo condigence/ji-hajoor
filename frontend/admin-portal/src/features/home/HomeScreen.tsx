@@ -1,4 +1,4 @@
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router';
 import { Box, Button, CircularProgress, Container, Stack, Typography } from '@mui/material';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import PlumbingRoundedIcon from '@mui/icons-material/PlumbingRounded';
@@ -15,6 +15,9 @@ import { BrandLogo } from '@components/BrandLogo';
 import { HomeRedirect } from '@components/HomeRedirect';
 import { useAuthStore } from '@stores/authStore';
 import { brand } from '@lib/theme';
+
+/** Read once at load: the footer year needs no re-render to stay current within a session. */
+const CURRENT_YEAR = new Date().getFullYear();
 
 const SERVICES = [
   { icon: PlumbingRoundedIcon, label: 'Plumbing' },
@@ -91,7 +94,7 @@ export function HomeScreen() {
           }}
         />
         <Container maxWidth="lg" sx={{ position: 'relative', py: { xs: 3, md: 4 } }}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
             <BrandLogo size={40} inverted />
             <Button
               component={RouterLink}
@@ -178,9 +181,9 @@ export function HomeScreen() {
           {SERVICES.map(({ icon: Icon, label }) => (
             <Stack
               key={label}
-              alignItems="center"
               spacing={1.25}
               sx={{
+                alignItems: 'center',
                 p: 2.5,
                 borderRadius: 3,
                 border: '1px solid',
@@ -246,9 +249,14 @@ export function HomeScreen() {
         <Stack
           direction={{ xs: 'column', md: 'row' }}
           spacing={3}
-          alignItems={{ md: 'center' }}
-          justifyContent="space-between"
-          sx={{ p: { xs: 3, md: 5 }, borderRadius: 4, bgcolor: brand.navBg, color: '#FFFFFF' }}
+          sx={{
+            alignItems: { md: 'center' },
+            justifyContent: 'space-between',
+            p: { xs: 3, md: 5 },
+            borderRadius: 4,
+            bgcolor: brand.navBg,
+            color: '#FFFFFF',
+          }}
         >
           <Box sx={{ maxWidth: 560 }}>
             <Typography variant="h5" component="h2" sx={{ fontWeight: 800 }}>
@@ -280,7 +288,7 @@ export function HomeScreen() {
         >
           <BrandLogo size={28} />
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            © {new Date().getFullYear()} Ji-Hajoor. All rights reserved.
+            © {CURRENT_YEAR} Ji-Hajoor. All rights reserved.
           </Typography>
         </Container>
       </Box>

@@ -20,8 +20,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.jihajoor.dispatch.adapter.HttpBookingTransitionAdapter.BookingTransitionException;
 import com.jihajoor.dispatch.domain.BookingNotSearchableException;
 import com.jihajoor.dispatch.domain.DispatchRequest;
@@ -80,7 +80,7 @@ class BookingCreatedConsumerTest {
     @Mock
     private BookingTransitionPort bookingTransition;
 
-    private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+    private final ObjectMapper mapper = new JsonMapper();
 
     private BookingCreatedConsumer consumer;
 

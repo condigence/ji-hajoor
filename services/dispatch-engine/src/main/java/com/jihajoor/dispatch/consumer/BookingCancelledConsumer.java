@@ -1,7 +1,7 @@
 package com.jihajoor.dispatch.consumer;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.jihajoor.dispatch.port.BookingCancellationPort;
 import com.jihajoor.dispatch.service.JobOfferService;
 import com.jihajoor.shared.outbox.kafka.DlqForwarder;

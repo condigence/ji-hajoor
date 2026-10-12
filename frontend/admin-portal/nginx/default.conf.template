@@ -108,6 +108,10 @@ server {
     # "/api/bookings/123" -> gateway "/bookings/123".
     location /api/ {
         # Same re-resolution fix as /api/auth/ above.
+        # Photo and document uploads are multipart requests of several MB. nginx
+        # refuses any body over 1 MB by default with a 413 before the services'
+        # own limits apply; booking-service accepts up to 60 MB per request.
+        client_max_body_size 60m;
         set $gateway_upstream ${API_GATEWAY_URL};
         rewrite ^/api/(.*)$ /$1 break;
         proxy_pass $gateway_upstream;

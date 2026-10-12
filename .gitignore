@@ -14,12 +14,6 @@ tok.tmp
 # IDE / OS
 .idea/
 *.iml
-# Eclipse/VS Code Java build output
-**/bin/
-.classpath
-.project
-.settings/
-.factorypath
 .DS_Store
 Thumbs.db
 

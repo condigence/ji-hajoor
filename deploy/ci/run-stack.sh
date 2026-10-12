@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Starts the customer booking stack in Docker the way it runs on Railway:
-# one Postgres, password-protected Redis, single-node Kafka, and each service
-# configured only through PORT / DATABASE_URL / REDIS_URL / KAFKA_BOOTSTRAP_SERVERS
-# plus the same per-service variables used on Railway. Used by the
-# "Booking flow" workflow. Images are expected as jh/<service>.
+# Starts the whole Ji-Hajoor stack in Docker the way it runs on Railway: one
+# Postgres, password-protected Redis, single-node Kafka, the five backend
+# deployables (four multi-service apps + gateway) configured only through
+# DATABASE_URL / REDIS_URL / KAFKA_BOOTSTRAP_SERVERS plus the same variables
+# used on Railway, and the three web apps. Images are expected as jh/<name>.
+# Used by the "Booking flow" workflow.
 set -euo pipefail
 
 NET=jh
@@ -31,92 +32,95 @@ docker run -d --name kafka --network "$NET" \
 
 for i in $(seq 1 30); do docker exec postgres pg_isready -U postgres -d railway >/dev/null 2>&1 && break; sleep 2; done
 
-# Report a container's last log lines as a GitHub annotation (job logs are not always readable).
+# Report a container's error lines as a GitHub annotation (job logs are not always readable).
 annotate_logs() {
   printf '::error title=%s log::%s\n' "$1" \
     "$(docker logs "$1" 2>&1 | grep -E 'ERROR|Exception|Caused by|APPLICATION FAILED|Description|Action|required' | tail -12 | cut -c1-220 | sed ':a;N;$!ba;s/\n/%0A/g')"
 }
 
-# svc NAME PORT [extra -e args...]
-svc() {
-  local name="$1" port="$2"; shift 2
+# app NAME [extra docker args...] — every deployable gets the shared platform settings.
+app() {
+  local name="$1"; shift
   docker run -d --name "$name" --network "$NET" \
-    -e PORT="$port" -e DATABASE_URL="$DB" -e JWT_SECRET="$JWT" -e INTERNAL_API_KEY="$KEY" \
-    -e SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=4 \
+    -e DATABASE_URL="$DB" -e REDIS_URL="$REDIS" -e KAFKA_BOOTSTRAP_SERVERS="$KAFKA" \
+    -e JWT_SECRET="$JWT" -e INTERNAL_API_KEY="$KEY" -e SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=4 \
     "$@" "jh/$name"
 }
 
-svc auth-service 8081 -e REDIS_URL="$REDIS" -e OTP_FIXED_CODE=123456 \
+app identity-app -e PORT=8081 \
+  -e OTP_FIXED_CODE=123456 -e SMS_PROVIDER=log -e EMAIL_PROVIDER=log \
   -e BOOTSTRAP_ADMIN_USERNAME=owner -e BOOTSTRAP_ADMIN_PASSWORD=ci-admin-password-1 \
-  -e BOOTSTRAP_ADMIN_MOBILE=+919999999999
-svc catalog-service 8085 -e REDIS_URL="$REDIS" -e CATALOG_CACHE=memory
-svc customer-service 8082 -e KMS_PROVIDER=local -e KMS_LOCAL_DATA_KEY="$KMS" -e GEOCODING_PROVIDER=noop \
-  -e BOOKING_SERVICE_URL=http://booking-service:8084
-svc pricing-engine 8086 -e REDIS_URL="$REDIS" -e PRICING_CACHE=memory \
-  -e PROMOTION_SERVICE_URL=http://promotion-service:8098
-svc booking-service 8084 -e KAFKA_BOOTSTRAP_SERVERS="$KAFKA" \
-  -e CATALOG_CLIENT=http -e CATALOG_SERVICE_URL=http://catalog-service:8085 \
-  -e PRICING_CLIENT=http -e PRICING_ENGINE_URL=http://pricing-engine:8086 \
-  -e CUSTOMER_CLIENT=http -e CUSTOMER_SERVICE_URL=http://customer-service:8082 \
-  -e PROVIDER_SERVICE_URL=http://provider-service:8083 -e MEDIA_STORAGE_PROVIDER=local
-svc dispatch-engine 8087 -e REDIS_URL="$REDIS" -e KAFKA_BOOTSTRAP_SERVERS="$KAFKA" \
-  -e PROVIDER_SERVICE_URL=http://provider-service:8083 -e BOOKING_SERVICE_URL=http://booking-service:8084 \
-  -e NOTIFICATION_SERVICE_URL=http://notification-service:8090 -e CUSTOMER_SERVICE_URL=http://customer-service:8082 \
-  -e CATALOG_SERVICE_URL=http://catalog-service:8085
-svc provider-service 8083 -e KMS_PROVIDER=local -e KMS_DATA_KEY="$KMS" -e BOOKING_CLIENT=http \
-  -e BOOKING_SERVICE_URI=http://booking-service:8084 -e CATALOG_SERVICE_URI=http://catalog-service:8085 \
-  -e VERIFICATION_SERVICE_URL=http://verification-service:8094 -e AUTH_SERVICE_URL=http://auth-service:8081 \
+  -e BOOTSTRAP_ADMIN_MOBILE=+919999999999 \
+  -e KMS_PROVIDER=local -e KMS_LOCAL_DATA_KEY="$KMS" -e KMS_DATA_KEY="$KMS" -e GEOCODING_PROVIDER=noop \
+  -e BOOKING_CLIENT=http -e BOOKING_SERVICE_URL=http://jobs-app:8084 -e BOOKING_SERVICE_URI=http://jobs-app:8084 \
+  -e CATALOG_SERVICE_URI=http://jobs-app:8085 -e VERIFICATION_SERVICE_URL=http://identity-app:8094 \
+  -e AUTH_SERVICE_URL=http://identity-app:8081 -e PROVIDER_SERVICE_URL=http://identity-app:8083 \
   -e BANK_ACCOUNT_VERIFICATION=manual
-svc verification-service 8094 -e PROVIDER_SERVICE_URL=http://provider-service:8083
-svc location-service 8092 -e REDIS_URL="$REDIS" -e KAFKA_BOOTSTRAP_SERVERS="$KAFKA" -e LOCATION_STORE=redis
-svc payment-service 8088 -e REDIS_URL="$REDIS" -e KMS_DATA_KEY="$KMS" \
-  -e RAZORPAY_WEBHOOK_SECRET=ci-rzp -e STRIPE_WEBHOOK_SECRET=ci-stripe \
-  -e BOOKING_SERVICE_URL=http://booking-service:8084 -e PROVIDER_SERVICE_URL=http://provider-service:8083 \
-  -e PROVIDER_WALLET_CLIENT=http -e PAYMENT_DEFAULT_GATEWAY=simulator -e PAYMENT_SIMULATOR_ENABLED=true \
+app jobs-app -e PORT=8084 \
+  -e CATALOG_CACHE=memory -e PRICING_CACHE=memory -e PROMOTION_SERVICE_URL=http://jobs-app:8098 \
+  -e CATALOG_CLIENT=http -e CATALOG_SERVICE_URL=http://jobs-app:8085 \
+  -e PRICING_CLIENT=http -e PRICING_ENGINE_URL=http://jobs-app:8086 \
+  -e CUSTOMER_CLIENT=http -e CUSTOMER_SERVICE_URL=http://identity-app:8082 \
+  -e PROVIDER_SERVICE_URL=http://identity-app:8083 -e BOOKING_SERVICE_URL=http://jobs-app:8084 \
+  -e NOTIFICATION_SERVICE_URL=http://engagement-app:8090 \
+  -e MEDIA_STORAGE_PROVIDER=local -e LOCATION_STORE=redis
+app money-app -e PORT=8088 \
+  -e KMS_DATA_KEY="$KMS" -e RAZORPAY_WEBHOOK_SECRET=ci-rzp -e STRIPE_WEBHOOK_SECRET=ci-stripe \
+  -e BOOKING_SERVICE_URL=http://jobs-app:8084 -e PROVIDER_SERVICE_URL=http://identity-app:8083 \
+  -e PROVIDER_WALLET_CLIENT=http -e NOTIFICATION_SERVICE_URL=http://engagement-app:8090 \
+  -e PAYMENT_DEFAULT_GATEWAY=simulator -e PAYMENT_SIMULATOR_ENABLED=true \
   -e PAYMENT_SIMULATOR_SECRET=ci-simulator-secret
-svc notification-service 8090 -e KAFKA_BOOTSTRAP_SERVERS="$KAFKA" \
-  -e PREFERENCE_SERVICE_URL=http://customer-service:8082 -e AUTH_SERVICE_URL=http://auth-service:8081
-svc outbox-processor 8099 -e KAFKA_BOOTSTRAP_SERVERS="$KAFKA"
-svc admin-service 8095
-svc api-gateway 8080 -p 8080:8080 -e REDIS_URL="$REDIS" \
-  -e AUTH_SERVICE_URI=http://auth-service:8081 -e AUTH_INTROSPECT_URI=http://auth-service:8081/auth/introspect \
-  -e CUSTOMER_SERVICE_URI=http://customer-service:8082 -e PROVIDER_SERVICE_URI=http://provider-service:8083 \
-  -e BOOKING_SERVICE_URI=http://booking-service:8084 -e CATALOG_SERVICE_URI=http://catalog-service:8085 \
-  -e PRICING_ENGINE_URI=http://pricing-engine:8086 -e DISPATCH_ENGINE_URI=http://dispatch-engine:8087 \
-  -e PAYMENT_SERVICE_URI=http://payment-service:8088 -e NOTIFICATION_SERVICE_URI=http://notification-service:8090 \
-  -e LOCATION_SERVICE_URI=http://location-service:8092 -e VERIFICATION_SERVICE_URI=http://verification-service:8094 \
-  -e ADMIN_SERVICE_URI=http://admin-service:8095
+app engagement-app -e PORT=8095 \
+  -e PREFERENCE_SERVICE_URL=http://identity-app:8082 -e AUTH_SERVICE_URL=http://identity-app:8081
+app api-gateway -p 8080:8080 -e PORT=8080 \
+  -e AUTH_SERVICE_URI=http://identity-app:8081 -e AUTH_INTROSPECT_URI=http://identity-app:8081/auth/introspect \
+  -e CUSTOMER_SERVICE_URI=http://identity-app:8082 -e PROVIDER_SERVICE_URI=http://identity-app:8083 \
+  -e VERIFICATION_SERVICE_URI=http://identity-app:8094 \
+  -e BOOKING_SERVICE_URI=http://jobs-app:8084 -e CATALOG_SERVICE_URI=http://jobs-app:8085 \
+  -e PRICING_ENGINE_URI=http://jobs-app:8086 -e DISPATCH_ENGINE_URI=http://jobs-app:8087 \
+  -e LOCATION_SERVICE_URI=http://jobs-app:8092 -e CHAT_SERVICE_URI=http://jobs-app:8093 \
+  -e PROMOTION_SERVICE_URI=http://jobs-app:8098 \
+  -e PAYMENT_SERVICE_URI=http://money-app:8088 -e INVOICE_SERVICE_URI=http://money-app:8089 \
+  -e NOTIFICATION_SERVICE_URI=http://engagement-app:8090 -e COMPLAINT_SERVICE_URI=http://engagement-app:8091 \
+  -e ADMIN_SERVICE_URI=http://engagement-app:8095 -e REPORTING_SERVICE_URI=http://engagement-app:8096 \
+  -e RATING_SERVICE_URI=http://engagement-app:8097
 
-docker run -d --name customer-app --network "$NET" -p 3001:3001 -e PORT=3001 \
-  -e API_GATEWAY_URL=http://api-gateway:8080 jh/customer-app
-docker run -d --name provider-app --network "$NET" -p 3002:3002 -e PORT=3002 \
-  -e API_GATEWAY_URL=http://api-gateway:8080 jh/provider-app
+for web in admin-portal:3000 customer-app:3001 provider-app:3002; do
+  n="${web%%:*}"; p="${web##*:}"
+  docker run -d --name "$n" --network "$NET" -p "$p:$p" -e PORT="$p" \
+    -e API_GATEWAY_URL=http://api-gateway:8080 "jh/$n"
+done
 
-SERVICES="auth-service:8081 catalog-service:8085 customer-service:8082 pricing-engine:8086 booking-service:8084
-  dispatch-engine:8087 provider-service:8083 verification-service:8094 location-service:8092 payment-service:8088
-  notification-service:8090 outbox-processor:8099 admin-service:8095 api-gateway:8080"
-for s in $SERVICES; do
+# Every hosted service must answer its own health check: name:port pairs per deployable.
+CHECKS="identity-app:8081 identity-app:8082 identity-app:8083 identity-app:8094
+  jobs-app:8085 jobs-app:8086 jobs-app:8098 jobs-app:8084 jobs-app:8087 jobs-app:8092 jobs-app:8093
+  money-app:8088 money-app:8089
+  engagement-app:8099 engagement-app:8090 engagement-app:8091 engagement-app:8097 engagement-app:8095 engagement-app:8096
+  api-gateway:8080"
+for s in $CHECKS; do
   name="${s%%:*}"; port="${s##*:}"
-  for i in $(seq 1 100); do
+  for i in $(seq 1 120); do
     if docker run --rm --network "$NET" curlimages/curl:8.10.1 -fsS "http://$name:$port/health" >/dev/null 2>&1; then
-      echo "$name is up"; continue 2
+      echo "$name:$port is up"; continue 2
     fi
     if [ "$(docker inspect -f '{{.State.Running}}' "$name")" != "true" ]; then
       echo "::error::$name exited"; annotate_logs "$name"; docker logs "$name" 2>&1 | tail -60; exit 1
     fi
     sleep 3
   done
-  echo "::error::$name not healthy in time"; annotate_logs "$name"; docker logs "$name" 2>&1 | tail -60; exit 1
+  echo "::error::$name:$port not healthy in time"; annotate_logs "$name"; docker logs "$name" 2>&1 | tail -60; exit 1
 done
 
-# Starter data, exactly as on Railway.
-docker run --name seed --network "$NET" -e DATABASE_URL="$DB" \
-  -e AUTH_URL=http://auth-service:8081 -e PRICING_URL=http://pricing-engine:8086 \
-  -e ADMIN_USERNAME=owner -e ADMIN_PASSWORD=ci-admin-password-1 jh/seed \
+# Starter data and app addresses, exactly as on Railway.
+seed() {
+  docker run "$@" --network "$NET" -e DATABASE_URL="$DB" \
+    -e AUTH_URL=http://identity-app:8081 -e PRICING_URL=http://jobs-app:8086 \
+    -e ADMIN_USERNAME=owner -e ADMIN_PASSWORD=ci-admin-password-1 \
+    -e CUSTOMER_APP_URL=http://localhost:3001 -e PROVIDER_APP_URL=http://localhost:3002 \
+    -e ADMIN_PORTAL_URL=http://localhost:3000 jh/seed
+}
+seed --name seed \
   || { printf '::error title=seed::%s\n' "$(docker logs seed 2>&1 | tail -8 | sed ':a;N;$!ba;s/\n/%0A/g')"; exit 1; }
 # Running it twice must change nothing.
-docker run --rm --network "$NET" -e DATABASE_URL="$DB" \
-  -e AUTH_URL=http://auth-service:8081 -e PRICING_URL=http://pricing-engine:8086 \
-  -e ADMIN_USERNAME=owner -e ADMIN_PASSWORD=ci-admin-password-1 jh/seed
-
+seed --rm
 echo "stack ready"
