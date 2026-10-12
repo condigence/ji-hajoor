@@ -34,8 +34,13 @@ for i in $(seq 1 30); do docker exec postgres pg_isready -U postgres -d railway 
 
 # Report a container's error lines as a GitHub annotation (job logs are not always readable).
 annotate_logs() {
-  printf '::error title=%s log::%s\n' "$1" \
-    "$(docker logs "$1" 2>&1 | grep -E 'ERROR|Exception|Caused by|APPLICATION FAILED|Description|Action|required' | tail -12 | cut -c1-220 | sed ':a;N;$!ba;s/\n/%0A/g')"
+  # Logs are JSON lines: decode message + stack trace so the cause is not cut off.
+  local body
+  body="$(docker logs "$1" 2>&1 | grep '"logLevel":"ERROR"' | tail -3 \
+    | jq -r '(.message // "") + "\n" + ((.stackTrace // "") | split("\n") | map(select(test("Caused by|Exception|Description|Action|^[A-Z]"))) | .[0:14] | join("\n"))' 2>/dev/null \
+    | grep -v '^\s*$' | cut -c1-300 | head -45)"
+  [ -n "$body" ] || body="$(docker logs "$1" 2>&1 | grep -E 'ERROR|Exception|Caused by' | tail -12 | cut -c1-300)"
+  printf '::error title=%s log::%s\n' "$1" "$(printf '%s' "$body" | sed ':a;N;$!ba;s/\n/%0A/g')"
 }
 
 # app NAME [extra docker args...] — every deployable gets the shared platform settings.
