@@ -173,6 +173,28 @@ accept() { # provider-token booking-id
   done
 }
 
+pay_and_review() { # booking-id
+  B="$GW/bookings/$1"
+  i=0
+  while :; do
+    c="$(code -X POST -H "Authorization: Bearer $ASHA_TOKEN" -H "$J" -d "{\"bookingId\":\"$1\",\"method\":\"UPI\"}" "$GW/payments")"
+    case "$c" in 200|201) break ;; 000|5*) i=$((i + 1)); [ "$i" -gt 24 ] && fail "payment for $1 (HTTP $c)"; sleep 5 ;; *) fail "payment for $1 (HTTP $c)" ;; esac
+  done
+  i=0
+  until [ "$(api -H "Authorization: Bearer $ASHA_TOKEN" "$B" | jq -r '.status // empty')" = PAYMENT_COMPLETED ]; do
+    i=$((i + 1)); [ "$i" -gt 60 ] && fail "payment never completed for $1"
+    sleep 1
+  done
+  log "Asha's plumbing job is done and paid"
+  review="{\"bookingId\":\"$1\",\"overall\":5,\"behavior\":5,\"quality\":5,\"timeliness\":4,\"pricingTransparency\":5,\"reviewText\":\"Fixed the leaking tap quickly and left the kitchen clean.\"}"
+  i=0
+  until [ "$(code -X POST -H "Authorization: Bearer $ASHA_TOKEN" -H "$J" -d "$review" "$GW/reviews")" = 201 ]; do
+    i=$((i + 1)); [ "$i" -gt 30 ] && { log "review window not open yet; skipped the review"; return 0; }
+    sleep 2
+  done
+  log "Asha reviewed Ramesh (5 stars)"
+}
+
 if [ "$(q "SELECT count(*) FROM booking.booking WHERE customer_id = '$ASHA_ID'")" = 0 ]; then
   # Asha: a finished job, paid and reviewed.
   book "$ASHA_TOKEN" "$ASHA_ADDRESS" Plumbing "Tap / Faucet Repair" 6 "Kitchen tap is leaking"
@@ -185,23 +207,15 @@ if [ "$(q "SELECT count(*) FROM booking.booking WHERE customer_id = '$ASHA_ID'")
   code -X POST -H "$P" "$B/start" >/dev/null
   code -X POST -H "$P" -F "type=AFTER_PHOTO" -F "file=@/tmp/photo.jpg;type=image/jpeg;filename=after.jpg" "$B/photos" >/dev/null
   c="$(code -X POST -H "$P" "$B/complete")"; [ "$c" = 200 ] || fail "complete $BOOKING_ID (HTTP $c)"
-  c="$(code -X POST -H "Authorization: Bearer $ASHA_TOKEN" -H "$J" -d "{\"bookingId\":\"$BOOKING_ID\",\"method\":\"UPI\"}" "$GW/payments")"
-  [ "$c" = 201 ] || [ "$c" = 200 ] || fail "payment for $BOOKING_ID (HTTP $c)"
-  i=0
-  until [ "$(api -H "Authorization: Bearer $ASHA_TOKEN" "$B" | jq -r '.status // empty')" = PAYMENT_COMPLETED ]; do
-    i=$((i + 1)); [ "$i" -gt 60 ] && fail "payment never completed for $BOOKING_ID"
-    sleep 1
-  done
-  log "Asha's plumbing job is done and paid"
-  review="{\"bookingId\":\"$BOOKING_ID\",\"overall\":5,\"behavior\":5,\"quality\":5,\"timeliness\":4,\"pricingTransparency\":5,\"reviewText\":\"Fixed the leaking tap quickly and left the kitchen clean.\"}"
-  i=0
-  until [ "$(code -X POST -H "Authorization: Bearer $ASHA_TOKEN" -H "$J" -d "$review" "$GW/reviews")" = 201 ]; do
-    i=$((i + 1)); [ "$i" -gt 30 ] && { log "review window not open yet; skipped the review"; break; }
-    sleep 2
-  done
-  [ "$i" -le 30 ] && log "Asha reviewed Ramesh (5 stars)"
+  pay_and_review "$BOOKING_ID"
 else
-  log "Asha already has bookings; demo jobs left as they are"
+  # A run interrupted after the job (e.g. a redeploy) left it unpaid: finish it.
+  BOOKING_ID="$(q "SELECT id FROM booking.booking WHERE customer_id = '$ASHA_ID' ORDER BY created_at LIMIT 1")"
+  if [ "$(api -H "Authorization: Bearer $ASHA_TOKEN" "$GW/bookings/$BOOKING_ID" | jq -r '.status // empty')" = JOB_COMPLETED ]; then
+    pay_and_review "$BOOKING_ID"
+  else
+    log "Asha's demo job is already finished"
+  fi
 fi
 
 if [ "$(q "SELECT count(*) FROM booking.booking WHERE customer_id = '$RAVI_ID'")" = 0 ]; then
