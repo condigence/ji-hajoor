@@ -128,4 +128,16 @@ seed --name seed \
   || { printf '::error title=seed::%s\n' "$(docker logs seed 2>&1 | tail -8 | sed ':a;N;$!ba;s/\n/%0A/g')"; exit 1; }
 # Running it twice must change nothing.
 seed --rm
+# Test accounts and demo bookings, as SEED_TEST_DATA=true does on Railway; twice, to prove it re-runs.
+for run in 1 2; do
+  seed --name "seed-test-$run" -e SEED_TEST_DATA=true -e GATEWAY_URL=http://api-gateway:8080 \
+       -e TEST_STAFF_PASSWORD=ci-staff-password-1 \
+    || { printf '::error title=test data run %s::%s\n' "$run" "$(docker logs "seed-test-$run" 2>&1 | tail -12 | sed ':a;N;$!ba;s/\n/%0A/g')"; exit 1; }
+done
+docker logs seed-test-1 2>&1 | grep 'test-data:'
+for u in testadmin teststaff; do
+  curl -fsS -o /dev/null -H 'X-Forwarded-Proto: https' -H 'Content-Type: application/json' \
+    -d "{\"username\":\"$u\",\"password\":\"ci-staff-password-1\"}" http://localhost:8080/auth/login/password \
+    || { echo "::error::test account $u cannot sign in"; exit 1; }
+done
 echo "stack ready"

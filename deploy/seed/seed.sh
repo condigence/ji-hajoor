@@ -44,8 +44,14 @@ fi
 
 MISSING="$(q "SELECT s.id || ' ' || s.base_price FROM catalog.service_subcategory s
              WHERE NOT EXISTS (SELECT 1 FROM pricing.pricing_parameters p WHERE p.subcategory_id = s.id)")"
+# Test accounts and demo bookings, only when asked for (SEED_TEST_DATA=true).
+test_data() {
+  if [ "${SEED_TEST_DATA:-false}" = "true" ]; then /seed/test-data.sh; fi
+}
+
 if [ -z "$MISSING" ]; then
   echo "seed: every subcategory already has pricing"
+  test_data
   exit 0
 fi
 
@@ -84,4 +90,5 @@ done
 left="$(q "SELECT count(*) FROM catalog.service_subcategory s
           WHERE NOT EXISTS (SELECT 1 FROM pricing.pricing_parameters p WHERE p.subcategory_id = s.id)")"
 [ "$left" = "0" ] || { echo "seed: $left subcategories still without pricing" >&2; exit 1; }
+test_data
 echo "seed: done"

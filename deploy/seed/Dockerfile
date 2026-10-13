@@ -7,6 +7,6 @@
 FROM postgres:16-alpine
 RUN apk add --no-cache curl jq
 COPY seed-catalog.sql /seed/seed-catalog.sql
-COPY seed.sh /seed/seed.sh
-RUN chmod 755 /seed/seed.sh
+COPY seed.sh test-data.sh /seed/
+RUN chmod 755 /seed/seed.sh /seed/test-data.sh
 ENTRYPOINT ["/seed/seed.sh"]
