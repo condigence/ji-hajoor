@@ -25,6 +25,13 @@ server {
     ${NGINX_LISTEN_V6}
     server_name _;
 
+    # Railway's edge accepts plain http too and says so in X-Forwarded-Proto:
+    # send those visitors to https. Requests without the header (health checks,
+    # docker compose) are served as they are.
+    if ($http_x_forwarded_proto = "http") {
+        return 301 https://$host$request_uri;
+    }
+
     # The container's own DNS server (read from /etc/resolv.conf at start-up):
     # Docker's embedded DNS locally, Railway's private-network DNS there.
     # Required for the variable-based proxy_pass below: nginx only re-resolves
