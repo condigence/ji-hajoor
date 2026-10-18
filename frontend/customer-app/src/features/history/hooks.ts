@@ -3,14 +3,17 @@ import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
 import { keepPreviousData } from '@tanstack/react-query';
 import type { ApiError } from '@api/client';
 import { isAssignmentStatus, isTerminalStatus } from './status';
+import type { BookingStatus } from '@stores/bookingStore';
 import {
   decideQuote,
+  downloadInvoicePdf,
   fetchBookingDetail,
   fetchBookingHistory,
-  fetchInvoiceDownloadUrl,
+  fetchBookingInvoice,
+  fetchJobPhoto,
   type BookingDetail,
   type BookingHistoryPage,
-  type InvoiceDownload,
+  type InvoiceSummary,
 } from './api';
 
 /** TanStack Query hooks for Service History (Requirement 28.7, Requirement 13). */
@@ -20,6 +23,8 @@ export const DEFAULT_HISTORY_PAGE_SIZE = 10;
 export const historyKeys = {
   page: (page: number, pageSize: number) => ['history', 'bookings', page, pageSize] as const,
   detail: (bookingId: string) => ['history', 'booking', bookingId] as const,
+  invoice: (bookingId: string) => ['history', 'invoice', bookingId] as const,
+  photo: (bookingId: string, photoId: string) => ['history', 'photo', bookingId, photoId] as const,
 };
 
 /** How often the history list is re-read while a booking on it is being assigned. */
@@ -94,13 +99,62 @@ export function useQuoteDecision(bookingId: string): UseMutationResult<void, Api
   });
 }
 
+/** Statuses a booking can be in once its payment has completed, so an invoice can exist. */
+const INVOICED_STATUSES: readonly BookingStatus[] = ['PAYMENT_COMPLETED', 'DISPUTED', 'REFUNDED'];
+
+/** How often a just-paid booking's invoice is looked for again while it is generated. */
+export const INVOICE_POLL_MS = 10_000;
+/** How many times a missing invoice is looked for again before giving up. */
+const INVOICE_POLL_LIMIT = 6;
+
 /**
- * Fetch a fresh signed invoice URL on demand. Modeled as a mutation because it
- * is triggered by an explicit user action (tapping "Download invoice") and
- * should not be cached — the signed URL is short-lived (Requirement 13.3).
+ * The invoice for a booking (Requirement 13), looked up once the booking has
+ * been paid. The Invoice Service generates it shortly after the payment
+ * completes, so a just-paid booking answers 404 for a moment: while the booking
+ * is PAYMENT_COMPLETED the lookup is retried every few seconds, a bounded number
+ * of times. `bookingId` must be the booking's id (the detail's `bookingId`),
+ * not its HFX- reference.
  */
-export function useInvoiceDownload(): UseMutationResult<InvoiceDownload, ApiError, string> {
-  return useMutation<InvoiceDownload, ApiError, string>({
-    mutationFn: (invoiceId: string) => fetchInvoiceDownloadUrl(invoiceId),
+export function useBookingInvoice(
+  bookingId: string | undefined,
+  status: BookingStatus | undefined,
+): UseQueryResult<InvoiceSummary, ApiError> {
+  return useQuery<InvoiceSummary, ApiError>({
+    queryKey: historyKeys.invoice(bookingId ?? ''),
+    queryFn: () => fetchBookingInvoice(bookingId ?? ''),
+    enabled: Boolean(bookingId) && status !== undefined && INVOICED_STATUSES.includes(status),
+    staleTime: Infinity,
+    retry: false,
+    refetchInterval: (query) =>
+      status === 'PAYMENT_COMPLETED' &&
+      query.state.error?.status === 404 &&
+      query.state.errorUpdateCount < INVOICE_POLL_LIMIT
+        ? INVOICE_POLL_MS
+        : false,
+  });
+}
+
+/**
+ * Download an invoice PDF on demand. Modeled as a mutation because it is
+ * triggered by an explicit user action (tapping "Download invoice") and the
+ * bytes are not worth caching.
+ */
+export function useInvoiceDownload(): UseMutationResult<void, ApiError, InvoiceSummary> {
+  return useMutation<void, ApiError, InvoiceSummary>({
+    mutationFn: (invoice) => downloadInvoicePdf(invoice),
+  });
+}
+
+/**
+ * One stored job photo as a blob (Requirement 11.2, 11.4). Stored photos never
+ * change, so a fetched one is kept for the session; a failed read (404
+ * `MEDIA_NOT_FOUND` for a photo uploaded before photos were kept) is not retried.
+ */
+export function useJobPhoto(bookingKey: string, photoId: string): UseQueryResult<Blob, ApiError> {
+  return useQuery<Blob, ApiError>({
+    queryKey: historyKeys.photo(bookingKey, photoId),
+    queryFn: () => fetchJobPhoto(bookingKey, photoId),
+    staleTime: Infinity,
+    retry: false,
   });
 }

@@ -63,6 +63,13 @@ import jakarta.annotation.PostConstruct;
  *             callback is a two-segment POST.</li>
  *       </ul>
  *   </li>
+ *   <li><strong>{@code /internal/**} has no rule</strong> (today {@code POST
+ *       /internal/payments/refunds}, the Complaint Service's refund call). Its caller is a service
+ *       holding no JWT, authenticated by the shared {@code X-Internal-Api-Key} in
+ *       {@link InternalApiKeyFilter} and admitted by {@link WebSecurityConfig} only with the
+ *       {@code ROLE_INTERNAL} authority that filter grants. A role rule here would demand a user
+ *       role the service caller cannot hold and turn every internal call into a 403. None of the
+ *       patterns below starts with {@code /internal}, so none can match it.</li>
  *   <li><strong>Health, metrics and actuator get no rule</strong> either — {@code /health/**},
  *       {@code /actuator/**}, {@code /metrics} and {@code /prometheus} are scraped by Kubernetes
  *       probes and Prometheus, which present no JWT; they are {@code permitAll()} in

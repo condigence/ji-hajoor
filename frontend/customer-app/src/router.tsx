@@ -11,7 +11,6 @@ import { HomeScreen } from '@features/catalog/HomeScreen';
 import { SubcategoryScreen } from '@features/catalog/SubcategoryScreen';
 import { ServiceRequestScreen } from '@features/booking/ServiceRequestScreen';
 import { PriceEstimateScreen } from '@features/booking/PriceEstimateScreen';
-import { AvailableProfessionalsScreen } from '@features/tracking/AvailableProfessionalsScreen';
 import { LiveTrackingScreen } from '@features/tracking/LiveTrackingScreen';
 import { ChatScreen } from '@features/tracking/ChatScreen';
 import { ServiceHistoryScreen } from '@features/history/ServiceHistoryScreen';
@@ -22,7 +21,8 @@ import { HelpScreen } from '@features/help/HelpScreen';
 /**
  * Customer App routes. Screen set follows Requirement 28.7:
  * Splash, Login/OTP, Home, Subcategory selection, Service Request,
- * Price Estimate, Available Professionals, Live Tracking, Service History.
+ * Price Estimate, Live Tracking, Service History. (Dispatch picks the
+ * professional, so there is no list to choose from.)
  *
  * Profile and Help back the remaining two bottom-navigation destinations.
  *
@@ -82,14 +82,6 @@ export const router = createBrowserRouter([
         element: (
           <RequireAuth>
             <PriceEstimateScreen />
-          </RequireAuth>
-        ),
-      },
-      {
-        path: '/book/:bookingId/professionals',
-        element: (
-          <RequireAuth>
-            <AvailableProfessionalsScreen />
           </RequireAuth>
         ),
       },

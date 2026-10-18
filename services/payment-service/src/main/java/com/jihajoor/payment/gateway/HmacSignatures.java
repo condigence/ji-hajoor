@@ -8,7 +8,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 /**
  * HMAC-SHA256 signing and constant-time verification used by gateway adapters to authenticate
- * asynchronous callbacks (Requirement 12.5). Both Razorpay and Stripe document HMAC-SHA256 over
+ * asynchronous callbacks (Requirement 12.5). Razorpay documents HMAC-SHA256 over
  * the raw webhook payload with a shared secret, so this helper is reused by both adapters and is
  * independently unit-testable.
  */

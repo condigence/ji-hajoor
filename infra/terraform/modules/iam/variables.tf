@@ -54,3 +54,8 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "namespace" {
+  description = "Namespace the deployables run in; their IRSA roles trust service accounts there. Must equal the GitHub environment's K8S_NAMESPACE."
+  type        = string
+}

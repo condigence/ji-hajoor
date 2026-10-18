@@ -1,9 +1,12 @@
 package com.jihajoor.complaint.support;
 
+import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -12,7 +15,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 import com.jihajoor.complaint.domain.Complaint;
+import com.jihajoor.complaint.domain.ComplaintCategory;
+import com.jihajoor.complaint.domain.ComplaintCategoryCount;
 import com.jihajoor.complaint.domain.ComplaintRepository;
+import com.jihajoor.complaint.domain.ComplaintResolutionTotals;
 import com.jihajoor.complaint.domain.ComplaintStatus;
 
 import org.springframework.data.domain.Example;
@@ -30,13 +36,38 @@ public class InMemoryComplaintRepository implements ComplaintRepository {
     private final Map<UUID, Complaint> byId = new ConcurrentHashMap<>();
 
     @Override
-    public List<Complaint> findByStatusNotInAndEscalatedFalseAndSlaDeadlineLessThanEqual(
-            List<ComplaintStatus> statuses, Instant asOf) {
+    public List<Complaint> findSlaBreachCandidates(Instant asOf) {
         return byId.values().stream()
-                .filter(c -> !statuses.contains(c.getStatus()))
+                .filter(c -> !c.getStatus().isTerminal())
                 .filter(c -> !c.isEscalated())
                 .filter(c -> !c.getSlaDeadline().isAfter(asOf))
                 .toList();
+    }
+
+    /** Mirrors the JPQL {@code GROUP BY}: only categories that have complaints get a row. */
+    @Override
+    public List<ComplaintCategoryCount> countByCategory() {
+        Map<ComplaintCategory, Long> counts = new EnumMap<>(ComplaintCategory.class);
+        byId.values().forEach(c -> counts.merge(c.getCategory(), 1L, Long::sum));
+        return counts.entrySet().stream()
+                .map(e -> new ComplaintCategoryCount(e.getKey(), e.getValue()))
+                .toList();
+    }
+
+    /** Mirrors the JPQL aggregate: per-row floored milliseconds, {@code null} sum over no rows. */
+    @Override
+    public ComplaintResolutionTotals resolutionTotals() {
+        List<Complaint> resolved = byId.values().stream()
+                .filter(c -> c.getStatus().isTerminal() && c.getResolvedAt() != null)
+                .toList();
+        if (resolved.isEmpty()) {
+            return new ComplaintResolutionTotals(0L, null);
+        }
+        BigDecimal millis = resolved.stream()
+                .map(c -> BigDecimal.valueOf(
+                        Duration.between(c.getCreatedAt(), c.getResolvedAt()).toMillis()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return new ComplaintResolutionTotals((long) resolved.size(), millis);
     }
 
     /**

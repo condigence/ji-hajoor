@@ -32,11 +32,29 @@ public class ComplaintProperties {
     /** Maximum staleness of aggregated complaint stats for Admin reports (Requirement 16.9). */
     private Duration statsRefreshWindow = Duration.ofMinutes(60);
 
+    /**
+     * How long a refund call to the Payment Service with no recorded outcome counts as still in
+     * flight (Requirement 16.5). Within it, a same-key retry is answered 409 REFUND_IN_PROGRESS so two
+     * attempts of one refund never overlap at the gateway; after it, the attempt is presumed lost
+     * (for example the instance died mid-call) and the retry re-sends the refund under the same key.
+     * An attempt that ended with an unknown outcome can be re-sent at once. Must be comfortably
+     * longer than the refund client's connect + read timeout ({@code jihajoor.complaint.payment.*}).
+     */
+    private Duration refundAttemptLease = Duration.ofMinutes(5);
+
     @NestedConfigurationProperty
     private Attachments attachments = new Attachments();
 
     @NestedConfigurationProperty
     private Topics topics = new Topics();
+
+    public Duration getRefundAttemptLease() {
+        return refundAttemptLease;
+    }
+
+    public void setRefundAttemptLease(Duration refundAttemptLease) {
+        this.refundAttemptLease = refundAttemptLease;
+    }
 
     public int getMaxDescriptionLength() {
         return maxDescriptionLength;

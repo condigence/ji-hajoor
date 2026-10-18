@@ -33,11 +33,11 @@ graph TB
     end
 
     subgraph External
-        SMS["SMS gateway<br/>(stub)"]
-        PAY["Razorpay Checkout<br/>Stripe (stub)"]
-        MAIL["Email provider<br/>(none yet: dev mail log)"]
+        SMS["SMS gateway<br/>(MSG91)"]
+        PAY["Razorpay Checkout"]
+        MAIL["Email over SMTP<br/>(Amazon SES; Mailpit<br/>or dev mail log locally)"]
         OIDC["Google / Apple OIDC"]
-        S3["Object storage<br/>(stub)"]
+        S3["Object storage<br/>(S3: job photos and<br/>verification documents)"]
         KYC["Background check<br/>(admin-recorded)"]
     end
 
@@ -58,7 +58,7 @@ graph TB
     SVC --> MAIL
 ```
 
-Google and Apple OIDC and Razorpay (orders, Checkout confirmation, webhook, refunds; test mode locally) are real integrations. Everything else is a logging or in-memory stub. See review section 10, item 2. Email has no provider yet: locally every email is written to `docker/dev-mail/dev-mail.log`, elsewhere it is only logged by subject (section 5.9). No background-check vendor is integrated: an admin runs the check and records its result in the Verification Queue (section 5.6). Locally, payments are settled by a payment simulator that only Compose enables unless `PAYMENT_DEFAULT_GATEWAY=razorpay` (section 5.5).
+Real integrations: Google and Apple OIDC; Razorpay (orders, Checkout confirmation, webhook, refunds; test mode locally), the only payment gateway; MSG91 for sign-in OTPs (`jihajoor.sms.provider=msg91`); email over SMTP (Amazon SES in AWS, `EMAIL_PROVIDER=smtp` and `NOTIFICATION_EMAIL_PROVIDER=smtp`; locally the dev mail log `docker/dev-mail/dev-mail.log`, or Mailpit with the `mail` profile); and S3 for job photos and provider verification documents when a bucket is configured and reachable (booking-service and verification-service fall back to local disk otherwise). Still stand-ins: push notifications (no device tokens), background checks (no vendor: an admin runs the check and records its result in the Verification Queue, section 5.6), invoice PDFs (kept in memory and re-rendered from the invoice row when gone), and the Admin dashboard's metrics (a stub source that reports zeros). See review sections 20 and 21. Locally, payments are settled by a payment simulator that only Compose enables unless `PAYMENT_DEFAULT_GATEWAY=razorpay` (section 5.5).
 
 ---
 
@@ -135,7 +135,6 @@ graph TB
     DISP -->|"internal: eligible providers"| PROV
     DISP -->|"internal: address"| CUST
     DISP -->|"sync: skill tags"| CAT
-    DISP -.->|"endpoints missing"| NOTIF
     DISP -->|"internal: transitions"| BOOK
     PAYS -->|"internal: payment facts"| BOOK
     PAYS -->|"internal: earnings"| PROV
@@ -152,7 +151,7 @@ graph TB
     KF --> BOOK & DISP & NOTIF & INV & CHAT & RATE & LOC
 ```
 
-Arrows labelled `internal` go to `/internal/**` endpoints. They carry no end-user token: the caller acts on its own behalf and presents the shared service credential (`X-Internal-Api-Key`) instead. Dispatch's calls to notification-service (`/internal/notifications/**`) still answer 4xx because notification-service has no such endpoints; they are best effort, and providers see offers by polling dispatch instead.
+Arrows labelled `internal` go to `/internal/**` endpoints. They carry no end-user token: the caller acts on its own behalf and presents the shared service credential (`X-Internal-Api-Key`) instead. Dispatch no longer calls notification-service directly (its notification adapter only logs); providers see offers by polling dispatch, and customers are notified from the booking events.
 
 Note that the SPAs talk to auth-service directly for the registration and refresh endpoints, bypassing the gateway. The nginx and Vite configs proxy `/api/auth` to port 8081 and everything else under `/api` to the gateway.
 
@@ -395,7 +394,7 @@ sequenceDiagram
 
 If no candidate accepts within `agency-fallback-minutes` (default 5), or the configured radius cycles run out sooner, dispatch calls `POST /internal/bookings/{id}/searching-failed`, and booking-service either routes the booking to the covering Tenants (`AWAITING_ASSIGNMENT`, section 5.8) or fails it (`SEARCHING_FAILED`, announced as `BookingCancelled`). Dispatch sends its own "no provider" notices only in the second case.
 
-Offers live only in Redis: the provider app reads and answers them through the gateway (`/dispatch/offers/**`, SERVICE_PROVIDER only, matched to the JWT subject), and a late or double answer is refused by the compare-and-set. All of a booking's offers live in one Redis hash, so the first accept and the withdrawal of everyone else's offer are one atomic write; a provider who accepts a moment later gets 409 `OFFER_TAKEN`. A `BookingCancelled` stops an in-flight search and withdraws the pending offers. Two gaps remain: a dispatch failure after `BookingCreated` is acknowledged (outage, restart mid-search) leaves the booking in `SEARCHING_PROVIDER` with no sweeper, and the `provider-accepted` call and the `ProviderAccepted` row are a dual write. See review sections 16.1, 17.1 and 17.5.
+Offers live only in Redis: the provider app reads and answers them through the gateway (`/dispatch/offers/**`, SERVICE_PROVIDER only, matched to the JWT subject), and a late or double answer is refused by the compare-and-set. All of a booking's offers live in one Redis hash, so the first accept and the withdrawal of everyone else's offer are one atomic write; a provider who accepts a moment later gets 409 `OFFER_TAKEN`. A `BookingCancelled` stops an in-flight search and withdraws the pending offers. Two earlier gaps are closed. booking-service's `StalledSearchSweeper` moves a search older than `provider-search-timeout` (60 min by default) to the Tenant fallback or `SEARCHING_FAILED`, so a dispatch failure mid-search no longer strands the booking. Dispatch records an acceptance in its `AcceptanceLedger` before calling booking-service and writes `ProviderAccepted` from the ledger in one transaction, with `AcceptanceReconciler` retrying every 30 s, so the event cannot be lost. See review sections 16.1, 17.1 and 17.5.
 
 ### 5.4 Job execution milestones
 
@@ -433,7 +432,7 @@ sequenceDiagram
     opt extra parts discovered
         PAPP->>BOOK: POST /bookings/{key}/parts
         CAPP->>BOOK: POST /bookings/{key}/quote/approval or /quote/rejection<br/>(the booking's customer only)
-        note over BOOK: 60-min auto-resolve exists<br/>⚠ but has no scheduler
+        note over BOOK: unanswered after 60 min: QuoteApprovalTimeoutSweeper<br/>(every 60 s) completes at the original price
     end
 
     PAPP->>BOOK: POST /bookings/{key}/photos (type=AFTER_PHOTO)
@@ -442,7 +441,9 @@ sequenceDiagram
     BOOK->>KF: JobCompleted
 ```
 
-Ownership is enforced in one place (`service/BookingAccess`): the assigned provider for milestones, photos, pause and parts; the customer for confirmation and quote decisions; either to cancel; staff for all. The job detail (`GET /bookings/{key}`) carries the service address and coordinates, the photos, the parts and the net duration. Location reads are still not ownership-checked: any signed-in customer or provider with a booking id can read its provider's position (review 17.5).
+Ownership is enforced in one place (`service/BookingAccess`): the assigned provider for milestones, photos, pause and parts; the customer for confirmation and quote decisions; either to cancel; staff for all. The job detail (`GET /bookings/{key}`) carries the service address and coordinates, the photos, the parts and the net duration; a photo's bytes come from `GET /bookings/{key}/photos/{photoId}` under the same access rule, streamed through booking-service (no presigned links).
+
+Photos are stored by `MediaStorage` (`MEDIA_STORAGE_PROVIDER`, default `auto`): S3 when `MEDIA_BUCKET` is set and a `HeadBucket` check at startup succeeds, otherwise the local directory `MEDIA_LOCAL_DIR`, with a WARN, since local photos are per replica. `s3` makes a missing or unreachable bucket fail startup and `local` never tries S3. Each `job_media` row records where it went (`storage`, V5), so photos stay readable after the mode changes. Once S3 is chosen, an S3 failure on upload answers 503 `MEDIA_STORAGE_UNAVAILABLE` rather than falling back to one replica's disk. Location reads, both the snapshot and the stream, are ownership-checked by `LocationController`'s access policy.
 
 ### 5.5 Payment, invoice and review prompt
 
@@ -492,7 +493,7 @@ The client sends only the booking and the method; amount, provider and customer 
 
 The simulator gateway exists only when `PAYMENT_SIMULATOR_ENABLED=true` (Compose sets it, Helm never does) and logs a WARN at startup; otherwise `simulator` is an unknown gateway.
 
-**Razorpay** replaces steps 7-9 with Checkout. The charge creates a Razorpay *order* for the server-side amount in paise (the transaction id is its receipt) and stores the order id as the gateway reference. The customer app reads `GET /payments/{id}/razorpay/checkout` and opens Checkout on that order; on success it forwards Checkout's answer to `POST /payments/{id}/razorpay/verify`. payment-service checks the HMAC of `order_id|payment_id` with the key secret, that the order is this transaction's, and reads the payment back from Razorpay (capturing it if only authorized) before settling. Razorpay's webhook (`POST /payments/webhooks/razorpay`, public at the gateway, HMAC over the raw body) settles `payment.captured` / `order.paid` for a customer who closed the tab first. Both go through `PaymentService.settleVerifiedOutcome`, the same binding, replay handling and side effects as a signed callback, so the second confirmation is a no-op. A failed attempt inside Checkout does not fail the transaction: the customer can retry on the same order. Refunds go to the order's captured payment, de-duplicated by receipt. Without `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET` the gateway refuses new payments with 503. Stripe is still a stub that stays PENDING until a signed callback. The booking-side handler never fails on a `PaymentCompleted` it cannot apply (cancelled, disputed, unknown booking): it logs a WARN and acknowledges. Settlement reversals still have no provider-service endpoint. See review section 17.6.
+**Razorpay** replaces steps 7-9 with Checkout. The charge creates a Razorpay *order* for the server-side amount in paise (the transaction id is its receipt) and stores the order id as the gateway reference. The customer app reads `GET /payments/{id}/razorpay/checkout` and opens Checkout on that order; on success it forwards Checkout's answer to `POST /payments/{id}/razorpay/verify`. payment-service checks the HMAC of `order_id|payment_id` with the key secret, that the order is this transaction's, and reads the payment back from Razorpay (capturing it if only authorized) before settling. Razorpay's webhook (`POST /payments/webhooks/razorpay`, public at the gateway, HMAC over the raw body) settles `payment.captured` / `order.paid` for a customer who closed the tab first. Both go through `PaymentService.settleVerifiedOutcome`, the same binding, replay handling and side effects as a signed callback, so the second confirmation is a no-op. A failed attempt inside Checkout does not fail the transaction: the customer can retry on the same order. Refunds go to the order's captured payment, de-duplicated by receipt. Without `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET` the gateway refuses new payments with 503. Razorpay is the only gateway; the Stripe stub was removed (with its required `STRIPE_WEBHOOK_SECRET`). The booking-side handler never fails on a `PaymentCompleted` it cannot apply (cancelled, disputed, unknown booking): it logs a WARN and acknowledges. Settlement reversals still have no provider-service endpoint. See review section 17.6.
 
 ### 5.6 Provider onboarding and verification
 
@@ -514,7 +515,7 @@ stateDiagram-v2
 
 State names follow `VerificationStatus` in verification-service. Only `APPROVED` makes a provider eligible for job assignment.
 
-The Admin Portal's Verification Queue has a tab per admin step. **Document review** (`GET /admin/verification/queue`, `POST .../decision`) accepts or rejects the documents; accepting starts the background check. No background-check vendor is integrated (`LoggingBackgroundCheckAdapter` only logs a reference), so **Background check** (`GET /admin/verification/background-checks`) lists providers at `BACKGROUND_CHECK_PENDING` or `_COMPLETED`, and `POST .../background-check {outcome, result, reason}` records the result the admin obtained and moves the provider to `APPROVED` or `REJECTED` in one transaction. It refuses a provider at any other step, so it cannot reinstate a suspended one. The document bytes are discarded by the storage stub. The upload and record-read endpoints assert that the caller is the provider named in the path, or staff. The eligibility check deliberately does not, because dispatch asks about other providers. See review sections 8.5 and 12.1.
+The Admin Portal's Verification Queue has a tab per admin step. **Document review** (`GET /admin/verification/queue`, `POST .../decision`) accepts or rejects the documents; accepting starts the background check. No background-check vendor is integrated (`LoggingBackgroundCheckAdapter` only logs a reference), so **Background check** (`GET /admin/verification/background-checks`) lists providers at `BACKGROUND_CHECK_PENDING` or `_COMPLETED`, and `POST .../background-check {outcome, result, reason}` records the result the admin obtained and moves the provider to `APPROVED` or `REJECTED` in one transaction. It refuses a provider at any other step, so it cannot reinstate a suspended one. Documents are stored by `DocumentStorage` (`DOCUMENT_STORAGE_PROVIDER`, default `auto`: S3 when `DOCUMENTS_BUCKET` is set and reachable at startup, the local `DOCUMENTS_LOCAL_DIR` otherwise), modelled on booking-service's job-photo storage; each row records where it went (verification V2). The review dialog fetches a document's bytes from `GET /admin/verification/{providerId}/documents/{documentId}` as a blob; documents uploaded before 18 October were discarded by the old stub and show as not stored. The upload and record-read endpoints assert that the caller is the provider named in the path, or staff. The eligibility check deliberately does not, because dispatch asks about other providers. See review sections 8.5 and 12.1.
 
 ### 5.7 Complaint lifecycle with SLA
 
@@ -541,10 +542,13 @@ sequenceDiagram
 
     APP->>CMPL: POST /complaints/{id}/refund (support agent)
     note right of CMPL: only OPEN, IN_PROGRESS, ESCALATED or DISPUTED,<br/>one complaint_refund per complaint (unique),<br/>a second approval is 409 REFUND_ALREADY_REQUESTED
-    CMPL->>PAY: issue refund
-    note over CMPL,PAY: ⚠ RefundPort is still a logging stub that answers<br/>approved: nothing reaches payment-service
-    CMPL->>PG: UPDATE complaint_refund + status<br/>(REFUND_FAILED on rejection)
+    CMPL->>PAY: POST /internal/payments/refunds<br/>{bookingId, amount, reason, idempotencyKey}
+    note over CMPL,PAY: service credential; key = complaint-refund:{refund id},<br/>so a re-send never refunds twice. PaymentService.refund<br/>moves the money through Razorpay
+    PAY-->>CMPL: 200 SUCCEEDED, a refusal (4xx), or outcome unknown
+    CMPL->>PG: UPDATE complaint_refund + status<br/>(REFUND_FAILED on a refusal; stays PENDING if unknown)
 ```
+
+A refusal (not refundable, already refunded, amount too large, gateway declined) records `REFUND_FAILED` as before. A timeout, a 5xx or `REFUND_OUTCOME_UNKNOWN` means money may have moved, so the complaint refund stays `PENDING`, Finance is alerted, and it is re-sent either by a retry with the same client `idempotencyKey` or, whatever key the approval had, by `POST /complaints/{id}/refund/resend` (the Admin Portal's Re-send button), always under the same payment-side key `complaint-refund:<refund id>`; an attempt still in flight (younger than `COMPLAINT_REFUND_ATTEMPT_LEASE`, 5 min) is answered 409 `REFUND_IN_PROGRESS`. `COMPLAINT_PAYMENT_CLIENT=logging` keeps the old stub for local use only.
 
 ---
 
@@ -603,7 +607,7 @@ sequenceDiagram
     participant APP as customer / provider app
     participant AUTH as auth-service
     participant RD as Redis
-    participant MAIL as EmailSenderPort<br/>(dev mail log locally)
+    participant MAIL as EmailSenderPort<br/>(SES SMTP; dev mail log locally)
 
     APP->>AUTH: POST /auth/register/email {name, email, mobile, password, role}
     note right of AUTH: throttle per address and IP first.<br/>Email already an account? email "you already<br/>have an account", change nothing, same 202.<br/>Mobile held by another account → 409 MOBILE_IN_USE
@@ -625,7 +629,31 @@ sequenceDiagram
 - **Staff invitations** (`/admin/invitations`, routed to auth-service). A SUPER_ADMIN invites `ADMIN`, `FINANCE_ADMIN`, `DISPATCHER` or `SUPPORT_AGENT`; an ADMIN the last three. `SUPER_ADMIN` and `TENANT_ADMIN` are never invitable, and no public path grants a staff role. The emailed link `/invite/{token}` carries 32 random bytes; `auth.staff_invitation` stores only their SHA-256. It works once, for 7 days; re-inviting revokes the open one. Accepting creates the account with the email verified (an existing account proves itself with its password and gains the role).
 - **Agency applications** (`/tenant-applications`, provider-service). Any signed-in user applies once; the Tenant is `PENDING_APPROVAL`, covers no booking and grants nothing. A platform admin approves (the applicant is granted `TENANT_ADMIN` and recorded as admin, then the Tenant becomes `ACTIVE`) or rejects with a reason. provider-service asks auth-service, which owns email, to send the decision (`POST /internal/emails/agency-decision`). The applicant signs in again to reach the Tenant Portal.
 - **Housekeeping.** An hourly sweep removes sign-ups never verified within 24 hours; until then a stale one does not block its address or number.
-- **Email delivery.** `EmailSenderPort` with a `file` adapter (local Dev_Mail_Log, codes and links in plain text) and a `logging` adapter (default; subject only). No production provider is built yet.
+- **Email delivery.** `EmailSenderPort` with three adapters chosen by `EMAIL_PROVIDER`: `smtp` (Spring Mail, text body, Amazon SES's SMTP interface in AWS, Mailpit locally with `docker compose --profile mail`), `file` (local Dev_Mail_Log, codes and links in plain text; the Compose default) and `logging` (subject only). Codes and links are only ever in the body, so subjects are safe to log. A 5xx reply from the SMTP server is a permanent failure, anything else may succeed later. notification-service's email channel has the same `smtp` adapter (`NOTIFICATION_EMAIL_PROVIDER`). Both read `SMTP_HOST`/`SMTP_PORT`/`SMTP_USERNAME`/`SMTP_PASSWORD`/`SMTP_STARTTLS`, never `SPRING_MAIL_*`, which would reach every service in the JVM.
+
+### 5.10 Chat across several instances
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as customer-app (socket on node A)
+    participant A as chat-service node A
+    participant R as Redis
+    participant B as chat-service node B
+    participant P as provider-app (socket on node B)
+
+    C->>A: {"body": "..."} on /chat/channels/{bookingId}/ws
+    A->>A: participant check, mask phone numbers, store (90-day retention)
+    A->>R: PUBLISH chat:messages (after commit)
+    R-->>A: message
+    R-->>B: message
+    A->>C: frame (also to node A's STOMP subscribers)
+    B->>P: frame (also to node B's STOMP subscribers)
+    A->>R: ZCOUNT chat:presence:{booking}:{provider}: online?
+    note over A,R: offline (no live socket stamp) → unread push via notification-service
+```
+
+The socket handshake admits only the booking's customer and provider (401/403/404 otherwise); the gateway accepts `?access_token=` on this path only. With `CHAT_CLUSTER=redis` (the default) a node never writes to its own sockets directly: every message reaches every node through one Redis pub/sub channel, including the node that sent it, so each socket gets it exactly once. Pub/sub is at-most-once; a node that misses a message during a reconnect is covered by the apps reloading history. Presence is a sorted set per (booking, user) of `{node}/{session}` members scored with an expiry: each node re-stamps its live sockets every 3 s (`CHAT_PRESENCE_HEARTBEAT`) for 10 s (`CHAT_OFFLINE_PUSH_WINDOW`), a closed socket is removed at once, and a crashed node's sockets lapse within 10 s. If Redis is down a send is still stored and the recipient is pushed. `CHAT_CLUSTER=local` keeps everything in one process for a single instance or tests.
 
 ## 6. Event topology
 
@@ -700,7 +728,7 @@ graph LR
 | ReviewSubmitted | rating-review-service | review submitted |
 | ComplaintCreated, ComplaintStatusChanged | complaint-service | complaint lifecycle |
 
-Consumer groups: `booking-service.payment-completed`, `dispatch-engine.booking-created`, `dispatch-engine.booking-cancelled`, `notification-service.lifecycle`, `invoice-service.payment-completed`, `chat-service.lifecycle`, `rating-review-service.payment-completed`, `location-service.job-started`. Any event type without an explicit mapping falls through to the `domain-events` topic, where nothing subscribes; all thirteen above are mapped. Ratings are not consumed by provider-service, so reviews never change a provider's aggregate rating (review 17.5).
+Consumer groups: `booking-service.payment-completed`, `dispatch-engine.booking-created`, `dispatch-engine.booking-cancelled`, `notification-service.lifecycle`, `invoice-service.payment-completed`, `chat-service.lifecycle`, `rating-review-service.payment-completed`, `location-service.job-started`. Any event type without an explicit mapping falls through to the `domain-events` topic, where nothing subscribes; all thirteen above are mapped. Ratings do not travel over Kafka: rating-review-service owns the reviews and pushes each provider's aggregate (weighted average of customer reviews, count, and a sequence number) to provider-service's `PUT /internal/providers/{id}/rating` after any submit, approval or removal commits. The push is an idempotent set; a failed one stays owed in `rating.provider_rating_sync` and `ProviderRatingSweeper` re-sends it every minute, and a lower sequence never overwrites a newer rating. provider-service stores it on the profile, where dispatch's rating score and the apps read it, and flags the provider for review below the threshold.
 
 ### Outbox and delivery guarantees
 
@@ -721,7 +749,7 @@ flowchart LR
 
 The publisher requires `Propagation.MANDATORY`, so an outbox row can only be written inside an existing transaction. The producer template refuses to start unless `acks=all` and idempotence are enabled.
 
-The relay claims rows in a short transaction (`SELECT ... FOR UPDATE SKIP LOCKED`, then `next_attempt_at` = now + a 2-minute lease) and publishes outside it, so several relay instances can run without two of them working one row. A failed publish is not slept on: the attempt, its error and the next attempt time are written to the row, and the row is simply not due until then. Delivery is at-least-once (a crash between the broker ACK and the PUBLISHED write, a timed-out publish that still lands, or a relay outliving its lease can each publish twice), which consumer dedupe on `eventId` absorbs. The consumer's 5-second retry delay is likewise a paused listener container rather than a sleeping thread. The `processed_event` insert and the handler share one transaction (insert first), so a failure rolls both back and the redelivery runs the handler again; retriable broker outages no longer spend relay attempts, and a dead-letter send is awaited before the offset commits. See review sections 8.2 and 16.5.
+The relay claims rows in a short transaction (`SELECT ... FOR UPDATE SKIP LOCKED`, then `next_attempt_at` = now + a 2-minute lease) and publishes outside it, so several relay instances can run without two of them working one row. A failed publish is not slept on: the attempt, its error and the next attempt time are written to the row, and the row is simply not due until then. Delivery is at-least-once (a crash between the broker ACK and the PUBLISHED write, a timed-out publish that still lands, or a relay outliving its lease can each publish twice), which consumer dedupe on `eventId` absorbs. The consumer's 5-second retry delay is likewise a paused listener container rather than a sleeping thread. The `processed_event` insert and the handler share one transaction (insert first), so a failure rolls both back and the redelivery runs the handler again. That transaction holds a database connection for the whole handler, so a consumer whose handler is mostly calls to other systems can opt out (`handleInOneTransaction()` → false): notification-service does, since its contact lookups and SMS, email and push sends with back-off held a connection each and drained its pool under load (review section 21); its per-`(event, recipient, channel)` delivery log keeps it idempotent, and the event is recorded after the handler returns; retriable broker outages no longer spend relay attempts, and a dead-letter send is awaited before the offset commits. See review sections 8.2 and 16.5.
 
 ---
 
@@ -917,7 +945,9 @@ erDiagram
     VERIFICATION_DOCUMENT {
         uuid id PK
         string document_type
-        string storage_ref "s3:// ref, bytes discarded by stub"
+        string storage "LOCAL or S3 (V2); null: not stored"
+        string storage_ref "object key"
+        string file_name "sanitised original name"
         string content_type
         long size_bytes
         timestamp uploaded_at
@@ -1121,7 +1151,7 @@ erDiagram
         decimal amount "from booking payment-facts"
         decimal platform_fee
         string method "UPI, CREDIT_DEBIT_CARD, NET_BANKING, WALLET, CASH"
-        string gateway "razorpay, stripe, simulator (local)"
+        string gateway "razorpay, simulator (local)"
         enum status "PENDING, SUCCESS, FAILED, REFUNDED, PARTIALLY_REFUNDED"
         string gateway_reference
         bytes payment_credential_encrypted
@@ -1332,6 +1362,7 @@ Nineteen states with the transition table encoded in `BookingStateMachine`. This
 stateDiagram-v2
     [*] --> CREATED: booking created
     CREATED --> SEARCHING_PROVIDER: customer confirms<br/>(immediate for emergency)
+    CREATED --> CANCELLED
     SEARCHING_PROVIDER --> PROVIDER_ASSIGNED: dispatch acceptance<br/>(passed through)
     SEARCHING_PROVIDER --> SEARCHING_FAILED
     SEARCHING_PROVIDER --> CANCELLED
@@ -1371,7 +1402,7 @@ A scheduled booking lands in `CREATED` and needs an explicit confirmation call. 
 
 "Passed through" states are entered and left in one transaction: audited, but no event is published for them. Dispatch's acceptance walks `SEARCHING_PROVIDER → PROVIDER_ASSIGNED → PROVIDER_ACCEPTED` this way, so `PROVIDER_ASSIGNED` is a resting state only for a Tenant assignment awaiting the provider's answer. Paying is the customer's confirmation: payment-service's `payment-pending` call walks `JOB_COMPLETED → CUSTOMER_CONFIRMED → PAYMENT_PENDING`, and the `PaymentCompleted` consumer moves it on to `PAYMENT_COMPLETED` (passing through any state the pending call did not record). The Tenant assignment deadline fails an unanswered `PROVIDER_ASSIGNED` via `AWAITING_ASSIGNMENT → SEARCHING_FAILED` in one transaction.
 
-Cancellation is legal from `SEARCHING_PROVIDER`, `AWAITING_ASSIGNMENT`, `PROVIDER_ASSIGNED`, `PROVIDER_ACCEPTED` and `PROVIDER_ON_THE_WAY`. It is not legal from `CREATED`, so a scheduled booking that was never confirmed cannot be cancelled, and the cancellation fee policy still computes fees for `PROVIDER_ARRIVED` and `JOB_STARTED`, so those calls compute a fee and then fail with 409. Only `SEARCHING_FAILED`, `CANCELLED` and `REFUNDED` are terminal, so a normally completed booking rests in `PAYMENT_COMPLETED`. See review section 8.3.
+Cancellation is legal from `CREATED` (Requirement 9.16, fee-free), `SEARCHING_PROVIDER`, `AWAITING_ASSIGNMENT`, `PROVIDER_ASSIGNED`, `PROVIDER_ACCEPTED` and `PROVIDER_ON_THE_WAY`. The cancellation fee policy still computes fees for `PROVIDER_ARRIVED` and `JOB_STARTED`, so those calls compute a fee and then fail with 409. Only `SEARCHING_FAILED`, `CANCELLED` and `REFUNDED` are terminal, so a normally completed booking rests in `PAYMENT_COMPLETED`. See review section 8.3.
 
 ### 8.2 Payment transaction
 
@@ -1383,11 +1414,12 @@ stateDiagram-v2
     SUCCESS --> PARTIALLY_REFUNDED: partial refund
     SUCCESS --> REFUNDED: full refund
     FAILED --> [*]: next request opens attempt n+1 (max 10)
+    PARTIALLY_REFUNDED --> PARTIALLY_REFUNDED: further partial refund
+    PARTIALLY_REFUNDED --> REFUNDED: remainder refunded
     REFUNDED --> [*]
-    PARTIALLY_REFUNDED --> [*]
 ```
 
-`TransactionStatus.canTransitionTo` is the single source of truth, and the entity refuses illegal transitions. A transaction is one attempt: attempts for a booking share the customer + booking idempotency key, suffixed `:attempt:n` from the second, and a new one opens only when the latest is FAILED. A gateway error during the charge leaves the attempt PENDING (outcome unknown) for the callback to settle. `PARTIALLY_REFUNDED` has no outgoing transition, so a second refund of a partially refunded payment is refused (409), although `PaymentService.refund` lists it as refundable. Refunds themselves are `payment_refund` rows (PENDING, SUCCEEDED, FAILED); a refund whose gateway outcome is unknown stays PENDING until a same-key retry or a finance reconcile.
+`TransactionStatus.canTransitionTo` is the single source of truth, and the entity refuses illegal transitions. A transaction is one attempt: attempts for a booking share the customer + booking idempotency key, suffixed `:attempt:n` from the second, and a new one opens only when the latest is FAILED. A gateway error during the charge leaves the attempt PENDING (outcome unknown) for the callback to settle. A partially refunded payment can be refunded again (`PARTIALLY_REFUNDED` may move to itself or to `REFUNDED`). Refunds themselves are `payment_refund` rows (PENDING, SUCCEEDED, FAILED); a refund whose gateway outcome is unknown stays PENDING until a same-key retry or a finance reconcile.
 
 ### 8.3 Settlement
 
@@ -1446,11 +1478,12 @@ flowchart TD
     F -->|yes| G["POST searching-failed:<br/>Tenant fallback or SEARCHING_FAILED"]
     D -->|yes| H["Score each candidate"]
 
-    H --> H1["distance weight"]
-    H --> H2["rating weight"]
-    H --> H3["acceptance rate weight"]
-    H --> H4["idle time weight"]
-    H1 & H2 & H3 & H4 --> I["Rank descending"]
+    H --> H1["distance 0.30"]
+    H --> H2["availability 0.25"]
+    H --> H3["rating 0.20"]
+    H --> H4["skill 0.15"]
+    H --> H5["performance 0.10"]
+    H1 & H2 & H3 & H4 & H5 --> I["Rank descending"]
 
     I --> J["Next wave: the best<br/>offer-batch-size candidates (default 3)"]
     J --> K["Acquire Redis lock<br/>SET NX PX per provider"]
@@ -1468,7 +1501,9 @@ flowchart TD
     P --> Q["Publish ProviderAccepted"]
 ```
 
-Weights are validated with `BigDecimal` and must sum to one. They are stored in a process-local map, so admin changes (Admin Portal, Dispatch module) apply at runtime but are lost on restart and differ between replicas. Before every wave the search checks whether a `BookingCancelled` has arrived, and a 409 or 404 from booking-service ends the run quietly. The wave size (`offerBatchSize`, 1–10) and the agency hand-off time (`agencyFallbackMinutes`, 1–30) are tunable alongside the weights; no wave's window runs past the hand-off time.
+The five weights (defaults shown) are validated with `BigDecimal` and must sum to one. They are saved, with the other tunables (initial radius, radius step, expansion cycles, offer timeout, wave size, agency hand-off), in one row of `dispatch.dispatch_settings` (V3), whose CHECK constraints repeat the weight rules and which records `updated_at`, `updated_by` and a version. Until an admin first saves from the Admin Portal's Dispatch module there is no row, and every replica uses the `DISPATCH_*` configuration defaults; after that the database wins. Each search takes one snapshot of the settings, and a replica re-reads the row once its copy is older than `DISPATCH_SETTINGS_CACHE_TTL` (10 s), so a save reaches every replica within that time; the replica that saved uses it at once. Concurrent saves are last-write-wins under a row lock, so a partial update never undoes another. Before every wave the search checks whether a `BookingCancelled` has arrived, and a 409 or 404 from booking-service ends the run quietly. The wave size (`offerBatchSize`, 1–10) and the agency hand-off time (`agencyFallbackMinutes`, 1–30) are tunable alongside the weights; no wave's window runs past the hand-off time.
+
+**Under load** (`loadtest/`, review section 21): with the defaults a booking reached an active provider in 4.1 s at the median and 13.7 s at p95 (providers polling every 5 s, as the app does). Two properties shape that number. First, there is no online/offline state for providers: every approved provider in range is offered jobs, and one who is not using the app holds a place in the wave for the whole offer window (60 s) before the next wave starts; that is what an idle provider costs a customer. Second, each search holds a thread of its bulkhead pool for the length of its offer windows (`DISPATCH_SCHEDULED_MAX_THREADS` 16, queue 500; emergency 16 / 100), so more than 16 scheduled searches at once on one replica queue behind each other. Both are reasons to add an availability toggle before the provider base grows.
 
 ---
 
@@ -1506,7 +1541,12 @@ Settings that differ from the code defaults locally:
 | --- | --- | --- | --- |
 | `PAYMENT_SIMULATOR_ENABLED`, `PAYMENT_DEFAULT_GATEWAY` | payment-service | `true`, `simulator` (or `razorpay` from `.env`) | settles payments through the signed-callback path without a real gateway; **local only**, never set in Helm |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | payment-service | from `.env`, test-mode keys, optional | Razorpay Checkout; without them the `razorpay` gateway refuses new payments (503). Helm reads them from `payment-service-secrets` |
-| `EMAIL_PROVIDER`, `EMAIL_FILE_PATH` | auth-service | `file`, the dev mail log | sign-up and reset codes and invitation links go to `docker/dev-mail/dev-mail.log`; Helm keeps `logging` |
+| `EMAIL_PROVIDER`, `EMAIL_FILE_PATH` | auth-service | `file`, the dev mail log | sign-up and reset codes and invitation links go to `docker/dev-mail/dev-mail.log`; `smtp` with the `mail` profile sends them to Mailpit (`http://localhost:8025`). Helm uses `smtp` (Amazon SES) |
+| `MEDIA_STORAGE_PROVIDER`, `MEDIA_BUCKET` | booking-service | `auto`, no bucket | job photos in `docker/dev-media`; set `MEDIA_BUCKET` (and `MEDIA_S3_ENDPOINT` for MinIO) to use S3 |
+| `DOCUMENT_STORAGE_PROVIDER`, `DOCUMENTS_BUCKET` | verification-service | `auto`, no bucket | verification documents in `docker/dev-documents` (git-ignored: real ID scans); set `DOCUMENTS_BUCKET` (and `DOCUMENTS_S3_ENDPOINT`) to use S3 |
+| `RATE_LIMIT_PROVIDER_PER_MINUTE` (and `_CUSTOMER_`, `_DEFAULT_`) | api-gateway | unset (60, 100, 60) | per-user request limits; busy providers reach 60 under load (review section 21) |
+| `REVIEW_RATING_THRESHOLD` | provider-service and rating-review-service | unset (3.0) | the rating below which a provider is flagged UNDER_REVIEW; one variable for both services so they cannot drift |
+| `CHAT_CLUSTER` | chat-service | `redis` (default) | messages fan out over Redis pub/sub and presence lives in Redis, so several instances work; `local` for a single instance without Redis |
 | `PROVIDER_WALLET_CLIENT` | payment-service | `http` | credits provider-service's wallet (code default `logging` pays no one); Helm also sets `http` |
 | `TENANT_ASSIGNMENT_TIMEOUT` | booking-service | `PT60M` | how long a booking may wait for a Tenant assignment; same in Helm |
 | `KAFKA_BOOTSTRAP_SERVERS` | booking-service and the other consumers | `host.docker.internal:9094` | booking-service now consumes `PaymentCompleted` |
@@ -1576,7 +1616,11 @@ Terraform is the most complete infrastructure layer. Database migrations now exi
 
 ### 10.3 Namespace and chart layout
 
-All five deployables share one Helm chart, `helm/jihajoor-service`, with one release per deployable (`jihajoor-<deployable>`) rendered from `values-<environment>.yaml` plus `helm/services/<deployable>.yaml`. A deployable that hosts several services exposes each one's port (`containerPort` plus `extraPorts`) on its Deployment and Service. Resources are named after the bare deployable, so in-cluster DNS matches Compose (`identity-app:8081`). The pipeline deploys into the namespace configured on each GitHub environment, while the Kubernetes manifests under `infra/k8s` still assume six domain namespaces. Reconciling these is step 12 of the roadmap.
+All five deployables share one Helm chart, `helm/jihajoor-service`, with one release per deployable (`jihajoor-<deployable>`) rendered from `values-<environment>.yaml` plus `helm/services/<deployable>.yaml`. A deployable that hosts several services exposes each one's port (`containerPort` plus `extraPorts`) on its Deployment and Service. Resources are named after the bare deployable, so in-cluster DNS matches Compose (`identity-app:8081`).
+
+Everything runs in **one namespace per environment**: Terraform's `k8s_namespace` (default `jihajoor`), which the GitHub environment's `K8S_NAMESPACE` must equal, since the pipeline installs every release there. Terraform creates that namespace (quota, limits, network policies) and one IRSA role per deployable, `<prefix>-irsa-<deployable>`, trusting the ServiceAccount the chart creates under the deployable's name; its ARN goes in the release's `serviceAccount.annotations`. A deployable's role is the union of what its services need (S3 and PII KMS for identity-app, S3 for jobs-app, and so on).
+
+Autoscaling lives in the chart: an HPA per deployable, or, with `keda.enabled`, a KEDA ScaledObject on the consumer-group lag of the services it hosts (triggers in `helm/services/*.yaml`; the TriggerAuthentication is `infra/k8s/observability/keda-kafka-trigger-auth.yaml`). The observability manifests name no application namespace: Prometheus scrapes every Service labelled `app.kubernetes.io/part-of: jihajoor` on each hosted service's port at `/prometheus`, the crash-loop alert and the Fluent Bit routes (one CloudWatch log group per deployable) match container names.
 
 ---
 
@@ -1599,7 +1643,7 @@ graph LR
 
 Actuator endpoints are exposed at the root path, not under `/actuator`; the Helm chart probes `/health/liveness` and `/health/readiness` on each service's own port. They are also unauthenticated.
 
-Resilience is meant to wrap every synchronous call through the shared `ResilientCall` helper: per-call timeout, three retries with exponential backoff, then a circuit breaker that opens at 50 percent failures over a 10-call window for 30 seconds. In practice only booking-service and dispatch-engine use it, and most other outbound clients have no timeout at all.
+Resilience is meant to wrap every synchronous call through the shared `ResilientCall` helper: per-call timeout, three retries with exponential backoff, then a circuit breaker that opens at 50 percent failures over a 10-call window for 30 seconds. booking-service, dispatch-engine, payment-service and provider-service use it; the other outbound clients set connect and read timeouts of their own (customer-service's booking check, 3 s by default, was the last one without).
 
 ---
 

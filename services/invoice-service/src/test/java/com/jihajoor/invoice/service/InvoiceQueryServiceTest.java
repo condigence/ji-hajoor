@@ -98,6 +98,39 @@ class InvoiceQueryServiceTest {
         }
     }
 
+    @Test
+    void findForBookingReturnsTheNewestInvoiceOfThatBooking() {
+        UUID booking = UUID.randomUUID();
+        UUID customer = UUID.randomUUID();
+        invoiceRepository.save(Invoice.create("INV-2024-07-000001", booking, UUID.randomUUID(),
+                customer, UUID.randomUUID(), "k1", BigDecimal.TEN, BigDecimal.ONE, new BigDecimal("9"),
+                NOW.minus(Duration.ofDays(2))));
+        Invoice newest = invoiceRepository.save(Invoice.create("INV-2024-07-000002", booking,
+                UUID.randomUUID(), customer, UUID.randomUUID(), "k2", BigDecimal.TEN, BigDecimal.ONE,
+                new BigDecimal("9"), NOW.minus(Duration.ofDays(1))));
+        save(customer, NOW, "INV-2024-07-000003"); // another booking
+
+        assertThat(service.findForBooking(booking).getId()).isEqualTo(newest.getId());
+    }
+
+    @Test
+    void unknownInvoiceOrBookingIsNotFound() {
+        assertThatThrownBy(() -> service.findInvoice(UUID.randomUUID()))
+                .isInstanceOfSatisfying(InvoiceException.class,
+                        e -> assertThat(e.getStatus()).isEqualTo(HttpStatus.NOT_FOUND));
+        assertThatThrownBy(() -> service.findForBooking(UUID.randomUUID()))
+                .isInstanceOfSatisfying(InvoiceException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo("INVOICE_NOT_FOUND"));
+    }
+
+    @Test
+    void findInvoiceReturnsTheStoredInvoice() {
+        Invoice saved = save(UUID.randomUUID(), NOW, "INV-2024-07-000009");
+
+        assertThat(service.findInvoice(saved.getId())).isSameAs(saved);
+        assertThat(service.toSummary(saved).invoiceNumber()).isEqualTo("INV-2024-07-000009");
+    }
+
     private Invoice save(UUID customer, Instant generatedAt, String number) {
         Invoice invoice = Invoice.create(number, UUID.randomUUID(), UUID.randomUUID(), customer,
                 UUID.randomUUID(), "invoices/" + customer + "/" + number + ".pdf",

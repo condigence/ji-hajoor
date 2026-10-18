@@ -61,6 +61,25 @@ public class BookingException extends RuntimeException {
     }
 
     /**
+     * The media store (S3, or the local disk) could not take or return a file right now. 503 so
+     * the client retries: an upload that hit this was not recorded, and nothing was written in
+     * its place elsewhere.
+     */
+    public static BookingException mediaStorageUnavailable() {
+        return new BookingException(HttpStatus.SERVICE_UNAVAILABLE, "MEDIA_STORAGE_UNAVAILABLE",
+                "Media storage is temporarily unavailable; please try again shortly");
+    }
+
+    /**
+     * No media with that id belongs to the booking, or its bytes are not stored (media recorded
+     * before media was kept, or a local file on another instance's disk).
+     */
+    public static BookingException mediaNotFound(java.util.UUID mediaId) {
+        return new BookingException(HttpStatus.NOT_FOUND, "MEDIA_NOT_FOUND",
+                "Media not found: " + mediaId);
+    }
+
+    /**
      * A required before/after photo was not attached for a JOB_STARTED / JOB_COMPLETED
      * transition (Requirement 9.10, 9.11, 11.2, 11.4). Surfaced as 422 so the client knows to
      * upload a photo before retrying.

@@ -42,7 +42,29 @@ config:
   CUSTOMER_SERVICE_URL: "http://identity-app:8082"
   PROVIDER_SERVICE_URL: "http://identity-app:8083"
   TENANT_ASSIGNMENT_TIMEOUT: "PT60M"
-  MEDIA_STORAGE_PROVIDER: "local"
+  # Job photos go to S3 when the bucket is set and reachable, otherwise to the pod's local disk,
+  # which is per replica and lost on restart, so set MEDIA_BUCKET (Terraform output
+  # s3_bucket_photos). "s3" instead of "auto" makes a missing or unreachable bucket fail startup.
+  # Credentials come from the jobs-app IRSA role; the bucket's default SSE-KMS encrypts objects.
+  MEDIA_STORAGE_PROVIDER: "auto"
+  MEDIA_BUCKET: ""
+  MEDIA_S3_REGION: "ap-south-1"
   BOOKING_SERVICE_URL: "http://jobs-app:8084"
   NOTIFICATION_SERVICE_URL: "http://engagement-app:8090"
   LOCATION_STORE: "redis"
+
+# Kafka lag triggers, used when keda.enabled is set for the environment.
+keda:
+  triggers:
+    - consumerGroup: dispatch-engine.booking-created
+      topic: BookingCreated
+      lagThreshold: 50
+    - consumerGroup: dispatch-engine.booking-cancelled
+      topic: BookingCancelled
+    - consumerGroup: booking-service.payment-completed
+      topic: PaymentCompleted
+    - consumerGroup: location-service.job-started
+      topic: JobStarted
+    # ProviderAccepted, PaymentCompleted and BookingCancelled
+    - consumerGroup: chat-service.lifecycle
+      lagThreshold: 150

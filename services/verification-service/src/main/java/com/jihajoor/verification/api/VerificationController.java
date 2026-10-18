@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -68,7 +69,8 @@ public class VerificationController {
             DocumentType type = parseType(entry.getKey());
             MultipartFile file = entry.getValue();
             try {
-                uploads.add(new DocumentUpload(type, file.getBytes(), file.getContentType()));
+                uploads.add(new DocumentUpload(type, file.getBytes(), file.getContentType(),
+                        file.getOriginalFilename()));
             } catch (IOException e) {
                 throw new VerificationException(HttpStatus.BAD_REQUEST, "DOCUMENT_READ_FAILED",
                         "Could not read uploaded document: " + entry.getKey());
@@ -88,6 +90,19 @@ public class VerificationController {
     public ResponseEntity<VerificationResponse> get(@PathVariable("providerId") UUID providerId) {
         callerIdentity.requireSelfOrStaff(providerId);
         return ResponseEntity.ok(VerificationResponse.from(verificationService.getByProviderId(providerId)));
+    }
+
+    /**
+     * {@code GET /verifications/{providerId}/documents/{documentId}} — the bytes of one of the
+     * provider's own documents, served exactly as the admin endpoint serves them
+     * ({@link DocumentResponses}). Ownership is asserted first: only the provider themselves (or
+     * staff the role rule admits) may read it.
+     */
+    @GetMapping("/documents/{documentId}")
+    public ResponseEntity<Resource> document(@PathVariable("providerId") UUID providerId,
+                                             @PathVariable("documentId") UUID documentId) {
+        callerIdentity.requireSelfOrStaff(providerId);
+        return DocumentResponses.stream(verificationService.openDocument(providerId, documentId));
     }
 
     /**

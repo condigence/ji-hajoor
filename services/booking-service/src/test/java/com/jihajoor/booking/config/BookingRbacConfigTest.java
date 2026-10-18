@@ -134,6 +134,29 @@ class BookingRbacConfigTest {
         assertRejectedWith(invoke("GET", detailPath()), HttpStatus.UNAUTHORIZED);
     }
 
+    // ----- photo bytes ---------------------------------------------------------
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CUSTOMER", "SERVICE_PROVIDER", "ADMIN", "SUPPORT_AGENT", "DISPATCHER"})
+    void whoeverMayReadTheDetail_mayReadItsPhotos(String role) throws Exception {
+        authenticateAs(role);
+
+        assertPassedThrough(invoke("GET", detailPath() + "/photos/" + UUID.randomUUID()));
+    }
+
+    @Test
+    void tenantAdmin_isForbiddenFromPhotos() throws Exception {
+        authenticateAs("TENANT_ADMIN");
+
+        assertRejectedWith(invoke("GET", detailPath() + "/photos/" + UUID.randomUUID()), HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void unauthenticatedPhoto_isUnauthorized() throws Exception {
+        assertRejectedWith(invoke("GET", detailPath() + "/photos/" + UUID.randomUUID()),
+                HttpStatus.UNAUTHORIZED);
+    }
+
     // ----- admin portal --------------------------------------------------------
 
     @ParameterizedTest

@@ -37,6 +37,25 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+  # SMTP server for the email channel with NOTIFICATION_EMAIL_PROVIDER=smtp (SmtpEmailAdapter):
+  # Mailpit locally (port 1025, no credentials, no TLS), the Amazon SES SMTP interface in AWS
+  # (email-smtp.<region>.amazonaws.com, port 587, SES SMTP credentials, SMTP_STARTTLS=true). SMTP
+  # AUTH is switched on when a username is set. Unused with the log provider: the mail sender only
+  # connects when an email is sent. The variables are SMTP_* rather than SPRING_MAIL_*: services
+  # sharing a JVM share its environment, and a SPRING_MAIL_HOST would configure mail (and a mail
+  # health check) in every one of them.
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    default-encoding: UTF-8
+    properties:
+      mail.smtp.starttls.enable: ${SMTP_STARTTLS:false}
+      mail.smtp.starttls.required: ${SMTP_STARTTLS:false}
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
 
 server:
   port: ${SERVER_PORT:8090}
@@ -55,8 +74,12 @@ jihajoor:
     retry-initial-backoff: ${NOTIFICATION_RETRY_INITIAL_BACKOFF:1s}
     # SMS vendor adapter selector: 'log' (dev/test), 'twilio', 'vonage'.
     sms-provider: ${NOTIFICATION_SMS_PROVIDER:log}
-    # Email vendor adapter selector: 'log' (dev/test), 'ses', 'sendgrid'.
+    # Email adapter selector: 'log' (dev/test; delivers nothing) or 'smtp' (spring.mail above:
+    # Mailpit locally, Amazon SES in AWS).
     email-provider: ${NOTIFICATION_EMAIL_PROVIDER:log}
+    # From header of the emails the smtp adapter sends; with SES it must be a verified identity.
+    # Defaults to the Auth Service's EMAIL_FROM, so one variable can serve both.
+    email-from: "${NOTIFICATION_EMAIL_FROM:${EMAIL_FROM:Ji-Hajoor <no-reply@jihajoor.local>}}"
     # Push vendor adapter selector: 'log' (dev/test), 'fcm'.
     push-provider: ${NOTIFICATION_PUSH_PROVIDER:log}
     topics:
@@ -96,6 +119,13 @@ management:
     health:
       probes:
         enabled: true
+  health:
+    # Boot's mail health indicator opens an SMTP connection on every health check. Off: an email
+    # outage must not mark the service down (the other channels and failed-delivery retries keep
+    # working), and with the log provider there is no server to reach.
+    # MANAGEMENT_HEALTH_MAIL_ENABLED=true turns it on.
+    mail:
+      enabled: false
   metrics:
     tags:
       application: notification-service

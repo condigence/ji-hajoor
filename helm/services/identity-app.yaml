@@ -25,14 +25,22 @@ secrets:
     INTERNAL_API_KEY: internal_api_key
     KMS_LOCAL_DATA_KEY: kms_data_key
     KMS_DATA_KEY: kms_data_key
+    # Amazon SES SMTP credentials (IAM SMTP user), for EMAIL_PROVIDER=smtp.
+    SMTP_USERNAME: smtp_username
+    SMTP_PASSWORD: smtp_password
 
 config:
   GOOGLE_CLIENT_ID: ""
   APPLE_SERVICES_ID: ""
-  # Email sign-up, reset and invitations (email-auth spec). No production email provider exists
-  # yet, so the default 'logging' adapter records each email by subject and delivers nothing;
-  # never 'file' here, which writes codes and links in plain text.
-  EMAIL_PROVIDER: "logging"
+  # Email sign-up, reset and invitations (email-auth spec), sent through Amazon SES's SMTP
+  # interface. Never 'file' here, which writes codes and links in plain text. EMAIL_FROM must be a
+  # verified SES identity. Use SMTP_* only: a SPRING_MAIL_* variable would reach every service
+  # hosted in this JVM.
+  EMAIL_PROVIDER: "smtp"
+  EMAIL_FROM: "Ji-Hajoor <no-reply@jihajoor.example>"  # TODO: your verified SES identity
+  SMTP_HOST: "email-smtp.ap-south-1.amazonaws.com"
+  SMTP_PORT: "587"
+  SMTP_STARTTLS: "true"
   # Staff invitation links point at the jihajoor.apps.admin-portal-url row of config.app_config
   # (seeded with the local address: set it for this environment with SQL, see docs/ARCHITECTURE.md).
   KMS_PROVIDER: "local"
@@ -46,3 +54,15 @@ config:
   # Account lookup and TENANT_ADMIN grants for Tenant administration (Requirement MT-2).
   AUTH_SERVICE_URL: "http://identity-app:8081"
   PROVIDER_SERVICE_URL: "http://identity-app:8083"
+  # Provider verification documents (verification-service) go to S3 when the bucket is set and
+  # reachable, otherwise to the pod's local disk, which is per replica and lost on restart (an admin
+  # reviewing through another replica would see "not stored"), so set DOCUMENTS_BUCKET (Terraform
+  # output s3_bucket_documents) per environment. "s3" instead of "auto" makes a missing or
+  # unreachable bucket fail startup. Credentials come from the identity-app IRSA role (its S3 policy
+  # covers the documents bucket: s3:PutObject/GetObject on objects, s3:ListBucket for the startup
+  # HeadBucket, kms:GenerateDataKey/Decrypt on the bucket key); DOCUMENTS_S3_SSE is left blank so
+  # the bucket's default SSE-KMS key encrypts each object. Only DOCUMENTS_* names: generic AWS_* or
+  # SPRING_* variables would reach every service hosted in this JVM.
+  DOCUMENT_STORAGE_PROVIDER: "auto"
+  DOCUMENTS_BUCKET: ""
+  DOCUMENTS_S3_REGION: "ap-south-1"

@@ -26,6 +26,14 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     Optional<PaymentTransaction> findByGatewayReference(String gatewayReference);
 
     /**
+     * Every payment attempt for a booking, in no particular order (Requirement 12.7). A booking has
+     * one attempt per FAILED charge plus at most one that was captured, so the list is short. Used
+     * by the internal refund endpoint, which identifies the payment by booking; backed by
+     * {@code ix_payment_transaction_booking} (V4).
+     */
+    List<PaymentTransaction> findByBookingId(UUID bookingId);
+
+    /**
      * Loads a transaction holding a row lock ({@code SELECT ... FOR UPDATE}) until the surrounding
      * database transaction ends. The refund flow uses it to serialise refund reservations for one
      * transaction, so two concurrent refunds cannot both pass the amount check (Requirement 12.7).

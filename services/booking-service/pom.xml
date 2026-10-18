@@ -33,7 +33,25 @@
              consumer/provider tests still generate and verify pacts on the filesystem. -->
         <pactbroker.url>${env.PACT_BROKER_BASE_URL}</pactbroker.url>
         <pact.provider.version>${project.version}</pact.provider.version>
+
+        <!-- AWS SDK for Java v2, for the S3 media storage adapter. Not managed by the Spring Boot
+             BOM; the SDK's own BOM is imported below so every software.amazon.awssdk artifact
+             resolves to this one version. The first AWS SDK user in the repo: when a second
+             service needs it, move this property and the BOM import to the root pom. -->
+        <aws-sdk.version>2.55.4</aws-sdk.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws-sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- ===== Ji-Hajoor shared libraries (Tasks 4-6) ===== -->
@@ -97,6 +115,22 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-restclient</artifactId>
+        </dependency>
+
+        <!-- ===== Object storage: booking photos and media in S3 (Requirement 7.2) =====
+             Only the synchronous S3Client is used, over the SDK's default Apache 5 HTTP client
+             (a runtime dependency of the SDK). The Netty client exists only for the async
+             client, so it is excluded rather than shipped in every deployable that hosts this
+             service. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- ===== Runtime persistence driver ===== -->

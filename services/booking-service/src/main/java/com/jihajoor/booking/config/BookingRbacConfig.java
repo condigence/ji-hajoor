@@ -34,8 +34,9 @@ import jakarta.annotation.PostConstruct;
  * ({@code POST /bookings/**}) remain "authenticated only", as before this class existed; their
  * ownership is enforced by {@code BookingAccess}, and giving them role rules is a separate change
  * with its own client-compatibility checks. {@code GET /bookings/*} matches a single path segment,
- * so it covers no command path and nothing deeper. {@code /internal/**} is guarded by the internal
- * credential instead, and the operational surface ({@code /health/**}, {@code /actuator/**},
+ * so it covers no command path and nothing deeper; the one deeper read, a photo's bytes
+ * ({@code GET /bookings/{key}/photos/{id}}), has a rule of its own with the same roles.
+ * {@code /internal/**} is guarded by the internal credential instead, and the operational surface ({@code /health/**}, {@code /actuator/**},
  * {@code /metrics}, {@code /prometheus}) must stay unruled, because a rule there would turn the
  * unauthenticated probes into 401s.
  */
@@ -88,6 +89,8 @@ public class BookingRbacConfig {
         var rules = rbacProperties.getEndpointRoles();
         rules.put("GET /bookings/history", HISTORY_TIER);
         rules.put("GET /bookings/*", DETAIL_TIER);
+        // A photo's bytes: whoever may read the detail. Ownership is checked as for the detail.
+        rules.put("GET /bookings/*/photos/*", DETAIL_TIER);
         rules.put("GET /admin/bookings/**", ADMIN_TIER);
         rules.put("POST /admin/bookings/**", ADMIN_TIER);
         rules.put("GET /tenant/bookings/**", TENANT_TIER);

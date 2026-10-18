@@ -13,7 +13,7 @@ import com.jihajoor.payment.config.PaymentProperties;
  * Entry point for the Ji-Hajoor Payment Service.
  *
  * <p>Owns multi-gateway payment processing (Requirement 12): a single {@code PaymentGatewayPort}
- * abstraction with Razorpay/Stripe adapters, idempotency scoped to {@code (customerId, bookingId)},
+ * abstraction with a Razorpay adapter (and a local-only simulator), idempotency scoped to {@code (customerId, bookingId)},
  * a strict transaction state machine, cryptographic callback signature verification, PaymentCompleted
  * event publishing via the shared outbox, invoice triggering, provider wallet credit, refunds, and
  * settlement bank transfers (Requirement 14.3-14.4).

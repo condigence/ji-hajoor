@@ -21,6 +21,7 @@ class NotificationPropertiesTest {
         assertThat(p.getRetryInitialBackoff()).isEqualTo(Duration.ofSeconds(1));
         assertThat(p.getSmsProvider()).isEqualTo("log");
         assertThat(p.getEmailProvider()).isEqualTo("log");
+        assertThat(p.getEmailFrom()).isEqualTo("Ji-Hajoor <no-reply@jihajoor.local>");
         assertThat(p.getPushProvider()).isEqualTo("log");
         assertThat(p.getClients().getPreferenceServiceBaseUrl()).isEqualTo("http://customer-service");
         assertThat(p.getClients().getAuthServiceBaseUrl()).isEqualTo("http://auth-service:8081");
@@ -48,7 +49,8 @@ class NotificationPropertiesTest {
         p.setMaxAttempts(5);
         p.setRetryInitialBackoff(Duration.ofMillis(250));
         p.setSmsProvider("twilio");
-        p.setEmailProvider("ses");
+        p.setEmailProvider("smtp");
+        p.setEmailFrom("Ji-Hajoor <hello@jihajoor.in>");
         p.setPushProvider("fcm");
 
         NotificationProperties.Topics t = new NotificationProperties.Topics();
@@ -76,7 +78,8 @@ class NotificationPropertiesTest {
         assertThat(p.getMaxAttempts()).isEqualTo(5);
         assertThat(p.getRetryInitialBackoff()).isEqualTo(Duration.ofMillis(250));
         assertThat(p.getSmsProvider()).isEqualTo("twilio");
-        assertThat(p.getEmailProvider()).isEqualTo("ses");
+        assertThat(p.getEmailProvider()).isEqualTo("smtp");
+        assertThat(p.getEmailFrom()).isEqualTo("Ji-Hajoor <hello@jihajoor.in>");
         assertThat(p.getPushProvider()).isEqualTo("fcm");
         assertThat(p.getTopics().getBookingCreated()).isEqualTo("bc");
         assertThat(p.getTopics().getProviderAssigned()).isEqualTo("pa");

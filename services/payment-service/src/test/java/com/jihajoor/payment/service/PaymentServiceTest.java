@@ -53,7 +53,7 @@ import com.jihajoor.payment.gateway.PaymentGatewayPort;
 import com.jihajoor.payment.gateway.PaymentGatewayRegistry;
 import com.jihajoor.payment.gateway.RazorpayGatewayAdapter;
 import com.jihajoor.payment.gateway.SimulatorGatewayAdapter;
-import com.jihajoor.payment.gateway.StripeGatewayAdapter;
+import com.jihajoor.payment.support.SecondHmacGateway;
 import com.jihajoor.payment.idempotency.InMemoryIdempotencyStoreAdapter;
 import com.jihajoor.payment.invoice.InvoiceTriggerException;
 import com.jihajoor.payment.invoice.InvoiceTriggerPort;
@@ -81,9 +81,9 @@ class PaymentServiceTest {
 
     private static final String TEST_DATA_KEY = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
     private static final String RAZORPAY_SECRET = "razorpay-test-secret";
-    private static final String STRIPE_SECRET = "stripe-test-secret";
+    private static final String SECOND_SECRET = "second-gateway-test-secret";
     private static final String RAZORPAY = RazorpayGatewayAdapter.GATEWAY_ID;
-    private static final String STRIPE = StripeGatewayAdapter.GATEWAY_ID;
+    private static final String SECOND = SecondHmacGateway.GATEWAY_ID;
 
     private InMemoryPaymentTransactionRepository transactionRepository;
     private InMemoryPaymentRefundRepository refundRepository;
@@ -118,8 +118,8 @@ class PaymentServiceTest {
         transactions = new MarkingTransactionOperations();
 
         razorpay = new SpyGateway();
-        PaymentGatewayPort stripe = new StripeGatewayAdapter(STRIPE_SECRET);
-        gatewayRegistry = new PaymentGatewayRegistry(List.of(razorpay, stripe));
+        PaymentGatewayPort second = new SecondHmacGateway(SECOND_SECRET);
+        gatewayRegistry = new PaymentGatewayRegistry(List.of(razorpay, second));
 
         props = new PaymentProperties();
         props.setRetryBackoff(Duration.ZERO); // keep tests fast — no real backoff sleeps
@@ -461,12 +461,12 @@ class PaymentServiceTest {
         @Test
         void callbackSignedByAnotherGateway_isRejected() {
             PaymentTransaction razorpayTx = initiate("100.00", "20.00");
-            // Validly signed by Stripe, naming Stripe, but the transaction belongs to Razorpay.
-            String payload = payload(razorpayTx.getId(), STRIPE, "SUCCEEDED", "100.00", null, Instant.now());
-            GatewayCallback stripeSigned = new GatewayCallback(STRIPE, payload,
-                    HmacSignatures.hmacSha256Hex(STRIPE_SECRET, payload));
+            // Validly signed by the second gateway, naming it, but the transaction belongs to Razorpay.
+            String payload = payload(razorpayTx.getId(), SECOND, "SUCCEEDED", "100.00", null, Instant.now());
+            GatewayCallback secondSigned = new GatewayCallback(SECOND, payload,
+                    HmacSignatures.hmacSha256Hex(SECOND_SECRET, payload));
 
-            assertThatThrownBy(() -> service.handleGatewayCallback(razorpayTx.getId(), stripeSigned))
+            assertThatThrownBy(() -> service.handleGatewayCallback(razorpayTx.getId(), secondSigned))
                     .satisfies(ex -> assertPaymentError(ex, HttpStatus.BAD_REQUEST, "CALLBACK_MISMATCH"));
             assertThat(stored(razorpayTx).getStatus()).isEqualTo(TransactionStatus.PENDING);
         }
@@ -474,7 +474,7 @@ class PaymentServiceTest {
         @Test
         void payloadGatewayFieldMustMatchVerifyingGateway() {
             PaymentTransaction tx = initiate("100.00", "20.00");
-            String payload = payload(tx.getId(), STRIPE, "SUCCEEDED", "100.00", null, Instant.now());
+            String payload = payload(tx.getId(), SECOND, "SUCCEEDED", "100.00", null, Instant.now());
 
             assertThatThrownBy(() -> service.handleGatewayCallback(tx.getId(), razorpayCallback(payload)))
                     .satisfies(ex -> assertPaymentError(ex, HttpStatus.BAD_REQUEST, "CALLBACK_MISMATCH"));
@@ -1483,7 +1483,7 @@ class PaymentServiceTest {
 
         @Test
         void bothGatewaysAreRegistered_andSelectableById() {
-            assertThat(gatewayRegistry.registeredGateways()).contains(RAZORPAY, STRIPE);
+            assertThat(gatewayRegistry.registeredGateways()).contains(RAZORPAY, SECOND);
         }
 
         @Test

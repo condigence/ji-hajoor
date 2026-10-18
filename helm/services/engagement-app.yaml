@@ -27,7 +27,29 @@ secrets:
   env:
     JWT_SECRET: jwt_secret
     INTERNAL_API_KEY: internal_api_key
+    # Amazon SES SMTP credentials (IAM SMTP user), for NOTIFICATION_EMAIL_PROVIDER=smtp.
+    SMTP_USERNAME: smtp_username
+    SMTP_PASSWORD: smtp_password
 
 config:
   PREFERENCE_SERVICE_URL: "http://identity-app:8082"
   AUTH_SERVICE_URL: "http://identity-app:8081"
+  # Complaint refunds go to payment-service, review ratings to provider-service.
+  PAYMENT_SERVICE_URL: "http://money-app:8088"
+  PROVIDER_SERVICE_URL: "http://identity-app:8083"
+  # Notification emails through Amazon SES SMTP; NOTIFICATION_EMAIL_FROM must be a verified
+  # SES identity. SMTP_* only, never SPRING_MAIL_* (it would reach every service in this JVM).
+  NOTIFICATION_EMAIL_PROVIDER: "smtp"
+  NOTIFICATION_EMAIL_FROM: "Ji-Hajoor <no-reply@jihajoor.example>"  # TODO: your verified SES identity
+  SMTP_HOST: "email-smtp.ap-south-1.amazonaws.com"
+  SMTP_PORT: "587"
+  SMTP_STARTTLS: "true"
+
+# Kafka lag triggers, used when keda.enabled is set for the environment.
+keda:
+  triggers:
+    # All thirteen lifecycle topics
+    - consumerGroup: notification-service.lifecycle
+    - consumerGroup: rating-review-service.payment-completed
+      topic: PaymentCompleted
+      lagThreshold: 200

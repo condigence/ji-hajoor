@@ -32,6 +32,7 @@ import com.jihajoor.provider.domain.ProviderEarning;
 import com.jihajoor.provider.domain.ProviderEarningRepository;
 import com.jihajoor.provider.domain.ProviderProfile;
 import com.jihajoor.provider.domain.ProviderProfileRepository;
+import com.jihajoor.provider.domain.RatingUpdateOutcome;
 import com.jihajoor.provider.domain.Settlement;
 import com.jihajoor.provider.domain.SettlementRepository;
 import com.jihajoor.provider.service.ProfileUpdateCommand.CategorySelectionCommand;
@@ -466,21 +467,66 @@ public class ProviderService {
         return new BankAccountDetails(holder, number, ifsc);
     }
 
-    // ================= Rating flag (Requirement 4.7) =================
+    // ================= Rating (Requirements 4.7, 15.4) =================
+
+    /** Highest aggregate rating: reviews are 1&ndash;5 stars. */
+    static final BigDecimal MAX_RATING = new BigDecimal("5");
 
     /**
-     * Applies a recalculated aggregate rating; if it drops below the configured threshold and
-     * the provider is not already flagged, flags them for Admin review and emits an alert.
+     * Sets the provider's aggregate rating as computed by the Rating &amp; Review Service over the
+     * provider's customer reviews ({@code PUT /internal/providers/{id}/rating}). If the aggregate
+     * drops below {@code jihajoor.provider.review-rating-threshold} and the provider is not already
+     * flagged, flags them UNDER_REVIEW (so dispatch skips them) and alerts Admin, once.
+     *
+     * <p>Idempotent: the aggregate is set, not accumulated, and an aggregate older than the one held
+     * (a lower {@code sequence}) is ignored, so the sender's retries and out-of-order deliveries are
+     * all safe. See {@link ProviderProfile#applyRatingAggregate}.
+     *
+     * <p>Checked here as well as on the request DTO, since this is the authoritative check for every
+     * caller: {@code count >= 0}, {@code sequence >= 0}, and an {@code average} in 0&ndash;5 whenever
+     * {@code count > 0}.
+     *
+     * @throws ProviderException 404 {@code PROVIDER_NOT_FOUND} for an unknown provider, 400
+     *                           {@code VALIDATION_ERROR} for an out-of-range value
      */
     @Transactional
-    public ProviderProfile applyAggregateRating(UUID providerId, BigDecimal newRating) {
+    public RatingApplication applyRatingAggregate(UUID providerId, BigDecimal average, int count,
+                                                  long sequence) {
+        validateRatingAggregate(average, count, sequence);
         ProviderProfile profile = getExisting(providerId);
-        boolean newlyFlagged = profile.applyAggregateRating(newRating, props.getReviewRatingThreshold());
-        profileRepository.save(profile);
-        if (newlyFlagged) {
-            adminAlert.providerFlaggedForReview(providerId, newRating);
+        RatingUpdateOutcome outcome = profile.applyRatingAggregate(
+                average, count, sequence, props.getReviewRatingThreshold());
+        if (!outcome.applied()) {
+            log.info("Ignored stale rating for provider {}: sequence {} is older than the {} held",
+                    providerId, sequence, profile.getRatingSequence());
+            return new RatingApplication(profile, outcome);
         }
-        return profile;
+        profileRepository.save(profile);
+        if (outcome == RatingUpdateOutcome.FLAGGED_FOR_REVIEW) {
+            adminAlert.providerFlaggedForReview(providerId, average);
+        }
+        return new RatingApplication(profile, outcome);
+    }
+
+    private static void validateRatingAggregate(BigDecimal average, int count, long sequence) {
+        List<String> errors = new ArrayList<>();
+        if (count < 0) {
+            errors.add("count: must be 0 or more");
+        }
+        if (sequence < 0) {
+            errors.add("sequence: must be 0 or more");
+        }
+        if (count > 0 && (average == null || average.signum() < 0 || average.compareTo(MAX_RATING) > 0)) {
+            errors.add("average: must be between 0 and 5 when count is above 0");
+        }
+        if (!errors.isEmpty()) {
+            throw new ProviderException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
+                    "Rating aggregate is invalid", errors);
+        }
+    }
+
+    /** The profile after a rating push and what the push did. */
+    public record RatingApplication(ProviderProfile profile, RatingUpdateOutcome outcome) {
     }
 
     // ================= Reads =================

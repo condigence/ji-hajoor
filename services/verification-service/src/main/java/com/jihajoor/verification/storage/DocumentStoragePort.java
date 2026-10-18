@@ -1,24 +1,37 @@
 package com.jihajoor.verification.storage;
 
-import com.jihajoor.verification.domain.DocumentType;
+import java.util.Optional;
+
+import com.jihajoor.verification.domain.DocumentStorageKind;
 
 /**
- * Abstraction over object storage for verification documents (Requirement 5.3). Documents are
- * stored with server-side encryption (SSE). Modelled as a port so the concrete backend (AWS
- * S3, MinIO, etc.) can vary without touching the verification workflow, and so uploads are
- * trivially mockable in unit tests.
+ * Port abstracting the object store verification documents are kept in (Requirement 5.3): S3 in
+ * production ({@link S3DocumentStorageAdapter}), the local disk otherwise
+ * ({@link LocalDocumentStorageAdapter}).
+ *
+ * <p>An adapter only moves bytes under a key it is given. Choosing the key, choosing which adapter
+ * to write to, and finding the adapter a stored row must be read from are {@link DocumentStorage}'s;
+ * the business logic talks to that, not to an adapter.
  */
 public interface DocumentStoragePort {
 
+    /** The kind recorded on a {@code verification_document} row written through this adapter. */
+    DocumentStorageKind kind();
+
     /**
-     * Uploads a document's bytes to object storage with server-side encryption enabled and
-     * returns an opaque storage reference (e.g. {@code s3://bucket/providerId/type/uuid}).
+     * Stores {@code file} under {@code key} ({@code providers/{providerId}/{TYPE}/{documentId}.{ext}}).
      *
-     * @param providerId  the owning provider
-     * @param type        the document type
-     * @param content     the raw file bytes
-     * @param contentType the MIME type of the file
-     * @return an opaque storage reference that can be persisted and later resolved to the file
+     * @return the key to persist and later pass to {@link #get}: {@code key} itself, or with the
+     *         adapter's own prefix applied
+     * @throws DocumentStorageException when the store cannot take the file right now
      */
-    String store(java.util.UUID providerId, DocumentType type, byte[] content, String contentType);
+    String put(String key, DocumentFile file);
+
+    /**
+     * The bytes stored under {@code storedKey}.
+     *
+     * @return empty when nothing is stored under that key
+     * @throws DocumentStorageException when the store cannot be read right now
+     */
+    Optional<DocumentContent> get(String storedKey);
 }

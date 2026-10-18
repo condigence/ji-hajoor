@@ -11,7 +11,7 @@ package com.jihajoor.payment.gateway;
  */
 public interface PaymentGatewayPort {
 
-    /** @return the stable gateway identifier (e.g. {@code "razorpay"}, {@code "stripe"}). */
+    /** @return the stable gateway identifier (e.g. {@code "razorpay"}, {@code "simulator"}). */
     String gatewayId();
 
     /**

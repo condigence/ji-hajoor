@@ -169,7 +169,7 @@ public abstract class IdempotentKafkaConsumer {
      */
     private RuntimeException tryHandle(ConsumerRecord<String, String> record, UUID eventId, int attempt) {
         try {
-            if (transactionTemplate == null) {
+            if (transactionTemplate == null || !handleInOneTransaction()) {
                 handle(record);
                 recordProcessed(eventId);
             } else {
@@ -205,6 +205,19 @@ public abstract class IdempotentKafkaConsumer {
      * {@link RuntimeException} to signal a recoverable failure that should be retried.
      */
     protected abstract void handle(ConsumerRecord<String, String> record);
+
+    /**
+     * Whether {@link #handle(ConsumerRecord)} runs in one transaction with the
+     * {@code processed_event} insert (the default; see the class comment). A consumer whose
+     * {@code handle()} is mostly calls to other systems, with idempotency of its own for each side
+     * effect, returns {@code false}: it then holds a database connection only for its own short
+     * transactions, not across those calls, and the event is recorded as processed after
+     * {@code handle()} returns. A crash in between redelivers the event, which its own
+     * idempotency absorbs.
+     */
+    protected boolean handleInOneTransaction() {
+        return true;
+    }
 
     /**
      * Inserts the dedup row inside the current transaction, flushing so a duplicate surfaces here

@@ -1,7 +1,7 @@
 import { ApiError, apiClient } from '@api/client';
 import { useAuthStore } from '@stores/authStore';
 import type { AddressFormValues } from './schemas';
-import { findSavedAddress, useSavedAddressStore } from './savedAddresses';
+import { findSavedAddress, useSavedAddressStore, type ServerAddress } from './savedAddresses';
 
 /**
  * Pricing Engine + Booking Service API bindings (Requirements 6, 7, 8).
@@ -167,13 +167,19 @@ function toLocalDateTime(iso: string): string {
  * UI must not proceed to booking creation in that case (Requirement 7.4).
  * A rejected coupon surfaces as a 4xx ApiError whose message identifies the
  * violated constraint (Requirement 6.10).
+ *
+ * The signed-in customer's id is sent as `userId` so the preview applies the
+ * coupon's per-user limits, exactly as booking creation will; without it a
+ * coupon the customer has already used up would preview as valid.
  */
 export async function requestEstimate(payload: EstimateRequestPayload): Promise<PriceEstimate> {
+  const userId = useAuthStore.getState().user?.id;
   const { data } = await apiClient.post<PriceBreakdownResponse>('/pricing/estimate', {
     subcategoryId: payload.subcategoryId,
     emergency: payload.isEmergency,
     ...(payload.scheduledAt ? { scheduledLocalTime: toLocalDateTime(payload.scheduledAt) } : {}),
     ...(payload.couponCode ? { couponCode: payload.couponCode } : {}),
+    ...(userId ? { userId } : {}),
   });
   return toPriceEstimate(data, payload.couponCode);
 }
@@ -274,6 +280,12 @@ async function resolveAddressId(
     address: { ...address, latitude, longitude },
   });
   return data.addressId;
+}
+
+/** GET /customers/{id}/addresses — the customer's saved addresses, default first. */
+export async function fetchSavedAddresses(customerId: string): Promise<ServerAddress[]> {
+  const { data } = await apiClient.get<ServerAddress[]>(`/customers/${customerId}/addresses`);
+  return data;
 }
 
 /**

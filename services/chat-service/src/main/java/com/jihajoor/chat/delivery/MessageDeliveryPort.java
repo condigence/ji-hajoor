@@ -1,5 +1,6 @@
 package com.jihajoor.chat.delivery;
 
+import com.jihajoor.chat.domain.ChatChannel;
 import com.jihajoor.chat.domain.ChatMessage;
 
 /**
@@ -14,7 +15,8 @@ public interface MessageDeliveryPort {
 
     /**
      * Delivers {@code message} to the recipient's live session for the booking. The body has
-     * already been phone-masked before it reaches this port (Requirement 18.8).
+     * already been phone-masked before it reaches this port (Requirement 18.8); {@code channel}
+     * is the message's channel, from which the sender's role is derived.
      */
-    void deliver(ChatMessage message);
+    void deliver(ChatMessage message, ChatChannel channel);
 }

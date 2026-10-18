@@ -15,13 +15,11 @@ import com.jihajoor.verification.domain.Verification;
 import com.jihajoor.verification.domain.VerificationStatus;
 import com.jihajoor.verification.notification.LoggingProviderNotificationAdapter;
 import com.jihajoor.verification.service.VerificationException;
-import com.jihajoor.verification.storage.S3DocumentStorageAdapter;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
 /**
- * Unit tests for the Verification Service outbound adapters, the S3 storage key/SSE contract
- * (Requirement 5.3), the tunable properties, the response mapping including the audit trail
+ * Unit tests for the Verification Service outbound adapters, the tunable properties, the response mapping including the audit trail
  * (Requirement 5.11), and the domain exception factories.
  */
 class VerificationAdaptersTest {
@@ -38,30 +36,12 @@ class VerificationAdaptersTest {
     }
 
     @Test
-    void s3StorageAdapter_buildsBucketScopedKeyAndReturnsRef() {
-        VerificationProperties props = new VerificationProperties();
-        props.setDocumentsBucket("jihajoor-docs-test");
-        S3DocumentStorageAdapter adapter = new S3DocumentStorageAdapter(props);
-        UUID provider = UUID.randomUUID();
-
-        String ref = adapter.store(provider, DocumentType.GOVERNMENT_ID, new byte[]{1, 2, 3}, "image/jpeg");
-
-        assertThat(ref)
-                .startsWith("s3://jihajoor-docs-test/")
-                .contains(provider.toString())
-                .contains(DocumentType.GOVERNMENT_ID.name());
-    }
-
-    @Test
     void verificationProperties_exposeDefaultsAndRoundTrip() {
         VerificationProperties p = new VerificationProperties();
-        assertThat(p.getDocumentsBucket()).isEqualTo("jihajoor-documents");
         assertThat(p.getRequiredDocumentTypes())
                 .containsExactly("GOVERNMENT_ID", "ADDRESS_PROOF", "SKILL_CERTIFICATION");
 
-        p.setDocumentsBucket("b");
         p.setRequiredDocumentTypes(List.of("GOVERNMENT_ID"));
-        assertThat(p.getDocumentsBucket()).isEqualTo("b");
         assertThat(p.getRequiredDocumentTypes()).containsExactly("GOVERNMENT_ID");
     }
 

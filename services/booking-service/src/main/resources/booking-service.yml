@@ -109,10 +109,32 @@ jihajoor:
     # Timezone the Pricing Engine evaluates night/weekend surcharge windows in; must match its
     # own jihajoor.pricing.zone-id (Requirement 6.5, 6.6).
     zone: ${PRICING_ZONE:UTC}
+  # Booking media (customer uploads, before/after job photos). See MediaStorage for the rules.
   media-storage:
-    # Selects the active MediaStoragePort adapter: 's3' (production) or 'local' (dev/test).
-    provider: ${MEDIA_STORAGE_PROVIDER:local}
-    bucket: ${MEDIA_BUCKET:jihajoor-media}
+    # Where new media is written: 'auto' (S3 when a bucket is set and answers HeadBucket at startup,
+    # else local disk with a WARN), 's3' (S3 or fail startup), or 'local' (always local disk).
+    # Each stored row records its store, so photos stay readable whichever mode a process runs in.
+    provider: ${MEDIA_STORAGE_PROVIDER:auto}
+    local:
+      # Root directory for locally stored media. Instance-local unless it is a shared volume.
+      directory: ${MEDIA_LOCAL_DIR:${java.io.tmpdir}/jihajoor-media}
+    s3:
+      # Blank = S3 not configured.
+      bucket: ${MEDIA_BUCKET:}
+      region: ${MEDIA_S3_REGION:${AWS_REGION:}}
+      # Optional key prefix inside the bucket, e.g. 'prod/'.
+      prefix: ${MEDIA_S3_PREFIX:}
+      # S3-compatible store (MinIO, LocalStack), e.g. http://minio:9000; blank for AWS.
+      endpoint: ${MEDIA_S3_ENDPOINT:}
+      path-style-access: ${MEDIA_S3_PATH_STYLE_ACCESS:false}
+      # Blank = the bucket's default encryption (on AWS at least SSE-S3); AES256 or aws:kms.
+      server-side-encryption: ${MEDIA_S3_SSE:}
+      kms-key-id: ${MEDIA_S3_KMS_KEY_ID:}
+      # Static keys, both or neither; otherwise the AWS SDK default chain (env, IRSA, instance role).
+      access-key-id: ${MEDIA_S3_ACCESS_KEY_ID:}
+      secret-access-key: ${MEDIA_S3_SECRET_ACCESS_KEY:}
+      # Bound on the startup HeadBucket check.
+      startup-check-timeout: ${MEDIA_S3_STARTUP_CHECK_TIMEOUT:10s}
   outbox:
     enabled: true
 

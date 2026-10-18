@@ -288,6 +288,43 @@ class VerificationRbacConfigTest {
         verify(chain, never()).doFilter(any(), any());
     }
 
+    // ------------------------------------------------------------------ document bytes
+
+    @Test
+    void documentBytesAreForTheQueueAdminsOnly() throws Exception {
+        String path = "/admin/verification/" + providerId + "/documents/" + UUID.randomUUID();
+        for (String role : List.of("ADMIN", "SUPER_ADMIN")) {
+            authenticateAs(role);
+            FilterChain chain = mock(FilterChain.class);
+            assertThat(invoke("GET", path, chain).getStatus()).as(role).isEqualTo(HttpStatus.OK.value());
+            verify(chain, times(1)).doFilter(any(), any());
+        }
+        for (String role : List.of("SUPPORT_AGENT", "SERVICE_PROVIDER", "DISPATCHER", "CUSTOMER", "FINANCE_ADMIN")) {
+            authenticateAs(role);
+            assertThat(invoke("GET", path, mock(FilterChain.class)).getStatus()).as(role)
+                    .isEqualTo(HttpStatus.FORBIDDEN.value());
+        }
+        SecurityContextHolder.clearContext();
+        assertThat(invoke("GET", path, mock(FilterChain.class)).getStatus())
+                .isEqualTo(HttpStatus.UNAUTHORIZED.value());
+    }
+
+    @Test
+    void ownDocumentBytesAreRuledForProvidersAndAdminsButNotSupport() throws Exception {
+        String path = "/verifications/" + providerId + "/documents/" + UUID.randomUUID();
+        for (String role : List.of("SERVICE_PROVIDER", "ADMIN", "SUPER_ADMIN")) {
+            authenticateAs(role);
+            FilterChain chain = mock(FilterChain.class);
+            assertThat(invoke("GET", path, chain).getStatus()).as(role).isEqualTo(HttpStatus.OK.value());
+            verify(chain, times(1)).doFilter(any(), any());
+        }
+        for (String role : List.of("SUPPORT_AGENT", "DISPATCHER", "CUSTOMER")) {
+            authenticateAs(role);
+            assertThat(invoke("GET", path, mock(FilterChain.class)).getStatus()).as(role)
+                    .isEqualTo(HttpStatus.FORBIDDEN.value());
+        }
+    }
+
     // ------------------------------------------------------------------ public surface guard
 
     @Test

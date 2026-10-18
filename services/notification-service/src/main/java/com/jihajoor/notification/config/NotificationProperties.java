@@ -26,8 +26,11 @@ public class NotificationProperties {
     /** SMS vendor adapter selector: {@code log} (dev/test), {@code twilio}, {@code vonage}. */
     private String smsProvider = "log";
 
-    /** Email vendor adapter selector: {@code log} (dev/test), {@code ses}, {@code sendgrid}. */
+    /** Email vendor adapter selector: {@code log} (dev/test) or {@code smtp} (Mailpit, Amazon SES). */
     private String emailProvider = "log";
+
+    /** From header of the emails the {@code smtp} adapter sends; with SES a verified identity. */
+    private String emailFrom = "Ji-Hajoor <no-reply@jihajoor.local>";
 
     /** Push vendor adapter selector: {@code log} (dev/test), {@code fcm}. */
     private String pushProvider = "log";
@@ -68,6 +71,14 @@ public class NotificationProperties {
 
     public void setEmailProvider(String emailProvider) {
         this.emailProvider = emailProvider;
+    }
+
+    public String getEmailFrom() {
+        return emailFrom;
+    }
+
+    public void setEmailFrom(String emailFrom) {
+        this.emailFrom = emailFrom;
     }
 
     public String getPushProvider() {

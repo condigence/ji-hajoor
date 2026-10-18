@@ -1,6 +1,7 @@
 package com.jihajoor.invoice.storage;
 
 import java.time.Duration;
+import java.util.Optional;
 
 /**
  * Outbound port for durable invoice-PDF storage (Requirement 13.2) and signed-URL issuance
@@ -27,4 +28,12 @@ public interface InvoiceStoragePort {
      * @return the signed URL and its absolute expiry instant
      */
     SignedUrl signedUrl(String objectKey, Duration ttl);
+
+    /**
+     * Reads a stored object back, for the authenticated {@code GET /invoices/{id}/download} route.
+     *
+     * @return the stored bytes, or empty when nothing is stored under {@code objectKey} (for the
+     *         in-memory adapter: the process restarted since the invoice was generated)
+     */
+    Optional<byte[]> load(String objectKey);
 }

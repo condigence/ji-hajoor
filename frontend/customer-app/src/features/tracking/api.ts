@@ -1,49 +1,13 @@
 import { apiClient } from '@api/client';
 
 /**
- * API bindings for the tracking flow: the Available Professionals list
- * (Dispatch/Provider data, Requirement 28.6), the Location Service snapshot
- * (Requirement 10), and the Chat Service channel bootstrap (Requirement 18).
+ * API bindings for the tracking flow: the Location Service snapshot
+ * (Requirement 10) and the Chat Service channel bootstrap (Requirement 18).
  *
  * Realtime streams (location SSE, chat WebSocket) are handled separately in
  * `realtime.ts`; this module covers the plain REST calls that flow through the
  * shared Axios client (Authorization + X-Correlation-ID interceptors).
  */
-
-/**
- * A candidate Provider for a Booking, shown as a card in the Available
- * Professionals list (Requirement 28.6).
- */
-export interface AvailableProfessional {
-  providerId: string;
-  displayName: string;
-  /** True when the Provider's verification status is APPROVED (Requirement 28.6). */
-  verified: boolean;
-  /** Aggregate star rating (0–5). */
-  rating: number;
-  /** Total jobs completed. */
-  jobsCompleted: number;
-  /** Distance from the service address in kilometers. */
-  distanceKm: number;
-  /** Estimated time of arrival in minutes. */
-  etaMinutes: number;
-  /** Starting price for the requested service, in the platform currency. */
-  startingPrice: number;
-  currency?: string;
-}
-
-/**
- * GET /bookings/{bookingId}/professionals — ranked list of eligible Providers
- * for a Booking (fed by the Dispatch Engine's matching, Requirement 8/28.6).
- */
-export async function fetchAvailableProfessionals(
-  bookingId: string,
-): Promise<AvailableProfessional[]> {
-  const { data } = await apiClient.get<AvailableProfessional[]>(
-    `/bookings/${bookingId}/professionals`,
-  );
-  return data;
-}
 
 /** A single geographic coordinate. */
 export interface Coordinates {

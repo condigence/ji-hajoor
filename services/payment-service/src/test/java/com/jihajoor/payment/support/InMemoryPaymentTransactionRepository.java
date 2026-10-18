@@ -44,6 +44,13 @@ public class InMemoryPaymentTransactionRepository implements PaymentTransactionR
     }
 
     @Override
+    public List<PaymentTransaction> findByBookingId(UUID bookingId) {
+        return store.values().stream()
+                .filter(t -> bookingId.equals(t.getBookingId()))
+                .toList();
+    }
+
+    @Override
     public Optional<PaymentTransaction> findById(UUID id) {
         return Optional.ofNullable(store.get(id));
     }

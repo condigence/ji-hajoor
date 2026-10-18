@@ -6,6 +6,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -17,7 +18,7 @@ import org.springframework.web.client.RestClientException;
  * with the shared {@code X-Internal-Api-Key}, and interprets a returned booking reference as
  * "address in use". Any failure, including a refused key, is surfaced so the caller fails the
  * deletion rather than silently allowing it: treating an unknown answer as "not in use" is unsafe
- * for a delete.
+ * for a delete. A timeout ({@code jihajoor.booking.timeout}, default 3 s) counts as such a failure.
  *
  * <p>Activated whenever no other {@link BookingClientPort} bean is present (tests supply
  * their own fake).
@@ -34,9 +35,14 @@ public class HttpBookingClientAdapter implements BookingClientPort {
 
     public HttpBookingClientAdapter(BookingClientProperties properties,
                                     @Value("${jihajoor.customer.internal-api-key:}") String internalApiKey) {
+        int timeoutMillis = (int) properties.getTimeout().toMillis();
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(timeoutMillis);
+        requestFactory.setReadTimeout(timeoutMillis);
         this.restClient = RestClient.builder()
                 .baseUrl(properties.getBaseUrl())
                 .defaultHeader(INTERNAL_KEY_HEADER, internalApiKey)
+                .requestFactory(requestFactory)
                 .build();
     }
 

@@ -20,15 +20,6 @@ export function formatCurrency(amount: number, currency = 'INR'): string {
   }
 }
 
-/** Format a distance in kilometers, e.g. "1.2 km" or "850 m" for short hops. */
-export function formatDistanceKm(km: number): string {
-  if (!Number.isFinite(km) || km < 0) return '—';
-  if (km < 1) {
-    return `${Math.round(km * 1000)} m`;
-  }
-  return `${km.toFixed(1)} km`;
-}
-
 /** Format an ETA in whole minutes, e.g. "5 min" or "Arriving" when ≤ 0. */
 export function formatEtaMinutes(minutes: number): string {
   if (!Number.isFinite(minutes) || minutes <= 0) return 'Arriving';

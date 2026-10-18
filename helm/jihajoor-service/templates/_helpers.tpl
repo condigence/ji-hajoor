@@ -20,6 +20,14 @@ services' built-in URL defaults resolve without extra wiring.
 {{- end -}}
 
 {{/*
+"true" when KEDA scales this deployable: enabled for the environment and the deployable lists
+Kafka triggers. Empty otherwise, so it can be used directly in an if.
+*/}}
+{{- define "jihajoor-service.kedaActive" -}}
+{{- if and .Values.keda.enabled .Values.keda.triggers -}}true{{- end -}}
+{{- end -}}
+
+{{/*
 Chart name and version label.
 */}}
 {{- define "jihajoor-service.chart" -}}

@@ -16,16 +16,27 @@ import jakarta.persistence.LockModeType;
 
 /**
  * Persistence for {@link Complaint}. Beyond CRUD, exposes the queries backing the SLA-breach
- * escalation sweep (Requirement 16.4) and complaint statistics aggregation (Requirement 16.9).
+ * escalation sweep (Requirement 16.4) and the complaint statistics aggregation (Requirement 16.9),
+ * which is computed with {@code GROUP BY}/aggregate queries rather than by loading every complaint.
  */
 public interface ComplaintRepository extends JpaRepository<Complaint, UUID> {
 
     /**
-     * Non-terminal, not-yet-escalated complaints whose SLA deadline is on/before {@code asOf}.
-     * Backs the periodic escalation sweep (Requirement 16.4).
+     * Non-terminal (not RESOLVED/CLOSED), not-yet-escalated complaints whose SLA deadline is
+     * on/before {@code asOf}. Backs the periodic escalation sweep (Requirement 16.4).
+     *
+     * <p>The terminal statuses and {@code escalated = false} are literals, not parameters, so the
+     * partial index {@code idx_complaint_sla_sweep} (migration V4), whose predicate is exactly
+     * that, serves the query under any plan, including a generic prepared-statement plan.
      */
-    List<Complaint> findByStatusNotInAndEscalatedFalseAndSlaDeadlineLessThanEqual(
-            List<ComplaintStatus> statuses, Instant asOf);
+    @Query("""
+            select c from Complaint c
+            where c.escalated = false
+              and c.status not in (com.jihajoor.complaint.domain.ComplaintStatus.RESOLVED,
+                                   com.jihajoor.complaint.domain.ComplaintStatus.CLOSED)
+              and c.slaDeadline <= :asOf
+            """)
+    List<Complaint> findSlaBreachCandidates(@Param("asOf") Instant asOf);
 
     /**
      * Loads a complaint holding a row lock until the surrounding transaction ends. Serialises
@@ -56,7 +67,36 @@ public interface ComplaintRepository extends JpaRepository<Complaint, UUID> {
                                    @Param("pattern") String pattern,
                                    Pageable page);
 
-    /** All complaints, used to aggregate category counts and resolution stats (Requirement 16.9). */
-    @Override
-    List<Complaint> findAll();
+    /**
+     * Complaint count per category (Requirement 16.9), aggregated in the database. Categories with
+     * no complaint are absent; the stats calculator fills them in with zero.
+     */
+    @Query("""
+            select new com.jihajoor.complaint.domain.ComplaintCategoryCount(c.category, count(c))
+            from Complaint c
+            group by c.category
+            """)
+    List<ComplaintCategoryCount> countByCategory();
+
+    /**
+     * How many complaints are resolved (RESOLVED/CLOSED with a resolution time) and the sum of
+     * their creation-to-resolution times in whole milliseconds (Requirement 16.9), aggregated in the
+     * database.
+     *
+     * <p>Each time is taken to the nanosecond and floored to the millisecond before summing, which
+     * is what {@code Duration.toMillis()} does per complaint in
+     * {@link com.jihajoor.complaint.service.ComplaintStatsCalculator#aggregate}, so both give the same
+     * average. ({@code by second} is not used: H2 truncates it to whole seconds per row while
+     * PostgreSQL keeps the fraction.)
+     */
+    @Query("""
+            select new com.jihajoor.complaint.domain.ComplaintResolutionTotals(
+                       count(c),
+                       sum(floor(((c.resolvedAt - c.createdAt) by nanosecond) / 1000000)))
+            from Complaint c
+            where c.status in (com.jihajoor.complaint.domain.ComplaintStatus.RESOLVED,
+                               com.jihajoor.complaint.domain.ComplaintStatus.CLOSED)
+              and c.resolvedAt is not null
+            """)
+    ComplaintResolutionTotals resolutionTotals();
 }

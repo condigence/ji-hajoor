@@ -332,6 +332,11 @@ Email codes, password-reset codes and staff invitation links are not mailed loca
 Service appends every email, whole, to **`docker/dev-mail/dev-mail.log`** (`EMAIL_PROVIDER=file`
 in `docker-compose.core.yml`), the counterpart of the dev SMS log.
 
+To see them as real email instead, set `EMAIL_PROVIDER=smtp` and `NOTIFICATION_EMAIL_PROVIDER=smtp` in
+`.env` and start the stack with `--profile mail`: the Auth and Notification services then send
+over SMTP to Mailpit, whose inbox is at <http://localhost:8025>. `docker/verify-signup.sh` and the
+apps' dev-mail hints read the log file, so they only work with the default `file` provider.
+
 ```bash
 tail -n 20 docker/dev-mail/dev-mail.log                         # the latest emails
 grep -A6 'To: asha@example.com' docker/dev-mail/dev-mail.log | tail -6   # one address's latest
@@ -528,7 +533,7 @@ for up to 15 minutes.
 ## 5. What works and what does not, today
 
 Knowing this up front saves debugging time. [CODEBASE_REVIEW.md](../CODEBASE_REVIEW.md)
-sections 16 to 18 have the detail and the verification behind it.
+sections 16 to 21 have the detail and the verification behind it.
 
 **Works end to end** (the check scripts in section 1.3 cover the first eight)
 
@@ -553,24 +558,27 @@ sections 16 to 18 have the detail and the verification behind it.
   verification, bookings, payments and refunds, complaints, reviews, coupons, pricing,
   dispatch weights, reports, notification templates, audit log, system configuration) with
   role tiers enforced; plus Tenants and the Tenant Portal
+- **Provider onboarding in the app**: services and skills, service area and base location,
+  weekly availability and verification documents; the admin sees the documents in the review
+  dialog (stored under `docker/dev-documents` locally, S3 with `DOCUMENTS_BUCKET`)
+- **After the job**: before/after photos on the customer's booking detail, the invoice PDF
+  download once paid, complaint refunds approved (and re-sent if their outcome is unknown) from
+  the Admin Portal, chat that reloads its history after a dropped connection
 - All three web apps build, serve and proxy correctly
+- **Under load** (section 8): 82 complete journeys in a 4-minute run with 60 browsing and 12
+  booking customers and 8 providers, browse p95 21 ms, no service errors; the gateway's per-user
+  and OTP limits hold under a burst
 
 **Still not working**
 
 | Area | Symptom | Review reference |
 | --- | --- | --- |
-| Chat | The apps call the wrong endpoints and open a raw WebSocket against a STOMP server no route serves | 17.5 |
-| Provider onboarding | No screens for base location, radius, availability, skills or documents, so a provider who signs up in the app can never be matched; only the seeded providers can | 17.5 |
-| Real external providers | Payment gateways (outside the local simulator), SMS/email/push, document storage, background checks and geocoding are logging or in-memory stubs | 16.12 |
-| Notifications | Every channel is a logging adapter; push has no device tokens to send to. OTP codes go to `docker/dev-sms/dev-sms.log`; sign-up and reset codes and invitation links go to `docker/dev-mail/dev-mail.log` (no real email provider yet) | 16.12 |
-| Complaint refunds | Recorded once per complaint and shown as succeeded, but the refund adapter only logs (`stub_rf_…` reference): no money is returned through payment-service | 17.3 |
-| Ratings | Reviews never reach provider-service, so a provider's aggregate rating (used in matching) never changes | 17.5 |
-| Location privacy | Any signed-in customer or provider with a booking id can read that booking's provider position | 17.5 |
-| Stuck searches | A dispatch failure after `BookingCreated` is acknowledged (outage, restart mid-search) leaves the booking in `SEARCHING_PROVIDER` with no sweeper | 17.5 |
+| Real external providers | Locally, payments go through the simulator unless Razorpay test keys are set, email goes to the dev mail log unless `EMAIL_PROVIDER=smtp` (Mailpit), and job photos and verification documents to `docker/dev-media` and `docker/dev-documents` unless `MEDIA_BUCKET` / `DOCUMENTS_BUCKET` are set. Push, background checks and geocoding are still logging stubs; invoice PDFs are kept in memory and re-rendered on download | 20, 21 |
+| Provider availability | There is no online/offline switch: every approved provider in range is offered jobs, and one who is not using the app holds a place in the offer wave for the full 60 s window | 21 |
+| Admin dashboard and audit log | The dashboard's metrics come from a stub source and are all zero; the audit log records only system-configuration changes | 21 |
+| Notifications | Push and SMS (from notification-service) are logging adapters; push has no device tokens to send to. Email is logged unless `NOTIFICATION_EMAIL_PROVIDER=smtp`. OTP codes go to `docker/dev-sms/dev-sms.log`; sign-up and reset codes and invitation links go to `docker/dev-mail/dev-mail.log`, or to Mailpit with the `mail` profile | 20 |
 | Coupon redemption | Coupons are quoted and charged, but nothing calls promotion-service's redeem, so usage limits are never consumed | 16.12 |
-| Saved addresses | customer-service cannot list a customer's addresses, so the app can only reuse ones saved from that device | 16.12 |
-| Admin display fields | Customer, provider and reviewer names and mobile numbers are blank in several admin tables; dispatch weights reset on restart | 17.5 |
-| Parts-quote timeout | The 60-minute auto-resolve exists but nothing schedules it | ARCHITECTURE 5.4 |
+| Admin display fields | Customer, provider and reviewer names and mobile numbers are blank in several admin tables; the assigned professional's card and the job description are blank on the booking detail | 17.5, 21 |
 | Native mobile builds | Android and iOS projects exist but were not built on this machine (no Android SDK, JDK 25 too new for Gradle 8.11; iOS needs macOS). See `frontend/MOBILE.md` | 18 |
 | Tenant alerts | Tenant admins are not pushed new requests; the portal polls every 15 s | 18 |
 
@@ -590,6 +598,7 @@ PGPASSWORD=<postgres superuser password> "/c/Program Files/PostgreSQL/18/bin/psq
   -h localhost -U postgres -c "DROP DATABASE jihajoor WITH (FORCE)" -c "CREATE DATABASE jihajoor OWNER jihajoor"
 . docker/local-infra.sh && "$PSQL" -f docker/init-db.sql
 rm -f docker/dev-sms/dev-sms.log docker/dev-mail/dev-mail.log
+rm -rf docker/dev-media docker/dev-documents
 ```
 
 `down -v` no longer resets anything: the data lives in the host's Postgres, not a volume.
@@ -612,3 +621,17 @@ The local stack is deliberately insecure and several of these values are committ
   (`PAYMENT_SIMULATOR_ENABLED`, signed with a default secret); Helm never enables it
 
 Never reuse any of these outside a local machine, and never point this Compose file at a shared database. The production path for all of them is AWS Secrets Manager, described in [ARCHITECTURE.md](ARCHITECTURE.md) section 10.2.
+
+---
+
+## 8. Load testing
+
+The k6 scripts in [`loadtest/`](../loadtest/README.md) run in Docker against the CI layout of the
+stack (fixed OTP code, payment simulator, seeded catalog), not against this Compose stack:
+
+```bash
+bash loadtest/run.sh stack-up                   # stop this stack first: ~6 GB of Docker memory
+PROFILE=load bash loadtest/run.sh marketplace
+bash loadtest/run.sh guardrails
+bash loadtest/run.sh stack-down
+```

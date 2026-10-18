@@ -13,6 +13,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.support.TransactionOperations;
 
 import com.jihajoor.rating.audit.AuditLogEntry;
 import com.jihajoor.rating.config.RatingProperties;
@@ -21,11 +22,14 @@ import com.jihajoor.rating.domain.Review;
 import com.jihajoor.rating.domain.ReviewPrompt;
 import com.jihajoor.rating.domain.ReviewerRole;
 import com.jihajoor.rating.event.PaymentCompletedEvent;
+import com.jihajoor.rating.provider.ProviderRatingChanged;
+import com.jihajoor.rating.provider.ProviderRatingSnapshot;
+import com.jihajoor.rating.provider.ProviderRatingSync;
 import com.jihajoor.rating.support.FixedReviewerAccountPort;
 import com.jihajoor.rating.support.InMemoryAuditLogRepository;
+import com.jihajoor.rating.support.InMemoryProviderRatingSyncRepository;
 import com.jihajoor.rating.support.InMemoryReviewPromptRepository;
 import com.jihajoor.rating.support.InMemoryReviewRepository;
-import com.jihajoor.rating.support.RecordingAdminAlertPort;
 import com.jihajoor.rating.support.RecordingProviderRatingPort;
 import com.jihajoor.rating.support.RecordingReviewSubmittedPublisher;
 
@@ -34,9 +38,14 @@ import com.jihajoor.rating.support.RecordingReviewSubmittedPublisher;
  *
  * <p>Covers: expired-window rejection (15.2, Property 15), weighted aggregate over mixed recency
  * (15.4, Property 16), fraud-flag triggers and their exclusion from the aggregate (15.5,
- * Property 17), the {@code ReviewSubmitted} event only for non-flagged reviews (15.6), auto-flag
- * UNDER_REVIEW below threshold (15.7, 15.8), and Admin removal recalculating the aggregate with an
- * Audit_Log entry (15.9). Example-based; no Spring context, DB, or Kafka.
+ * Property 17), the {@code ReviewSubmitted} event only for non-flagged reviews (15.6), a low
+ * aggregate reaching the Provider Service, which flags UNDER_REVIEW (15.7, 15.8), and Admin removal
+ * recalculating the aggregate with an Audit_Log entry (15.9). Example-based; no Spring context, DB,
+ * or Kafka.
+ *
+ * <p>The provider aggregate is observed where it lands: {@link RecordingProviderRatingPort}, through
+ * a real {@link ProviderRatingSync}. There is no transaction here, so "after commit" is straight
+ * after the change is recorded.
  */
 class ReviewServiceTest {
 
@@ -48,14 +57,19 @@ class ReviewServiceTest {
     private final InMemoryAuditLogRepository auditLog = new InMemoryAuditLogRepository();
     private final RecordingReviewSubmittedPublisher publisher = new RecordingReviewSubmittedPublisher();
     private final RecordingProviderRatingPort providerRating = new RecordingProviderRatingPort();
-    private final RecordingAdminAlertPort adminAlert = new RecordingAdminAlertPort();
+    private final InMemoryProviderRatingSyncRepository ratingSyncState = new InMemoryProviderRatingSyncRepository();
     private final FixedReviewerAccountPort accounts = new FixedReviewerAccountPort();
     private final RatingProperties properties = new RatingProperties();
 
     private ReviewService serviceAt(Instant now) {
         Clock clock = Clock.fixed(now, ZoneOffset.UTC);
-        return new ReviewService(reviews, prompts, auditLog, publisher, providerRating, adminAlert,
-                accounts, properties, clock);
+        // The event publisher stands in for the AFTER_COMMIT listener.
+        ProviderRatingSync[] ratingSync = new ProviderRatingSync[1];
+        ratingSync[0] = new ProviderRatingSync(reviews, ratingSyncState, providerRating,
+                event -> ratingSync[0].onRatingChanged((ProviderRatingChanged) event), properties,
+                TransactionOperations.withoutTransaction(), clock);
+        return new ReviewService(reviews, prompts, auditLog, publisher, ratingSync[0], accounts,
+                properties, clock);
     }
 
     private ReviewPrompt openCustomerPrompt(UUID bookingId, UUID customerId, UUID providerId,
@@ -211,10 +225,14 @@ class ReviewServiceTest {
         assertThat(review.isFlagged()).isTrue();
     }
 
-    // ---- Auto-flag UNDER_REVIEW below threshold (15.7, 15.8) -----------------------------------
+    // ---- Low aggregate reaches the Provider Service, which flags UNDER_REVIEW (15.7, 15.8) -------
 
+    /**
+     * Each review sets the whole aggregate, with its count and a rising sequence; the Provider
+     * Service decides UNDER_REVIEW from it (alerting once is tested there and in RatingAdaptersTest).
+     */
     @Test
-    void aggregateBelowThresholdFlagsProviderAndAlertsAdminOnce() {
+    void everyReviewPushesTheWholeAggregateWithARisingSequence() {
         UUID provider = UUID.randomUUID();
         UUID booking = UUID.randomUUID();
         UUID customer = UUID.randomUUID();
@@ -224,17 +242,76 @@ class ReviewServiceTest {
         // Single 2-star review -> aggregate 2.00 (< 3.0 default threshold).
         service.submitCustomerReview(command(booking, customer, 2));
 
-        assertThat(providerRating.lastAggregate(provider)).isEqualByComparingTo("2.00");
-        assertThat(providerRating.isUnderReview(provider)).isTrue();
-        assertThat(adminAlert.alerted).containsExactly(provider);
-
-        // A second low review recalculates but must not re-alert (already UNDER_REVIEW).
         UUID booking2 = UUID.randomUUID();
         UUID customer2 = UUID.randomUUID();
         openCustomerPrompt(booking2, customer2, provider, NOW);
-        service.submitCustomerReview(command(booking2, customer2, 1));
+        // Another IP, or the same-IP burst rule would hold the second review out of the aggregate.
+        service.submitCustomerReview(new SubmitReviewCommand(booking2, customer2, 1, 1, 1, 1, 1,
+                "poor", List.of(), "203.0.113.7"));
 
-        assertThat(adminAlert.alerted).containsExactly(provider);
+        assertThat(providerRating.pushes(provider)).containsExactly(
+                new ProviderRatingSnapshot(new BigDecimal("2.00"), 1, 1),
+                new ProviderRatingSnapshot(new BigDecimal("1.50"), 2, 2));
+        assertThat(ratingSyncState.findById(provider).orElseThrow().isOwed()).isFalse();
+    }
+
+    /** A provider's rating of a customer is not about any provider: nothing is pushed. */
+    @Test
+    void providerReviewOfACustomerDoesNotTouchAnyProviderAggregate() {
+        UUID booking = UUID.randomUUID();
+        UUID provider = UUID.randomUUID();
+        UUID customer = UUID.randomUUID();
+        openProviderPrompt(booking, provider, customer, NOW);
+
+        serviceAt(NOW).submitProviderReview(command(booking, provider, 1));
+
+        assertThat(providerRating.pushes(provider)).isEmpty();
+        assertThat(providerRating.pushes(customer)).isEmpty();
+        assertThat(ratingSyncState.findById(provider)).isEmpty();
+        assertThat(ratingSyncState.findById(customer)).isEmpty();
+    }
+
+    /** Removing the only counted review sets "no rating" (count 0), not a stale 1-star average. */
+    @Test
+    void removingTheOnlyCountedReviewPushesAnEmptyRating() {
+        UUID provider = UUID.randomUUID();
+        Review only = reviews.save(Review.customerReview(UUID.randomUUID(), UUID.randomUUID(), provider,
+                1, 1, 1, 1, 1, "abuse", "2.2.2.2", false, NOW.minus(Duration.ofDays(1))));
+
+        serviceAt(NOW).removeReview(only.getId(), UUID.randomUUID(), "abusive language");
+
+        ProviderRatingSnapshot last = providerRating.last(provider);
+        assertThat(last.count()).isZero();
+        assertThat(last.average()).isNull();
+    }
+
+    /**
+     * The review is committed whether or not the Provider Service is reachable; the rating stays
+     * owed and the sweep delivers it once the Provider Service is back.
+     */
+    @Test
+    void aProviderServiceOutageDoesNotFailTheReviewAndTheSweepDeliversItLater() {
+        UUID provider = UUID.randomUUID();
+        UUID booking = UUID.randomUUID();
+        UUID customer = UUID.randomUUID();
+        openCustomerPrompt(booking, customer, provider, NOW);
+        providerRating.failTransiently();
+
+        Review review = serviceAt(NOW).submitCustomerReview(command(booking, customer, 4));
+
+        assertThat(reviews.findById(review.getId())).isPresent();
+        assertThat(providerRating.pushes(provider)).isEmpty();
+        assertThat(ratingSyncState.findById(provider).orElseThrow().isOwed()).isTrue();
+
+        providerRating.recover();
+        Instant later = NOW.plus(properties.getProviderSync().getSweepMinAge());
+        ProviderRatingSync sweeperSync = new ProviderRatingSync(reviews, ratingSyncState, providerRating,
+                event -> { }, properties, TransactionOperations.withoutTransaction(),
+                Clock.fixed(later, ZoneOffset.UTC));
+        assertThat(sweeperSync.pushOwed()).isEqualTo(1);
+        assertThat(providerRating.last(provider))
+                .isEqualTo(new ProviderRatingSnapshot(new BigDecimal("4.00"), 1, 1));
+        assertThat(ratingSyncState.findById(provider).orElseThrow().isOwed()).isFalse();
     }
 
     // ---- Admin removal recalculates aggregate + audits (15.9) ----------------------------------

@@ -5,6 +5,8 @@ import java.util.UUID;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
@@ -13,8 +15,10 @@ import jakarta.persistence.Table;
  * Reference to a media file attached to a booking and stored in object storage (design
  * {@code JOB_MEDIA}, Requirement 7.2).
  *
- * <p>Only the S3 object key and metadata are stored here; the bytes live in S3 behind the
- * {@code MediaStoragePort}.
+ * <p>Only the storage key and metadata are stored here; the bytes live behind the
+ * {@code MediaStoragePort} adapter named by {@link #getStorage()}: an S3 object, or a file on the
+ * local disk of the instance that accepted the upload. The column holding the key is still called
+ * {@code s3_key} for both, since renaming it would gain nothing but a migration.
  */
 @Entity
 @Table(name = "job_media", indexes = {
@@ -45,22 +49,41 @@ public class JobMedia {
     @Column(name = "uploaded_at", nullable = false, updatable = false)
     private Instant uploadedAt;
 
+    /** Which store holds the bytes under {@link #s3Key} (V5; earlier rows are LOCAL). */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "storage", nullable = false, length = 10)
+    private MediaStorageKind storage;
+
     protected JobMedia() {
         // JPA
     }
 
-    private JobMedia(UUID bookingId, String type, String contentType, long sizeBytes, String s3Key) {
-        this.id = UUID.randomUUID();
+    private JobMedia(UUID id, UUID bookingId, String type, String contentType, long sizeBytes,
+                     MediaStorageKind storage, String s3Key) {
+        this.id = id;
         this.bookingId = bookingId;
         this.type = type;
         this.contentType = contentType;
         this.sizeBytes = sizeBytes;
+        this.storage = storage;
         this.s3Key = s3Key;
         this.uploadedAt = Instant.now();
     }
 
+    /** A LOCAL row with a fresh id, for callers (mostly tests) that do not care where bytes live. */
     public static JobMedia of(UUID bookingId, String type, String contentType, long sizeBytes, String s3Key) {
-        return new JobMedia(bookingId, type, contentType, sizeBytes, s3Key);
+        return new JobMedia(UUID.randomUUID(), bookingId, type, contentType, sizeBytes,
+                MediaStorageKind.LOCAL, s3Key);
+    }
+
+    /**
+     * The row for bytes already written to {@code storage} under {@code key}. The id is chosen by
+     * the caller before the upload, because the storage key embeds it
+     * ({@code bookings/{bookingId}/{id}.{ext}}).
+     */
+    public static JobMedia stored(UUID id, UUID bookingId, String type, String contentType, long sizeBytes,
+                                  MediaStorageKind storage, String key) {
+        return new JobMedia(id, bookingId, type, contentType, sizeBytes, storage, key);
     }
 
     public UUID getId() {
@@ -89,5 +112,9 @@ public class JobMedia {
 
     public Instant getUploadedAt() {
         return uploadedAt;
+    }
+
+    public MediaStorageKind getStorage() {
+        return storage;
     }
 }

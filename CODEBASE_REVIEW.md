@@ -4,39 +4,39 @@
 **Repository:** `condigence/ji-hajoor` (branch `main`)
 **Scope:** entire repository — 20 Spring Boot services, 4 shared libraries, 3 React apps, Docker Compose, Helm, Kubernetes manifests, Terraform, GitHub Actions, and the `.kiro` specifications.
 
-> **Remediation in progress.** A first pass of fixes has landed since this review was written. See
-> [Section 12](#12-remediation-status) for exactly what is fixed, what is partially fixed and what is
-> untouched. The findings below are kept as originally written so the record of what was found stays
-> intact; Section 12 is the authoritative current state.
+> **Current status: reviewed 2026-10-18.** Sections 1–18 preserve the original findings and dated
+> follow-up passes; some findings there have since been fixed. Sections 19 and 20 are the morning's
+> source-checked review and its fixes; [Section 21](#21-load-test-and-gap-review---2026-10-18) is the
+> afternoon's load test, app-to-service gap review and fixes, and holds the current list of open items. Historical test results are dated and are not a claim that
+> the current HEAD has passed the same checks.
 >
 > Supporting documents added alongside the fixes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for
 > flow, sequence, data-model and state diagrams, [docs/API_CONTRACTS.md](docs/API_CONTRACTS.md) for
-> REST and event JSON contracts, and [docs/LOCAL_ACCESS.md](docs/LOCAL_ACCESS.md) for test users and
-> URLs.
+> REST and event JSON contracts, [docs/LOCAL_ACCESS.md](docs/LOCAL_ACCESS.md) for test users and
+> URLs, and [loadtest/](loadtest/README.md) for the k6 load tests.
 
 ---
 
 ## 1. Executive summary
 
-Ji-Hajoor is an on-demand home-services marketplace (customers book verified providers for scheduled or emergency jobs). The codebase is a well-structured, spec-driven implementation of a 20-service event-driven architecture. The engineering fundamentals are strong: consistent hexagonal layout, transactional outbox + idempotent consumers, `BigDecimal` money handling, state machines as single sources of truth, injected clocks, property-based tests, and hardened Terraform.
+Ji-Hajoor is an on-demand home-services marketplace. The current repository has a root Maven
+reactor, 20 Spring services hosted in five deployable JVMs, three React applications, per-service
+Flyway migrations, and a transactional Kafka outbox. The documented booking, payment, provider
+acceptance, and tenant-assignment flows have advanced substantially since the original review.
 
-However, the platform is **not deployable or safe to expose as it stands**. The review found a small number of systemic gaps that affect nearly every service, plus several broken inter-service contracts that prevent the core booking flow from completing end to end.
+The engineering base is credible: domain-oriented service boundaries, explicit state transitions,
+database-backed migrations, role and ownership checks, and reproducible local infrastructure. The
+current review does **not** support the earlier conclusion that the core booking flow is broadly
+broken. It found a concrete chat integration mismatch and a WebSocket authorization gap, both now
+fixed, alongside readiness questions that need current end-to-end verification.
 
-**Overall verdict:** solid foundation, pre-alpha integration state. The remaining work is mostly wiring, authorization, and operational plumbing rather than domain logic.
-
-### The seven issues that matter most
-
-| # | Issue | Blast radius |
-|---|-------|--------------|
-| 1 | **No role-based authorization is configured anywhere except admin- and reporting-service.** The shared RBAC filter passes through when no rule matches, and the gateway only checks that a token is valid. Any authenticated customer can approve refunds, verify providers, moderate reviews, change pricing/dispatch parameters, and mutate the catalog. | All 18 other services |
-| 2 | **No object-level ownership checks.** Controllers never compare the JWT subject to the `{id}` in the path. Any user can act on any booking, provider profile, wallet, invoice, review or verification. | booking, provider, customer, verification, rating, location, payment, invoice, complaint |
-| 3 | **Self-service ADMIN registration.** The auth registration endpoint accepts any role name from the request body, including `ADMIN`. | Whole platform |
-| 4 | **Default secrets in every `application.yml`.** JWT signing secret, DB password, webhook secrets and AES data keys all have hard-coded fallbacks; a missing env var silently ships forgeable tokens and decryptable PII. | All services |
-| 5 | **The booking → dispatch → accept flow cannot complete.** Dispatch calls internal booking endpoints that do not exist, the `BookingCreated` event schema differs between producer and consumer (search runs at lat/lon 0,0), the requested state transition is illegal, and the outbox relay polls the wrong DB schema so events are never published at all. | Core product flow |
-| 6 | **No database migrations.** All services use `ddl-auto: validate`; local Compose overrides to `update`; there is no Flyway/Liquibase and `init-db.sql` creates only schemas. Any non-Compose deployment fails at startup. | All DB-backed services |
-| 7 | **CI/CD deploys a non-existent `hello-world-service`**, never builds the jars its Dockerfiles copy, never installs the `shared/` modules, and the Helm chart probes `/actuator/health/*` on port 8080 while services serve `/health/*` on 8081–8099. Nothing real is tested, built or deployed by the pipeline. | Delivery |
-
-A prioritised remediation plan is in [Section 11](#11-remediation-roadmap).
+**Current verdict:** a substantial working platform with dated evidence of successful end-to-end
+flows; not yet a production-readiness sign-off. The chat contract and its authorization boundary,
+the highest-priority finding of 2026-10-18, are repaired, and the eight open items that pass
+listed were implemented the same day (Section 20). See [Section 21](#21-load-test-and-gap-review---2026-10-18)
+for the load test, the gaps fixed after it and what is still open, Section 20 for the eight
+items, and Section 19 for the chat findings. Sections 8–18 remain useful as historical evidence,
+not as a live list of unresolved defects.
 
 ### Housekeeping done during this review
 
@@ -1201,3 +1201,291 @@ bake a developer's local `.env` into the web build (`.dockerignore` now excludes
 
 Operational note: six parallel builds exhausted host memory and froze the Docker engine; it needed a
 Docker Desktop restart. Run module builds one at a time on this machine.
+
+## 19. Current review - 2026-10-18
+
+Every item that Section 18 lists as found but not yet fixed, plus the limitations that
+`docs/ARCHITECTURE.md` still described, was re-checked against the source at this date. One live
+defect was found (chat) and fixed, along with one small resilience gap.
+
+### 19.1 Re-verified as fixed
+
+All 20 items in Section 18 ("Found during the documentation pass, not yet fixed") are fixed in the
+current source: the Tenant-admin cache (now 5 s, bypassed on assignment), `removeAdmin` ordering,
+`HttpCatalogClientAdapter`, the unused admin-portal screens, the payment retry with a charge in
+flight (409 `PAYMENT_IN_FLIGHT`), permanent 4xx in the wallet sweeper, `AWAITING_ASSIGNMENT`
+protecting its address, 409 on confirming a non-`CREATED` booking, completion only from
+`JOB_STARTED`, the multipart limits, decoded-path matching in the internal-key filters and the
+gateway, location ownership checks, 401/403 from provider-service no longer read as an empty
+market, invoice month validation, pricing range checks, complaint resolution notes,
+`PARTIALLY_REFUNDED` refunds, cancelling a `CREATED` booking, and dispatch's dead notification
+calls.
+
+Five limitations that `docs/ARCHITECTURE.md` still described are also fixed: `StalledSearchSweeper`
+for searches stuck in `SEARCHING_PROVIDER`, dispatch's `AcceptanceLedger` (no dual write for
+`ProviderAccepted`), `QuoteApprovalTimeoutSweeper`, the MSG91 SMS adapter, and resilience on
+outbound clients. The architecture document was corrected in this pass.
+
+### 19.2 Fixed in this pass
+
+1. **Chat did not work end to end.** The customer app called `GET /chat/bookings/{id}/channel`,
+   which did not exist, then opened a plain WebSocket at `/chat/channels/{id}/ws` (the path the
+   gateway accepts `?access_token=` on) and read `channelId`/`senderRole`; chat-service served only
+   STOMP at `/ws/chat`, unrouted, and sent `bookingId`/`senderId`. chat-service now has the channel
+   endpoint, a plain WebSocket at the apps' path (`ChatSocketConfig`, `ChatSocketHandler`,
+   `ChatSocketHandshakeInterceptor`, `ChatSocketSessions`) and a message shape carrying both sets of
+   fields. The handshake answers 401/404/403 for no principal, unknown booking or non-participant;
+   frames go through `ChatService.sendMessage`, so masking, persistence and the offline push apply;
+   a closed channel ends the socket with 1000, which the apps do not retry. RBAC rules cover both new
+   paths.
+2. **STOMP clients could bypass the participant check.** `WebSocketAuthorizationConfig` checked only
+   `SUBSCRIBE`; a client could `SEND` straight to `/topic/chat/{bookingId}`. Client `SEND` to
+   `/topic/**` and `/queue/**` is now refused.
+3. **Presence was never recorded.** Nothing called `PresenceRegistry.markOnline`, so every message
+   also raised an unread push. Open sockets now mark their user online for the booking, and the
+   last socket to close marks them offline.
+4. **The provider app had no chat.** Added `features/chat` (channel, history, WebSocket hook,
+   screen) and a "Message customer" button on the active job.
+5. **customer-service's booking check had no timeout.** `HttpBookingClientAdapter` now bounds
+   connect and read at `jihajoor.booking.timeout` (3 s by default); a timeout fails the address
+   deletion, as any other lookup failure does.
+
+Verification on this machine: chat-service 92 unit tests pass (11 new socket tests, plus new
+controller and RBAC cases); customer-service 55 pass; the provider app type-checks and lints
+clean. Its Vitest suite did not start here because the machine has Node 20 and the apps need
+Node 24 (missing rolldown native binding). Not verified: a live end-to-end chat between the two
+apps through the gateway.
+
+### 19.3 Still open at the time
+
+All eight were implemented later the same day; see Section 20.
+
+
+| # | Item | Evidence |
+|---|---|---|
+| 1 | Dispatch matching weights are process-local: lost on restart, different per replica | `dispatch-engine/.../domain/MatchingWeightsStore.java` |
+| 2 | Complaint refunds report success through a logging stub; no money moves | `complaint-service/.../payment/LoggingRefundAdapter.java` |
+| 3 | Reviews never update a provider's aggregate rating | `rating-review-service/.../provider/LoggingProviderRatingAdapter.java`; no `ReviewSubmitted` consumer in provider-service |
+| 4 | No production email provider (sign-up codes, resets, invitations) | only `LoggingEmailSenderAdapter` and `FileEmailSenderAdapter` |
+| 5 | Booking photos use local storage only | `booking-service/.../media/LocalMediaStorageAdapter.java` |
+| 6 | Chat presence and the STOMP broker are single-node | `InMemoryPresenceRegistry`, `ChatSocketSessions`, `enableSimpleBroker` |
+| 7 | `infra/k8s` assumes four domain namespaces plus `monitoring`; CD deploys into one namespace | `infra/k8s/observability/*`, `.github/workflows/deploy-services.yml` |
+| 8 | Stripe charges, refunds and transfers are simulated | `payment-service/.../gateway/StripeGatewayAdapter.java` |
+
+Each needs a product or infrastructure decision (a vendor, a broker, a persistence home for the
+weights, how refunds should reach payment-service) rather than a code-only fix.
+
+An architecture deck for this state of the platform is at
+[docs/JiHajoor_Architecture.pptx](docs/JiHajoor_Architecture.pptx).
+
+## 20. Open items implemented - 2026-10-18
+
+The eight items in 19.3 were implemented, plus one correction: 19.1 relied on a read-only check
+that called verification-service's `S3DocumentStorageAdapter` real. It only logs and discards the
+bytes; verification documents are still not stored (20.2).
+
+### 20.1 What changed
+
+| # | Item | Now |
+|---|---|---|
+| 1 | Dispatch settings lost on restart | The five weights (distance, availability, rating, skill, performance) and the six tunables live in one row of `dispatch.dispatch_settings` (V3), with CHECK constraints, `updated_by`/`updated_at`/`version`. Every replica re-reads it within `DISPATCH_SETTINGS_CACHE_TTL` (10 s); each search uses one snapshot. Until the first admin save the `DISPATCH_*` defaults apply. Admin API unchanged. |
+| 2 | Complaint refunds moved no money | complaint-service calls payment-service's new `POST /internal/payments/refunds` (service credential, key `complaint-refund:<id>`), which reuses `PaymentService.refund` and Razorpay. Refusals record `REFUND_FAILED`; an unknown outcome leaves the refund `PENDING`, alerts Finance, and only a same-key retry re-sends it. complaint V3, payment V4. |
+| 3 | Reviews never changed a provider's rating | rating-review-service pushes the aggregate (customer reviews only, with a sequence number) to provider-service's `PUT /internal/providers/{id}/rating` after every submit, approval and removal commits; failures stay owed in `rating.provider_rating_sync` and a sweeper re-sends them each minute. Idempotent set, older sequences ignored. rating V2, provider V5. |
+| 4 | No email provider | `smtp` adapters in auth-service and notification-service (Spring Mail, modelled on the shiprock notification service): Amazon SES SMTP in Helm, opt-in Mailpit locally (`docker compose --profile mail`). SMTP 5xx replies are permanent failures. Verification codes were moved out of subjects (subjects were logged), and resend is now enumeration-safe. Settings use `SMTP_*`, never `SPRING_MAIL_*`, which would reach every service in a shared JVM. |
+| 5 | Booking photos local only | `MEDIA_STORAGE_PROVIDER=auto` (default): S3 when `MEDIA_BUCKET` is set and a startup `HeadBucket` succeeds, local disk otherwise (with a WARN); `s3` fails startup instead, `local` never tries. Each `job_media` row records where it went (booking V5). New `GET /bookings/{key}/photos/{photoId}` streams a photo under the detail's access rule. The old local adapter never wrote any bytes, so earlier photos answer 404 `MEDIA_NOT_FOUND`. |
+| 6 | Chat single-node | `CHAT_CLUSTER=redis` (default): every stored message is published once on Redis pub/sub and each node delivers it to its own sockets and STOMP subscribers, so each socket gets it once. Presence is a Redis sorted set of per-socket expiries refreshed by a 3 s heartbeat with a 10 s TTL, so a crashed node's users lapse to "offline, push" within 10 s. `local` keeps the single-process mode. |
+| 7 | Kubernetes namespaces | One namespace per environment, Terraform `k8s_namespace` (default `jihajoor`) = the pipeline's `K8S_NAMESPACE`. Terraform creates it and one IRSA role per deployable trusting that namespace (previously six per-domain namespaces and per-service roles nothing ran in). The stale per-service HPAs and KEDA objects were removed; KEDA lag scaling moved into the chart with the real consumer groups (`keda.enabled`). Prometheus now scrapes every hosted service's port by label (previously only each deployable's first service), and the alert and Fluent Bit routes match container names. |
+| 8 | Stripe simulated | Removed: Razorpay is the gateway. The adapter, its required `STRIPE_WEBHOOK_SECRET` (compose, Helm, CI, `.env.example`) and the references are gone; tests use a test-only second gateway. |
+
+### 20.2 Verification
+
+- Unit tests, one module at a time with JDK 25: auth-service 386, booking-service 496,
+  chat-service 115, complaint-service 114, customer-service 55, dispatch-engine 253,
+  notification-service 191, payment-service 188, provider-service 231, rating-review-service 100.
+  All pass.
+- Every changed service was started from its packaged deployable against a throwaway
+  PostgreSQL 18 (initialised with `docker/init-db.sql`). All new migrations applied (booking V5,
+  complaint V3, dispatch V3, payment V4, provider V5, rating V2), and Hibernate schema validation
+  passed in each. payment-service also started without any Stripe variable. The rating upsert
+  (`INSERT ... ON CONFLICT`) was run against it directly.
+- The Helm chart lints `--strict` for every deployable in staging and production, and renders a
+  ScaledObject instead of an HPA for jobs-app, money-app and engagement-app when KEDA is enabled.
+- Not verified here: an end-to-end run of the stack (Docker Desktop would not start), real SES or
+  S3, two chat-service instances against one Redis, `terraform plan`, and the frontend Vitest
+  suites (Node 20 here; the apps need 24).
+
+### 20.3 Still open
+
+| # | Item |
+|---|---|
+| 1 | Provider verification documents are not stored: `S3DocumentStorageAdapter` only logs. |
+| 2 | The apps do not show stored job photos yet; they need to fetch `GET /bookings/{key}/photos/{id}` as a blob (it needs the bearer header). |
+| 3 | A complaint refund approved without a client `idempotencyKey` cannot be re-sent after an unknown outcome, and complaint-service has no reconcile endpoint. |
+| 4 | Chat pub/sub is at-most-once: a node that is resubscribing misses messages until the apps reload history. |
+| 5 | `jihajoor.rating.under-review-threshold` and `jihajoor.provider.review-rating-threshold` must be kept equal; a provider's rating only refreshes on a review change, not as reviews age past the 90-day weighting. |
+| 6 | Deploy prerequisites: a verified SES identity and SMTP credentials (`smtp_username`/`smtp_password` in the identity-app and engagement-app Secrets), `MEDIA_BUCKET` for jobs-app, the IRSA role ARNs in each release's `serviceAccount.annotations`, and KEDA plus its TriggerAuthentication before `keda.enabled`. Applying the new Terraform replaces the old namespaces and roles. |
+| 7 | Push notifications have no device tokens; background checks are recorded by an admin. |
+
+## 21. Load test and gap review - 2026-10-18
+
+The afternoon pass did three things: built a load test (there was none) and ran it against the
+stack the Booking flow workflow uses; checked every API call the three apps make against the
+gateway route, the controller, the RBAC rules and the DTO; and reviewed the uncommitted Section 20
+change set for bugs. Everything found that could be fixed in code was fixed, verified, and is
+listed below with what is still open.
+
+### 21.1 The load test
+
+[`loadtest/`](loadtest/README.md) holds two k6 scripts, run in Docker (`grafana/k6:1.0.0`), against
+`deploy/ci/run-stack.sh`'s layout (fixed OTP code, payment simulator, seeded catalog):
+
+- `marketplace.js`: **browse** (customers reading catalog, estimate and history with think time),
+  **customers** (book, confirm, wait for a provider, watch the location, pay) and **providers**
+  (onboarded through the real verification flow in `setup()`, polling offers every 5 s like the
+  app, accepting, sending location every 5 s, uploading photos, completing). `teardown()` suspends
+  the run's providers. Profiles `smoke`, `load` (60 / 12 / 8, 4-minute hold) and `stress`.
+- `guardrails.js`: the per-user limit under a 130-request burst, the OTP throttle, and 401s under
+  50 requests a second without a token.
+
+**Results, `load` profile on the fixed build** (one laptop: Docker with 6 CPUs and 11 GB for the
+whole stack, so these are a floor, not a capacity figure):
+
+| Measure | Result | Pass mark |
+|---|---|---|
+| Complete journeys (booked, dispatched, done, paid) | **82** (3 not finished in time: provider 429s) | none failed |
+| Requests | 12,487 at 26 a second; 0.94 % unexpected statuses (25 of them 429s) | < 1 % |
+| Browse (catalog, estimate, history) | p50 6 ms, p95 **21 ms**, p99 52 ms | p95 500 ms, p99 1.5 s |
+| `POST /bookings` / confirmation | p95 **114 ms** / **65 ms** | 1.5 s |
+| `POST /locations/{id}` | p95 **76 ms** | 300 ms |
+| `POST /payments` | p95 **272 ms** | 2 s |
+| Confirm → provider accepted (outbox, Kafka, dispatch, 5 s provider poll) | p50 **4.1 s**, p95 13.7 s | p95 30 s |
+| Payment → `PAYMENT_COMPLETED` (Kafka) | p50 **1.0 s**, p95 1.1 s | p95 15 s |
+| Errors logged by the five deployables | **0** (no pool or introspection timeouts) | |
+| CPU, average / peak per deployable | 9–19 % / 49–116 % (engagement-app peak) | |
+
+Two thresholds failed, both from one cause: 25 requests refused by the provider rate limit (21.2
+item 3), which left 3 journeys unfinished. An earlier run on the same build, with this machine also
+running a Maven build and PowerPoint, showed 13 s latency spikes, 17 connection-pool timeouts in
+notification-service and 10 introspection timeouts; the pool fix (21.2 item 5) is in the run above.
+
+**Guardrails: all 2,012 checks passed.** A 130-request burst from one customer got exactly 100
+answers of 200 and 30 of 429, each with `Retry-After`, while another customer was unaffected; the
+sixth OTP request for one number in the hour got 429; 1,000 unauthenticated requests at 50 a second
+all got a clean 401, none a 5xx.
+
+### 21.2 What the load test showed
+
+1. **An idle provider costs a customer a full offer window.** In a run where approved providers from
+   earlier runs (and the seeded Ramesh Plumbing Works) were not polling, confirm → accepted took
+   **62 s** at the median; with only active providers it was **4.1 s**. Dispatch offers the
+   best-ranked three at once and waits the whole window (`DISPATCH_OFFER_TIMEOUT_SECONDS`, 60) before
+   the next wave, and there is no online/offline state for providers. **Open:** an availability toggle
+   in the provider app, honoured by `/internal/providers/eligible`.
+2. **Each dispatch search holds a thread** of its bulkhead pool for its offer windows (16 scheduled,
+   16 emergency per replica; queues 500 and 100). More than 16 concurrent scheduled searches on one
+   replica queue behind each other. Not reached in these runs; it bounds how far one jobs-app
+   replica scales.
+3. **Busy providers reach the 60-a-minute gateway limit.** With the script at the app's own cadence,
+   providers doing jobs back to back were refused 25 times in the run (`Retry-After 60`,
+   at minute boundaries: the counter uses fixed windows). The limits are now overridable without a
+   rebuild (`RATE_LIMIT_PROVIDER_PER_MINUTE`, `RATE_LIMIT_CUSTOMER_PER_MINUTE`,
+   `RATE_LIMIT_DEFAULT_PER_MINUTE`; defaults unchanged). **Open:** decide the provider limit
+   (about 40 a minute is the app's background use during a job), or exempt location pings, which
+   location-service already limits to one per 5 s.
+4. **Hot polls had no index.** `booking.booking` had none on `provider_id` (every provider's
+   active-jobs poll, every 15 s, scanned the table); `provider_skill_tag`, the profile's collection
+   tables, earnings and settlements, `rating.review`, the complaint SLA sweep and invoice lookups had
+   only primary keys. **Fixed:** booking V6, provider V6, rating V3, complaint V4, invoice V2.
+5. **notification-service ran out of database connections.** The shared `IdempotentKafkaConsumer`
+   runs each handler in one transaction with the `processed_event` insert, so it holds a connection
+   for the whole handler; notification-service's handler is contact and preference lookups plus
+   SMS, email and push sends with back-off between retries, on eleven listener threads, against a
+   pool of 4 in this layout. Under load its pool was exhausted (`HikariPool-2 ... total=4, active=4,
+   waiting=6`, 30 s timeouts), and money-app's invoice notifications to it failed. **Fixed:** a
+   consumer can opt out (`handleInOneTransaction()`), and notification-service does: its
+   `(event, recipient, channel)` delivery log already makes each send idempotent, and a retry now
+   skips channels already sent instead of rolling their records back. The second run had
+   no pool timeouts.
+6. **The gateway's token introspection timed out** (10 times in one run) while identity-app was
+   CPU-bound on this machine; a cached introspection (30 s) hides it for active users. Worth a
+   watch on identity-app's CPU in production: every new token costs one introspection.
+7. Two errors in the first runs were the script's, not the platform's, and are fixed in it: a page
+   index of 0 (booking history is 1-based, as the app sends it) and location pings faster than
+   location-service's 5-second minimum (answered 429 `LOCATION_UPDATE_RATE_LIMITED`, by design;
+   that 429 carries no `Retry-After`).
+
+### 21.3 Gaps found and fixed
+
+| # | Gap | Fix |
+|---|---|---|
+| 1 | Verification documents were discarded (`S3DocumentStorageAdapter` only logged); admins approved providers without seeing them | `DocumentStorage` (auto / s3 / local, like job photos), verification V2 records where each went; `GET /admin/verification/{pid}/documents/{id}` and the provider's own read stream the bytes (`no-store`, `nosniff`); the review dialog shows images inline and offers PDFs; `DOCUMENTS_*` in Helm, Compose, CI and `.env.example`; `docker/dev-documents` is git-ignored |
+| 2 | The Admin Portal had no way to approve a complaint refund, so Section 20's refund path was unreachable from any UI; a refund approved without a client key could not be re-sent | Refund dialog (fresh idempotency key per dialog), `GET /complaints/{id}/refund`, `POST /complaints/{id}/refund/resend` (same payment-side key, so never a double refund) |
+| 3 | The customer app's invoice download called `GET /invoices/{id}/download`, which did not exist, and waited for a field the booking detail never sends | `GET /invoices/bookings/{bookingId}` and `GET /invoices/{id}/download` (party or staff, 404 otherwise); the PDF is re-rendered from the invoice row when the in-memory copy is gone |
+| 4 | Customers could not see the job's photos | Before/after tiles on the booking detail, fetched as blobs |
+| 5 | customer-service could not list a customer's addresses, so the app reused only those saved on that device, and could send a deleted one | `GET /customers/{id}/addresses`; the booking form syncs from it |
+| 6 | The Available Professionals screen called `GET /bookings/{id}/professionals`, which never existed, and nothing linked to it | Removed, with three catalog functions pointing at missing endpoints |
+| 7 | Chat (both apps): a reconnect never reloaded history (pub/sub is at-most-once), reused an expired token forever, and a message sent as the channel closed was silently lost | History reloads after a reconnect; an expired token is refreshed through the shared single-flight refresh before retrying; chat-service closes with reason `MESSAGE_NOT_DELIVERED` and the apps put the text back |
+| 8 | Accepting an offer opened the job screen before dispatch had assigned the booking: 404, error screen | The provider app retries that first 404 for six seconds |
+| 9 | Rejected or pending providers showed a Suspend button that always got 409 | Offered only for APPROVED (Suspend) and SUSPENDED (Reactivate) |
+| 10 | Logout through the gateway (a build whose auth calls are not proxied straight to auth-service) got 401 and left the refresh token valid | The three apps send their access token on logout |
+| 11 | SMTP 530/535 (STARTTLS or authentication required, credentials refused) marked every email permanently failed after one attempt | Treated as retryable configuration errors, in auth-service and notification-service |
+| 12 | `GET /complaints/stats` read every complaint into memory | GROUP BY queries with identical results (`ComplaintStatsJpaTest`) |
+| 13 | Two rating thresholds had to be kept equal by hand | `REVIEW_RATING_THRESHOLD` sets both services |
+| 14 | The provider dashboard polled each agency-assigned job every 5 s, pushing a provider with several over 60 requests a minute; an ASAP job showed "1 Jan 1970" | 15 s per card; "As soon as possible" |
+| 15 | notification-service held a database connection through every send (21.2 item 5) | It opts out of the shared consumer's wrapping transaction |
+| 16 | `.env.example`'s `JWT_SECRET` is the value in the old home-fix repository's public commit `1b5656d`, so any environment that copied it accepts tokens anyone can mint | Replaced with a placeholder and a warning. **The local `.env` on the review machine still holds the leaked value**, and any deployed environment must be checked |
+
+Also corrected in the documents: `API_CONTRACTS.md` (location ownership, which was fixed in 19.1;
+items 11 and 12 of its defects summary; the address-in-use rule; every new endpoint),
+`ARCHITECTURE.md` (stand-ins, document storage, refunds, dispatch under load), `LOCAL_ACCESS.md`
+(provider onboarding screens exist; load testing), `README.md`, both decks.
+
+### 21.4 Review of the Section 20 change set
+
+The backend changes for the eight items held up on a close read (dispatch settings, complaint →
+payment refunds, rating sync, media storage, Redis chat and presence, Helm/KEDA/Terraform). The two
+confirmed defects were in the apps' chat (21.3 item 7). Plausible but unconfirmed, left open:
+
+- a rating push bumps the provider profile's optimistic version, so a provider's own profile edit at
+  the same moment can fail (provider-service maps the lock error only in TenantService);
+- the rating sweeper takes the oldest 100 owed rows, so 100 that keep failing starve newer ones;
+- `GET /bookings/{key}/photos/{id}` returns an `InputStreamResource`: a `Range` request would get 416,
+  and an exception after opening the S3 stream would leak its connection;
+- STOMP-only chat subscribers never register presence, so they are always pushed;
+- uploads to S3 run inside the database transaction (job photos and documents alike), so a failed
+  commit leaves unreferenced objects.
+
+### 21.5 Verification
+
+- **Unit and integration tests:** `mvn package` over all 31 modules with JDK 25: **3,309 tests in 26
+  modules, 0 failures, 0 errors**; customer-service, api-gateway, the shared outbox library (two
+  new tests for the transaction opt-out) and notification-service re-run after the last changes.
+- **Web apps:** `tsc -b` and `eslint --max-warnings 0` clean in the customer app, provider app and
+  Admin Portal (Node 20 here, so their Vitest suites were not run); the three images were rebuilt
+  with Node 24 inside Docker.
+- **Fresh stack:** the five images rebuilt from those jars (engagement-app again after the
+  notification fix), a new PostgreSQL 16 database migrated by
+  the services at startup (booking V6, provider V6, rating V3, complaint V4, invoice V2, verification
+  V2 all applied; Hibernate validation passed), and `deploy/ci/booking-flow.sh` **passed all 48
+  checks**, including document upload into the new storage.
+- **New endpoints, through the gateway:** 11 of 11 checks passed (documents stored and streamed with
+  safe headers, a customer refused; invoice by booking and PDF download, another customer's invoice
+  404; address list and its owner check; refund status 404 before approval).
+- **Not verified:** real S3 and SES; two jobs-app or chat replicas; `terraform plan`; the apps in a
+  browser (photos, invoice download, refund dialog, document viewer were exercised through their
+  APIs only); the frontend unit tests.
+
+### 21.6 Still open
+
+| # | Item |
+|---|---|
+| 1 | Rotate `JWT_SECRET` wherever the old `.env.example` value is set (local `.env` included) |
+| 2 | Provider online/offline state for dispatch (21.2 item 1) |
+| 3 | The provider rate limit (21.2 item 3) |
+| 4 | Push notifications: no device tokens |
+| 5 | A refund does not debit the provider's earning; payouts are simulated |
+| 6 | Invoice PDFs are kept in memory (re-rendered on demand); store them like photos and documents |
+| 7 | The Admin dashboard's metrics are a stub (zeros); the audit log records only system-configuration changes |
+| 8 | Fields the screens read that the services never send (provider card and description on the booking detail; names in admin tables) |
+| 9 | Coupon redemption is never called, so usage limits are not consumed |
+| 10 | 21.4's plausible items, and Section 20.3's deploy prerequisites (now also `DOCUMENTS_BUCKET`) |

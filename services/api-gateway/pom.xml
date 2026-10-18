@@ -30,12 +30,6 @@
         they are unit- and integration-testable and enforced defence-in-depth.
     </description>
 
-    <properties>
-        <!-- Spring Cloud Gateway's GA train (2025.1) supports Spring Boot 4.0 only; move to
-             the parent's Boot version with the 2026.0 train. -->
-        <spring-boot.version>4.0.8</spring-boot.version>
-    </properties>
-
     <dependencyManagement>
         <dependencies>
             <dependency>

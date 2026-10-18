@@ -7,11 +7,14 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.hibernate.Hibernate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -29,7 +32,11 @@ import com.jihajoor.verification.domain.VerificationRepository;
 import com.jihajoor.verification.domain.VerificationStatus;
 import com.jihajoor.verification.domain.VerificationStatusView;
 import com.jihajoor.verification.notification.ProviderNotificationPort;
-import com.jihajoor.verification.storage.DocumentStoragePort;
+import com.jihajoor.verification.storage.DocumentContent;
+import com.jihajoor.verification.storage.DocumentFile;
+import com.jihajoor.verification.storage.DocumentStorage;
+import com.jihajoor.verification.storage.DocumentStorageException;
+import com.jihajoor.verification.storage.StoredDocument;
 
 /**
  * Core verification-workflow business logic (Requirement 5).
@@ -40,26 +47,31 @@ import com.jihajoor.verification.storage.DocumentStoragePort;
  * blocks job assignment for non-APPROVED providers (Requirement 5.10), and records a
  * contiguous audit trail (Requirement 5.11).
  *
- * <p>External dependencies are expressed as ports ({@link DocumentStoragePort},
+ * <p>External dependencies are expressed as ports ({@link DocumentStorage},
  * {@link BackgroundCheckPort}, {@link ProviderNotificationPort}, {@link DispatchPoolPort}) so
  * the logic is fully unit-testable.
  */
 @Service
 public class VerificationService {
 
+    private static final Logger log = LoggerFactory.getLogger(VerificationService.class);
+
+    /** Longest file name kept, the width of {@code verification_document.file_name}. */
+    static final int MAX_FILE_NAME_LENGTH = 255;
+
     /** The background-check step: started, or result recorded but not yet decided. */
     private static final Set<VerificationStatus> BACKGROUND_CHECK_STAGE = EnumSet.of(
             VerificationStatus.BACKGROUND_CHECK_PENDING, VerificationStatus.BACKGROUND_CHECK_COMPLETED);
 
     private final VerificationRepository repository;
-    private final DocumentStoragePort documentStorage;
+    private final DocumentStorage documentStorage;
     private final BackgroundCheckPort backgroundCheck;
     private final ProviderNotificationPort notification;
     private final DispatchPoolPort dispatchPool;
     private final VerificationProperties properties;
 
     public VerificationService(VerificationRepository repository,
-                               DocumentStoragePort documentStorage,
+                               DocumentStorage documentStorage,
                                BackgroundCheckPort backgroundCheck,
                                ProviderNotificationPort notification,
                                DispatchPoolPort dispatchPool,
@@ -78,6 +90,12 @@ public class VerificationService {
      * Uploads the provider's required documents to encrypted object storage and transitions
      * the verification to {@code DOCUMENT_SUBMITTED} (Requirement 5.3). Creates the
      * verification record in {@code PENDING} on first submission.
+     *
+     * <p>Each document's bytes are written to the {@link DocumentStorage} before its row is
+     * recorded, and the row records which store took them, so an admin can view them later. A store
+     * that refuses a file fails the whole submission with a retriable 503
+     * {@code DOCUMENT_STORAGE_UNAVAILABLE} and nothing is recorded (files already written for the
+     * same submission are left behind as unreferenced objects; harmless, and rare).
      *
      * @param providerId the provider submitting documents
      * @param uploads    the documents to store; must cover all required document types
@@ -105,9 +123,19 @@ public class VerificationService {
                 .orElseGet(() -> repository.save(Verification.create(providerId)));
 
         for (DocumentUpload upload : uploads) {
-            String ref = documentStorage.store(providerId, upload.type(), upload.content(), upload.contentType());
-            verification.addDocument(upload.type(), ref, upload.contentType(),
-                    upload.content() == null ? 0 : upload.content().length);
+            UUID documentId = UUID.randomUUID();
+            String fileName = sanitizeFileName(upload.originalFilename());
+            DocumentFile file = new DocumentFile(fileName, upload.contentType(), upload.content());
+            StoredDocument stored;
+            try {
+                stored = documentStorage.store(providerId, upload.type(), documentId, file);
+            } catch (DocumentStorageException e) {
+                log.warn("Verification document upload for provider {} ({}) failed in {} storage: {}",
+                        providerId, upload.type(), documentStorage.writeKind(), e.getMessage());
+                throw VerificationException.documentStorageUnavailable();
+            }
+            verification.addDocument(documentId, upload.type(), stored.kind(), stored.key(), fileName,
+                    upload.contentType(), file.bytes().length);
         }
 
         verification.transitionTo(VerificationStatus.DOCUMENT_SUBMITTED, actorId,
@@ -335,6 +363,70 @@ public class VerificationService {
     public List<VerificationDocument> documentsOf(UUID providerId) {
         // require() fetch-joins the documents; copy them out while the transaction is open.
         return List.copyOf(require(providerId).getDocuments());
+    }
+
+    /**
+     * The bytes of one of a provider's documents, for the Admin document viewer (Requirement 19.3).
+     * The caller streams {@link DocumentDownload#content()} to the response and closes it.
+     *
+     * @throws VerificationException 404 {@code VERIFICATION_NOT_FOUND} when the provider has no
+     *         record; 404 {@code DOCUMENT_NOT_FOUND} when the document is not this provider's; 404
+     *         {@code DOCUMENT_NOT_STORED} when its bytes were never stored (uploaded before documents
+     *         were kept) or are not in the store; 503 {@code DOCUMENT_STORAGE_UNAVAILABLE} when the
+     *         store cannot be read right now
+     */
+    @Transactional(readOnly = true)
+    public DocumentDownload openDocument(UUID providerId, UUID documentId) {
+        VerificationDocument document = require(providerId).getDocuments().stream()
+                .filter(d -> d.getId().equals(documentId))
+                .findFirst()
+                .orElseThrow(() -> VerificationException.documentNotFound(documentId));
+        if (!document.isStored()) {
+            throw VerificationException.documentNotStored(documentId);
+        }
+        Optional<DocumentContent> content;
+        try {
+            content = documentStorage.load(document.getStorage(), document.getStorageRef());
+        } catch (DocumentStorageException e) {
+            log.warn("Verification document {} of provider {} could not be read from {}: {}",
+                    documentId, providerId, document.getStorage(), e.getMessage());
+            throw VerificationException.documentStorageUnavailable();
+        }
+        if (content.isEmpty()) {
+            log.warn("Verification document {} of provider {} is recorded in {} storage under {} but nothing "
+                    + "is stored there", documentId, providerId, document.getStorage(), document.getStorageRef());
+            throw VerificationException.documentNotStored(documentId);
+        }
+        return new DocumentDownload(document, content.get());
+    }
+
+    /** A document and its open content stream. */
+    public record DocumentDownload(VerificationDocument document, DocumentContent content) {
+    }
+
+    /**
+     * The client's file name reduced to something safe to keep and echo in a
+     * {@code Content-Disposition}: the last path segment, without control characters, at most
+     * {@value #MAX_FILE_NAME_LENGTH} characters. {@code null} when nothing is left.
+     */
+    static String sanitizeFileName(String name) {
+        if (name == null) {
+            return null;
+        }
+        String base = name.replace('\\', '/');
+        base = base.substring(base.lastIndexOf('/') + 1);
+        base = base.replaceAll("\\p{Cntrl}", "").strip();
+        if (base.isEmpty() || base.equals(".") || base.equals("..")) {
+            return null;
+        }
+        if (base.length() > MAX_FILE_NAME_LENGTH) {
+            int end = MAX_FILE_NAME_LENGTH;
+            if (Character.isHighSurrogate(base.charAt(end - 1))) {
+                end--;
+            }
+            base = base.substring(0, end);
+        }
+        return base;
     }
 
     /**

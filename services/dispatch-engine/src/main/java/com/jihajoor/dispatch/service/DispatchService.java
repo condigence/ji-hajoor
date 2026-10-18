@@ -3,8 +3,8 @@ package com.jihajoor.dispatch.service;
 import com.jihajoor.dispatch.config.DispatchProperties;
 import com.jihajoor.dispatch.domain.BookingNotSearchableException;
 import com.jihajoor.dispatch.domain.DispatchRequest;
+import com.jihajoor.dispatch.domain.DispatchSettings;
 import com.jihajoor.dispatch.domain.MatchingWeights;
-import com.jihajoor.dispatch.domain.MatchingWeightsStore;
 import com.jihajoor.dispatch.domain.ProviderCandidate;
 import com.jihajoor.dispatch.domain.ProviderSearchUnavailableException;
 import com.jihajoor.dispatch.domain.SearchingFailedOutcome;
@@ -96,7 +96,7 @@ public class DispatchService {
     private final JobOfferPort jobOffer;
     private final BookingTransitionPort bookingTransition;
     private final NotificationPort notification;
-    private final MatchingWeightsStore weightsStore;
+    private final DispatchSettingsService settings;
     private final DispatchProperties properties;
     private final AcceptanceLedger acceptanceLedger;
     private final ProviderRejectedPublisher rejectedPublisher;
@@ -110,13 +110,13 @@ public class DispatchService {
                            JobOfferPort jobOffer,
                            BookingTransitionPort bookingTransition,
                            NotificationPort notification,
-                           MatchingWeightsStore weightsStore,
+                           DispatchSettingsService settings,
                            DispatchProperties properties,
                            AcceptanceLedger acceptanceLedger,
                            ProviderRejectedPublisher rejectedPublisher,
                            BookingCancellationPort cancellation,
                            Clock clock) {
-        this(providerQuery, lock, jobOffer, bookingTransition, notification, weightsStore, properties,
+        this(providerQuery, lock, jobOffer, bookingTransition, notification, settings, properties,
                 acceptanceLedger, rejectedPublisher, cancellation, clock, Thread::sleep);
     }
 
@@ -125,7 +125,7 @@ public class DispatchService {
                            JobOfferPort jobOffer,
                            BookingTransitionPort bookingTransition,
                            NotificationPort notification,
-                           MatchingWeightsStore weightsStore,
+                           DispatchSettingsService settings,
                            DispatchProperties properties,
                            AcceptanceLedger acceptanceLedger,
                            ProviderRejectedPublisher rejectedPublisher,
@@ -137,7 +137,7 @@ public class DispatchService {
         this.jobOffer = jobOffer;
         this.bookingTransition = bookingTransition;
         this.notification = notification;
-        this.weightsStore = weightsStore;
+        this.settings = settings;
         this.properties = properties;
         this.acceptanceLedger = acceptanceLedger;
         this.rejectedPublisher = rejectedPublisher;
@@ -166,10 +166,13 @@ public class DispatchService {
     }
 
     private UUID search(DispatchRequest request) {
-        MatchingWeights weights = weightsStore.current();
-        Duration offerWindow = Duration.ofSeconds(properties.getOfferTimeoutSeconds());
-        int waveSize = Math.max(1, properties.getOfferBatchSize());
-        long fallbackMinutes = properties.getAgencyFallbackMinutes();
+        // One snapshot of the Admin rules for the whole search: an Admin save during it applies
+        // from the next search on, never half-way through this one.
+        DispatchSettings rules = settings.current();
+        MatchingWeights weights = rules.weights();
+        Duration offerWindow = Duration.ofSeconds(rules.offerTimeoutSeconds());
+        int waveSize = Math.max(1, rules.offerBatchSize());
+        long fallbackMinutes = rules.agencyFallbackMinutes();
         Instant fallbackAt = clock.instant().plus(Duration.ofMinutes(fallbackMinutes));
 
         // Providers already offered (and declined/timed-out) are removed from the pool for this
@@ -177,15 +180,15 @@ public class DispatchService {
         Set<UUID> exhausted = new HashSet<>();
 
         // cycle 0 = initial radius; cycles 1..maxExpansionCycles = expansions (Req 8.8).
-        int totalCycles = properties.getMaxExpansionCycles();
+        int totalCycles = rules.maxExpansionCycles();
         for (int cycle = 0; cycle <= totalCycles; cycle++) {
             if (!clock.instant().isBefore(fallbackAt)) {
                 return handOff(request, timeUp(fallbackMinutes));
             }
-            double radiusKm = radiusForCycle(cycle);
+            double radiusKm = radiusForCycle(rules, cycle);
             log.debug("Dispatch booking {} cycle {} radius {} km", request.bookingId(), cycle, radiusKm);
 
-            List<ProviderCandidate> pending = rankedCandidates(request, radiusKm, weights, exhausted);
+            List<ProviderCandidate> pending = rankedCandidates(request, radiusKm, weights, exhausted, offerWindow);
             Instant busyDeadline = null;
             while (!pending.isEmpty()) {
                 ensureStillSearching(request);
@@ -257,8 +260,8 @@ public class DispatchService {
     }
 
     /** Radius for a given cycle: initial for cycle 0, then +increment per expansion. */
-    private double radiusForCycle(int cycle) {
-        return properties.getInitialRadiusKm() + cycle * properties.getRadiusIncrementKm();
+    private static double radiusForCycle(DispatchSettings rules, int cycle) {
+        return rules.initialRadiusKm() + cycle * rules.radiusIncrementKm();
     }
 
     /**
@@ -268,8 +271,9 @@ public class DispatchService {
     private List<ProviderCandidate> rankedCandidates(DispatchRequest request,
                                                      double radiusKm,
                                                      MatchingWeights weights,
-                                                     Set<UUID> exhausted) {
-        List<ProviderCandidate> candidates = new ArrayList<>(eligibleProviders(request, radiusKm));
+                                                     Set<UUID> exhausted,
+                                                     Duration offerWindow) {
+        List<ProviderCandidate> candidates = new ArrayList<>(eligibleProviders(request, radiusKm, offerWindow));
         candidates.removeIf(c -> exhausted.contains(c.providerId()));
         candidates.sort(Comparator.comparingDouble((ProviderCandidate c) -> c.score(weights)).reversed());
         return candidates;
@@ -283,7 +287,8 @@ public class DispatchService {
      * @throws ProviderSearchUnavailableException if it is still unavailable when the window closes;
      *         the run ends there rather than counting the radius as empty
      */
-    private List<ProviderCandidate> eligibleProviders(DispatchRequest request, double radiusKm) {
+    private List<ProviderCandidate> eligibleProviders(DispatchRequest request, double radiusKm,
+                                                      Duration offerWindow) {
         Instant deadline = null;
         while (true) {
             try {
@@ -291,7 +296,7 @@ public class DispatchService {
             } catch (ProviderSearchUnavailableException unavailable) {
                 Instant now = clock.instant();
                 if (deadline == null) {
-                    deadline = now.plusSeconds(properties.getOfferTimeoutSeconds());
+                    deadline = now.plus(offerWindow);
                 }
                 if (!now.isBefore(deadline) || !pause(PROVIDER_SEARCH_RETRY_PAUSE, deadline, now)) {
                     log.error("Dispatch for booking {} abandoned at radius {} km: the Provider Service could"

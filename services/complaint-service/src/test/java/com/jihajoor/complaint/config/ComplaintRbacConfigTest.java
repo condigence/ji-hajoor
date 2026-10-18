@@ -174,6 +174,54 @@ class ComplaintRbacConfigTest {
         }
     }
 
+    // ------------------------------------------------------------------ refund re-send / status
+
+    private static String resendPath() {
+        return "/complaints/" + UUID.randomUUID() + "/refund/resend";
+    }
+
+    /**
+     * "POST /complaints/{id}/refund" does not match ".../refund/resend", and an unmatched path
+     * passes through: without its own rule the re-send (which moves money) would be open to any
+     * authenticated caller. Same for reading the refund.
+     */
+    @Test
+    void refundResendAndRefundStatusAreStaffOnly() throws Exception {
+        for (String role : List.of("CUSTOMER", "SERVICE_PROVIDER", "DISPATCHER", "FINANCE_ADMIN")) {
+            authenticateAs(role);
+            for (String[] call : new String[][] {{"POST", resendPath()}, {"GET", refundPath()}}) {
+                FilterChain chain = mock(FilterChain.class);
+
+                assertThat(invoke(call[0], call[1], chain).getStatus())
+                        .as(role + " " + call[0] + " " + call[1])
+                        .isEqualTo(HttpStatus.FORBIDDEN.value());
+                verify(chain, never()).doFilter(any(), any());
+            }
+        }
+    }
+
+    @Test
+    void supportTierMayResendAndReadARefund() throws Exception {
+        for (String role : List.of("ADMIN", "SUPER_ADMIN", "SUPPORT_AGENT")) {
+            authenticateAs(role);
+            for (String[] call : new String[][] {{"POST", resendPath()}, {"GET", refundPath()}}) {
+                FilterChain chain = mock(FilterChain.class);
+
+                assertThat(invoke(call[0], call[1], chain).getStatus())
+                        .as(role + " " + call[0] + " " + call[1])
+                        .isEqualTo(HttpStatus.OK.value());
+                verify(chain, times(1)).doFilter(any(), any());
+            }
+        }
+    }
+
+    @Test
+    void unauthenticatedRefundResendIsUnauthorized() throws Exception {
+        SecurityContextHolder.clearContext();
+        assertThat(invoke("POST", resendPath(), mock(FilterChain.class)).getStatus())
+                .isEqualTo(HttpStatus.UNAUTHORIZED.value());
+    }
+
     @Test
     void unauthenticatedStatsIsUnauthorized() throws Exception {
         FilterChain chain = mock(FilterChain.class);

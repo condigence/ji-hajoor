@@ -244,3 +244,9 @@ variable "eks_cluster_ca_data" {
   default     = ""
   sensitive   = true
 }
+
+variable "k8s_namespace" {
+  description = "Kubernetes namespace all five deployables run in for this environment. Set the GitHub environment's K8S_NAMESPACE variable (deploy-services.yml) to the same value."
+  type        = string
+  default     = "jihajoor"
+}

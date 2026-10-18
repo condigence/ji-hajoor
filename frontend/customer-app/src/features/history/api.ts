@@ -3,8 +3,9 @@ import type { BookingStatus } from '@stores/bookingStore';
 
 /**
  * Service History API bindings (Requirement 28.7). Combines the Booking
- * Service's booking list/detail with the Invoice Service's signed-URL delivery
- * (Requirement 13.3, 13.5). All calls flow through the shared Axios client.
+ * Service's booking list/detail and job photos with the Invoice Service's
+ * per-booking invoice lookup and PDF download (Requirement 13). All calls flow
+ * through the shared Axios client, so each carries the bearer token.
  */
 
 /** A row in the paginated Service History list. */
@@ -45,13 +46,25 @@ export async function fetchBookingHistory(
   return data;
 }
 
+/** Which side of the job a photo documents. */
+export type PhotoKind = 'BEFORE' | 'AFTER';
+
+/** A stored job photo as the booking detail lists it. */
+export interface JobPhoto {
+  id: string;
+  kind: PhotoKind;
+  /** ISO-8601 upload time. */
+  uploadedAt: string;
+}
+
 /**
  * Detailed view of a single booking (Requirement 28.7).
  *
  * The Booking Service omits null fields: `scheduledAt` and `providerId` are
- * absent until set. `address`, `description`, `provider` and `invoice` are not
- * owned by the Booking Service and are not sent today, so every screen treats
- * them as optional and hides their sections when absent.
+ * absent until set. `description` and `provider` are not sent today, so every
+ * screen treats them as optional and hides their sections when absent. The
+ * invoice is not part of the detail: it lives in the Invoice Service and is
+ * looked up with {@link fetchBookingInvoice}.
  */
 export interface BookingDetail {
   bookingId: string;
@@ -76,6 +89,11 @@ export interface BookingDetail {
   address?: string;
   /** The service address's position — frames the live map and the ETA estimate. */
   coordinates?: { latitude: number; longitude: number };
+  /**
+   * Before/after photos the professional attached (Requirement 11.2, 11.4).
+   * Only metadata: the bytes need the bearer token, see {@link fetchJobPhoto}.
+   */
+  photos?: JobPhoto[];
   /** Parts and materials the professional has recorded (Requirement 11.3). */
   parts?: Array<{ id: string; itemName: string; quantity: number; unitCost: number }>;
   description?: string;
@@ -89,11 +107,6 @@ export interface BookingDetail {
     displayName: string;
     verified: boolean;
     rating: number;
-  };
-  /** Present once an invoice exists for the booking (Requirement 13). */
-  invoice?: {
-    invoiceId: string;
-    invoiceNumber: string;
   };
 }
 
@@ -116,20 +129,68 @@ export async function decideQuote(bookingId: string, approve: boolean): Promise<
   await apiClient.post(`/bookings/${bookingId}/quote/${approve ? 'approval' : 'rejection'}`);
 }
 
-/** A short-lived signed URL for downloading an invoice PDF (Requirement 13.3). */
-export interface InvoiceDownload {
-  /** Signed URL with a 72-hour expiry (Requirement 13.3). */
-  url: string;
+/**
+ * GET /bookings/{key}/photos/{photoId} — one stored job photo, under the same
+ * access rule as the booking detail. Fetched as a blob because the endpoint
+ * needs the bearer header, so it cannot be a plain `<img src>`. 404
+ * `MEDIA_NOT_FOUND` for a photo uploaded before photos were kept.
+ */
+export async function fetchJobPhoto(bookingKey: string, photoId: string): Promise<Blob> {
+  const { data } = await apiClient.get<Blob>(`/bookings/${bookingKey}/photos/${photoId}`, {
+    responseType: 'blob',
+  });
+  return data;
+}
+
+/** The Invoice Service's summary of one invoice (Requirement 13.5). */
+export interface InvoiceSummary {
+  id: string;
   invoiceNumber: string;
+  bookingId: string;
+  paymentId: string;
+  /** ISO-8601 time the invoice was generated. */
+  generatedAt: string;
 }
 
 /**
- * GET /invoices/{invoiceId}/download — obtain a fresh signed URL for the
- * invoice PDF. The Invoice Service returns a URL with a 72-hour expiry; the
- * client opens it to view/download the PDF (Requirement 13.3, Task 33
- * acceptance: "invoice download opens PDF").
+ * GET /invoices/bookings/{bookingId} — the invoice for a paid booking. 404
+ * `INVOICE_NOT_FOUND` until it has been generated (that runs shortly after the
+ * payment completes) and for a booking that is not the caller's. Takes the
+ * booking's id, not its HFX- reference.
  */
-export async function fetchInvoiceDownloadUrl(invoiceId: string): Promise<InvoiceDownload> {
-  const { data } = await apiClient.get<InvoiceDownload>(`/invoices/${invoiceId}/download`);
+export async function fetchBookingInvoice(bookingId: string): Promise<InvoiceSummary> {
+  const { data } = await apiClient.get<InvoiceSummary>(`/invoices/bookings/${bookingId}`);
   return data;
+}
+
+/**
+ * GET /invoices/{invoiceId}/download — the invoice PDF itself. Fetched through
+ * the API client as a blob (the route needs the bearer header) and handed to
+ * the browser as a file download named after the invoice number.
+ */
+export async function downloadInvoicePdf(invoice: {
+  id: string;
+  invoiceNumber: string;
+}): Promise<void> {
+  const { data } = await apiClient.get<Blob>(`/invoices/${invoice.id}/download`, {
+    responseType: 'blob',
+    headers: { Accept: 'application/pdf' },
+  });
+  saveBlob(data, `${invoice.invoiceNumber}.pdf`);
+}
+
+/** Saves a blob through a temporary object URL and anchor click. */
+function saveBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.rel = 'noopener';
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  // Revoke after the click has been handled; revoking synchronously can cancel
+  // the download in some browsers.
+  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }

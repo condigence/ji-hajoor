@@ -10,10 +10,11 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
  * STOMP-over-WebSocket configuration for real-time message delivery (Requirement 18.2).
  *
  * <p>Clients connect at {@code /ws/chat} and subscribe to their booking's destination
- * {@code /topic/chat/{bookingId}}. A simple in-memory broker is sufficient for a single node;
- * a multi-node deployment would swap in an external STOMP relay. Subscription is only granted to
- * booking participants (Property 23); the participant check is enforced by the Chat Service before
- * a subscription is accepted.
+ * {@code /topic/chat/{bookingId}}. The simple in-memory broker serves only this node's STOMP
+ * sessions; with several nodes, each receives every message over Redis pub/sub
+ * ({@link ChatRedisConfig}) and sends it into its own broker, so no external STOMP relay is
+ * needed. Subscription is only granted to booking participants (Property 23); the participant
+ * check is enforced by the Chat Service before a subscription is accepted.
  */
 @Configuration
 @EnableWebSocketMessageBroker

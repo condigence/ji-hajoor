@@ -1,0 +1,51 @@
+{{- if include "jihajoor-service.kedaActive" . }}
+{{- $bootstrap := required "keda.bootstrapServers is required when keda.enabled" .Values.keda.bootstrapServers }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "jihajoor-service.fullname" . }}
+  labels:
+    {{- include "jihajoor-service.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: {{ include "jihajoor-service.fullname" . }}
+  minReplicaCount: {{ .Values.keda.minReplicas }}
+  maxReplicaCount: {{ .Values.keda.maxReplicas }}
+  pollingInterval: {{ .Values.keda.pollingInterval }}
+  cooldownPeriod: {{ .Values.keda.cooldownPeriod }}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 30
+          policies:
+            - type: Pods
+              value: 2
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 120
+  triggers:
+    {{- range .Values.keda.triggers }}
+    - type: kafka
+      metadata:
+        bootstrapServers: {{ $bootstrap | quote }}
+        consumerGroup: {{ required "keda.triggers[].consumerGroup is required" .consumerGroup | quote }}
+        {{- with .topic }}
+        topic: {{ . | quote }}
+        {{- end }}
+        lagThreshold: {{ .lagThreshold | default 100 | quote }}
+        offsetResetPolicy: latest
+      authenticationRef:
+        name: {{ $.Values.keda.triggerAuthentication }}
+    {{- end }}
+    {{- if .Values.keda.cpuUtilization }}
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: {{ .Values.keda.cpuUtilization | quote }}
+    {{- end }}
+{{- end }}

@@ -216,6 +216,19 @@ class EmailSignupServiceTest {
     }
 
     @Test
+    void resend_whenTheEmailCannotBeSent_answersAsForAnUnknownAddress() {
+        long unknownAnswer = service.resend("nobody@example.com", null);
+
+        UserAccount pending = UserAccount.createPendingEmailSignup("Asha", EMAIL, MOBILE, Role.CUSTOMER, "h");
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(pending));
+        emails.failDelivery();
+
+        // A 502 here would tell the caller that the address has a sign-up waiting.
+        assertThat(service.resend(EMAIL, null)).isEqualTo(unknownAnswer);
+        assertThat(emails.sent()).isEmpty();
+    }
+
+    @Test
     void register_whenTheEmailCannotBeSent_is502() {
         emails.failDelivery();
 

@@ -19,6 +19,7 @@ engine. Service agencies (tenants) can run their own teams of providers on the p
 | [`infra/terraform/`](infra/terraform/) | AWS infrastructure: VPC, EKS, RDS, MSK, ElastiCache, KMS, IAM |
 | [`infra/k8s/`](infra/k8s/) | Cluster-level manifests (observability) |
 | [`docs/`](docs/) | Architecture, API contracts and local-run guide |
+| [`loadtest/`](loadtest/) | k6 load tests (marketplace journey, gateway guardrails), run in Docker |
 
 ## Services and deployables
 
@@ -97,15 +98,22 @@ The live Ji-Hajoor environment runs on Railway from this repository's `main` bra
 - Secrets (`JWT_SECRET`, `INTERNAL_API_KEY`, `KMS_*`, webhook and simulator secrets) are shared variables.
 - Services find each other at `http://${{<app>.RAILWAY_PRIVATE_DOMAIN}}:<service port>`, using the port table above.
 - SMS settings live on `identity-app`: `SMS_PROVIDER=msg91`, `MSG91_AUTH_KEY` and `MSG91_OTP_TEMPLATE_ID`. `OTP_FIXED_CODE` puts sign-in into test mode: every OTP is that code and no SMS is sent. Remove it to go live.
+- Email: on `identity-app` set `EMAIL_PROVIDER=smtp`, and on `engagement-app` `NOTIFICATION_EMAIL_PROVIDER=smtp`, both with `SMTP_HOST`, `SMTP_PORT` (587), `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_STARTTLS=true` and `EMAIL_FROM` (a sender the SMTP provider has verified). Never `SPRING_MAIL_*`: it would reach every service in the JVM.
+- Verification documents (`identity-app`): `DOCUMENTS_BUCKET`, `DOCUMENTS_S3_REGION`, `DOCUMENTS_S3_ACCESS_KEY_ID` and `DOCUMENTS_S3_SECRET_ACCESS_KEY` (plus `DOCUMENTS_S3_ENDPOINT`), as for photos; without a bucket they go to the container's disk and are lost on redeploy.
+- Job photos (`jobs-app`): `MEDIA_BUCKET`, `MEDIA_S3_REGION`, `MEDIA_S3_ACCESS_KEY_ID` and `MEDIA_S3_SECRET_ACCESS_KEY` (plus `MEDIA_S3_ENDPOINT` for an S3-compatible store) put them in S3. Without a bucket they go to the container's disk, which Railway discards on redeploy. Remove any `MEDIA_STORAGE_PROVIDER=local` so the default `auto` applies.
+- `engagement-app` needs `PAYMENT_SERVICE_URL` (money-app's private domain, port 8088) for complaint refunds and `PROVIDER_SERVICE_URL` (identity-app, port 8083) for provider ratings.
+- Chat uses the shared Redis (`CHAT_CLUSTER=redis`, the default), so `jobs-app` can run more than one replica.
 - Runtime settings (app URLs and other `jihajoor.*` keys) live in the `config.app_config` table and can be changed without a redeploy. Environment variables override them.
 - The "Booking flow" workflow ([`deploy/ci`](deploy/ci)) runs this same layout in Docker and drives a full booking through it on every push.
 
 ## Documentation
 
 - [Architecture and diagrams](docs/ARCHITECTURE.md)
+- [Architecture deck (PowerPoint)](docs/JiHajoor_Architecture.pptx)
 - [API contracts](docs/API_CONTRACTS.md)
 - [Running locally, test users and URLs](docs/LOCAL_ACCESS.md)
 - [Mobile builds](frontend/MOBILE.md)
+- [Load tests and latest results](loadtest/README.md)
 - [Codebase review findings](CODEBASE_REVIEW.md)
 
 ## Signing in locally
@@ -121,7 +129,15 @@ OTP codes to `docker/dev-sms/dev-sms.log`. See
 
 ## What is real and what is stubbed
 
-Google and Apple sign-in and Razorpay payments (test mode locally, with the keys in `.env`) are
-real integrations. SMS, email, document storage and background checks are not: there is no email
-provider yet, and an admin records each provider's background check in the Admin Portal's
-Verification Queue. The architecture document marks each one.
+Real integrations: Google and Apple sign-in; Razorpay payments and refunds (test mode locally,
+with the keys in `.env`), the only payment gateway; MSG91 for sign-in OTPs; email over SMTP
+(Amazon SES in AWS; locally the dev mail log, or Mailpit with `docker compose --profile mail`);
+and S3 for job photos and provider verification documents when a bucket is set and reachable
+(local disk otherwise). Complaint refunds move money through payment-service (approved, and
+re-sent if the outcome is unknown, from the Admin Portal), reviews update provider ratings, and
+customers download their invoice PDF from the booking.
+
+Still stand-ins: push notifications (no device tokens), background checks (an admin records the
+result in the Admin Portal's Verification Queue), invoice PDF storage (in memory, re-rendered
+from the invoice row on demand) and the Admin dashboard's metrics (zeros). The architecture
+document marks each one.

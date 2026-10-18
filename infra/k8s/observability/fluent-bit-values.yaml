@@ -86,79 +86,55 @@ config:
         Exclude log .*health.*
 
   outputs: |
-    # -------------------------------------------------------------------------
-    # auth-customer-provider namespace → separate CloudWatch log group
-    # -------------------------------------------------------------------------
+    # One CloudWatch log group per deployable, matched by container name. The tag is
+    # kube.var.log.containers.<pod>_<namespace>_<container>-<id>.log and the Helm chart names
+    # each container after its deployable, so this works in whichever namespace the deploy
+    # pipeline uses (K8S_NAMESPACE per GitHub environment).
     [OUTPUT]
         Name               cloudwatch_logs
-        Match              kube.*_auth-customer-provider_*
+        Match              kube.*_*_api-gateway-*
         region             ap-south-1
-        log_group_name     /jihajoor/eks/auth-customer-provider
+        log_group_name     /jihajoor/eks/api-gateway
         log_stream_prefix  ${HOSTNAME}-
         auto_create_group  true
         log_retention_days 90
         log_key            log_processed
 
-    # -------------------------------------------------------------------------
-    # booking-dispatch-location
-    # -------------------------------------------------------------------------
     [OUTPUT]
         Name               cloudwatch_logs
-        Match              kube.*_booking-dispatch-location_*
+        Match              kube.*_*_identity-app-*
         region             ap-south-1
-        log_group_name     /jihajoor/eks/booking-dispatch-location
+        log_group_name     /jihajoor/eks/identity-app
         log_stream_prefix  ${HOSTNAME}-
         auto_create_group  true
         log_retention_days 90
         log_key            log_processed
 
-    # -------------------------------------------------------------------------
-    # payment-invoice-rating
-    # -------------------------------------------------------------------------
     [OUTPUT]
         Name               cloudwatch_logs
-        Match              kube.*_payment-invoice-rating_*
+        Match              kube.*_*_jobs-app-*
         region             ap-south-1
-        log_group_name     /jihajoor/eks/payment-invoice-rating
+        log_group_name     /jihajoor/eks/jobs-app
         log_stream_prefix  ${HOSTNAME}-
         auto_create_group  true
         log_retention_days 90
         log_key            log_processed
 
-    # -------------------------------------------------------------------------
-    # notification-chat-complaint
-    # -------------------------------------------------------------------------
     [OUTPUT]
         Name               cloudwatch_logs
-        Match              kube.*_notification-chat-complaint_*
+        Match              kube.*_*_money-app-*
         region             ap-south-1
-        log_group_name     /jihajoor/eks/notification-chat-complaint
+        log_group_name     /jihajoor/eks/money-app
         log_stream_prefix  ${HOSTNAME}-
         auto_create_group  true
         log_retention_days 90
         log_key            log_processed
 
-    # -------------------------------------------------------------------------
-    # admin-reporting-promotion
-    # -------------------------------------------------------------------------
     [OUTPUT]
         Name               cloudwatch_logs
-        Match              kube.*_admin-reporting-promotion_*
+        Match              kube.*_*_engagement-app-*
         region             ap-south-1
-        log_group_name     /jihajoor/eks/admin-reporting-promotion
-        log_stream_prefix  ${HOSTNAME}-
-        auto_create_group  true
-        log_retention_days 90
-        log_key            log_processed
-
-    # -------------------------------------------------------------------------
-    # catalog-pricing-verification
-    # -------------------------------------------------------------------------
-    [OUTPUT]
-        Name               cloudwatch_logs
-        Match              kube.*_catalog-pricing-verification_*
-        region             ap-south-1
-        log_group_name     /jihajoor/eks/catalog-pricing-verification
+        log_group_name     /jihajoor/eks/engagement-app
         log_stream_prefix  ${HOSTNAME}-
         auto_create_group  true
         log_retention_days 90

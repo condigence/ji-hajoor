@@ -2,6 +2,8 @@ package com.jihajoor.payment.config;
 
 import jakarta.servlet.DispatcherType;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -19,18 +21,45 @@ import com.jihajoor.shared.security.RbacEnforcementFilter;
  * <p>Only the health and metrics surface, plus gateway callback webhooks, are public. Gateway
  * callbacks are not JWT-authenticated because they originate from the payment gateway; they are
  * instead authenticated by cryptographic signature verification in the callback handler
- * (Requirement 12.5). All other endpoints require an authenticated principal; fine-grained role
- * checks are performed by the shared {@code RbacEnforcementFilter} (Task 4). Without this bean,
- * Spring Boot's default security auto-configuration (pulled in transitively via the
- * shared-security module) would secure every endpoint with HTTP Basic.
+ * (Requirement 12.5). {@code /internal/**} (the Complaint Service's refund call) is
+ * service-to-service only: it is authenticated by the shared {@code X-Internal-Api-Key} through
+ * {@link InternalApiKeyFilter} and admitted only with the {@code ROLE_INTERNAL} authority that
+ * filter grants, never by a user token. All other endpoints require an authenticated principal;
+ * fine-grained role checks are performed by the shared {@code RbacEnforcementFilter} (Task 4).
+ * Without this bean, Spring Boot's default security auto-configuration (pulled in transitively via
+ * the shared-security module) would secure every endpoint with HTTP Basic.
  */
 @Configuration
 public class WebSecurityConfig {
 
+    /**
+     * Guards {@code /internal/**} with the shared service credential, the same
+     * {@code INTERNAL_API_KEY} this service presents to the Booking and Provider Services. Registered
+     * as a bean so the key comes from configuration and the filter is unit-testable on its own.
+     */
+    @Bean
+    public InternalApiKeyFilter internalApiKeyFilter(
+            @Value("${jihajoor.payment.internal-api-key:}") String internalApiKey) {
+        return new InternalApiKeyFilter(internalApiKey);
+    }
+
+    /**
+     * Keeps the internal-API filter out of the plain servlet chain; it runs inside the security
+     * chain below, for the same reason the shared JWT and RBAC filters do.
+     */
+    @Bean
+    public FilterRegistrationBean<InternalApiKeyFilter> internalApiKeyFilterRegistration(
+            InternalApiKeyFilter filter) {
+        FilterRegistrationBean<InternalApiKeyFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    JwtValidationFilter jwtValidationFilter,
-                                                   RbacEnforcementFilter rbacEnforcementFilter)
+                                                   RbacEnforcementFilter rbacEnforcementFilter,
+                                                   InternalApiKeyFilter internalApiKeyFilter)
             throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -53,13 +82,22 @@ public class WebSecurityConfig {
                                 "/payments/callbacks/**",
                                 "/payments/webhooks/razorpay")
                         .permitAll()
+                        // Service-to-service only: the authority is granted solely by the
+                        // internal-API filter, never by a user token, so a staff or customer JWT
+                        // cannot reach the internal refund even through an encoded path the filter
+                        // failed to spot.
+                        .requestMatchers("/internal/**")
+                        .hasAuthority(InternalApiKeyFilter.INTERNAL_AUTHORITY)
                         // Everything else requires an authenticated principal; fine-grained
                         // role checks are performed by the shared RbacEnforcementFilter.
                         .anyRequest().authenticated())
                 // The shared JWT and RBAC filters must run inside this chain: as plain
                 // servlet filters they would execute before Spring Security installs its own
                 // (anonymous) SecurityContext, which would discard the authenticated principal.
-                .addFilterBefore(jwtValidationFilter, UsernamePasswordAuthenticationFilter.class)
+                // The internal-API filter runs first and only touches /internal/**, authenticating
+                // the calling service without an end-user token.
+                .addFilterBefore(internalApiKeyFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(jwtValidationFilter, InternalApiKeyFilter.class)
                 .addFilterAfter(rbacEnforcementFilter, JwtValidationFilter.class);
         return http.build();
     }

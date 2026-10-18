@@ -2,6 +2,7 @@ package com.jihajoor.payment.gateway;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.jihajoor.payment.support.SecondHmacGateway;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -50,23 +51,13 @@ class GatewaySignatureTest {
     }
 
     @Test
-    void stripeAdapter_verifiesItsOwnSignature() {
-        StripeGatewayAdapter adapter = new StripeGatewayAdapter(SECRET);
-        String payload = "stripe-callback-body";
-        String sig = HmacSignatures.hmacSha256Hex(SECRET, payload);
-        assertThat(adapter.gatewayId()).isEqualTo("stripe");
-        assertThat(adapter.verifyCallbackSignature(payload, sig)).isTrue();
-        assertThat(adapter.verifyCallbackSignature(payload, "bogus")).isFalse();
-    }
-
-    @Test
     void differentGatewaySecrets_doNotCrossVerify() {
         RazorpayGatewayAdapter razorpay = new RazorpayGatewayAdapter("", "", "razorpay-secret", "https://api.razorpay.com/v1");
-        StripeGatewayAdapter stripe = new StripeGatewayAdapter("stripe-secret");
+        SecondHmacGateway second = new SecondHmacGateway("second-secret");
         String payload = "shared-body";
         String razorpaySig = HmacSignatures.hmacSha256Hex("razorpay-secret", payload);
-        // A signature valid for Razorpay must not verify against Stripe's secret.
-        assertThat(stripe.verifyCallbackSignature(payload, razorpaySig)).isFalse();
+        // A signature valid for Razorpay must not verify against another gateway's secret.
+        assertThat(second.verifyCallbackSignature(payload, razorpaySig)).isFalse();
         assertThat(razorpay.verifyCallbackSignature(payload, razorpaySig)).isTrue();
     }
 }

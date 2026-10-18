@@ -8,7 +8,8 @@ import org.springframework.stereotype.Component;
 /**
  * Default {@link EmailSenderPort} adapter: records that an email was accepted, by subject only.
  * It delivers nothing. The recipient is PII and the body may hold a code or an invitation link, so
- * neither is logged (Requirement 7.2, platform Requirement 26.4).
+ * neither is logged (Requirement 7.2, platform Requirement 26.4); the subject never holds either
+ * (see {@link EmailMessages}).
  *
  * <p>Active when {@code jihajoor.email.provider} is {@code logging} or unset.
  */

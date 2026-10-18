@@ -67,8 +67,11 @@ public record BookingDetailResponse(
     }
 
     /**
-     * A before/after photo the provider attached. {@code kind} is {@code BEFORE} or {@code AFTER};
-     * there is no URL because stored media is not served back yet.
+     * A before/after photo the provider attached. {@code kind} is {@code BEFORE} or {@code AFTER}.
+     * Its bytes are served, under the same ownership rule as this detail, at
+     * {@code GET /bookings/{bookingKey}/photos/{id}} ({@code BookingPhotoController}). No URL is
+     * included: that endpoint needs the caller's bearer token, so a client fetches it through its
+     * API client rather than putting a bare URL in an {@code <img src>}.
      */
     public record Photo(UUID id, String kind, Instant uploadedAt) {
 

@@ -17,7 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.jihajoor.rating.account.ReviewerAccountPort;
-import com.jihajoor.rating.alert.AdminAlertPort;
 import com.jihajoor.rating.audit.AuditLogEntry;
 import com.jihajoor.rating.audit.AuditLogRepository;
 import com.jihajoor.rating.config.RatingProperties;
@@ -30,7 +29,7 @@ import com.jihajoor.rating.domain.ReviewRepository;
 import com.jihajoor.rating.domain.ReviewerRole;
 import com.jihajoor.rating.event.PaymentCompletedEvent;
 import com.jihajoor.rating.event.ReviewSubmittedPublisher;
-import com.jihajoor.rating.provider.ProviderRatingPort;
+import com.jihajoor.rating.provider.ProviderRatingSync;
 
 /**
  * Orchestrates the rating-and-review lifecycle (Requirement 15):
@@ -40,13 +39,21 @@ import com.jihajoor.rating.provider.ProviderRatingPort;
  *       provider (15.1, 15.10), idempotent per payment.</li>
  *   <li>On submission, enforces the open window (15.2, Property 15), validates ratings/text/
  *       attachments (15.3), runs fraud detection (15.5, Property 17), persists the review, and —
- *       for a non-flagged customer review — recomputes the provider's weighted aggregate (15.4,
- *       Property 16) and publishes {@code ReviewSubmitted} (15.6).</li>
- *   <li>When the recomputed aggregate drops below threshold, flags the provider UNDER_REVIEW and
- *       alerts Admin (15.7, 15.8).</li>
- *   <li>On Admin removal, deactivates the review, recomputes the aggregate, and writes an
- *       Audit_Log entry with the actor and reason (15.9).</li>
+ *       for a non-flagged customer review — has the provider's weighted aggregate (15.4,
+ *       Property 16) recomputed and propagated, and publishes {@code ReviewSubmitted} (15.6).</li>
+ *   <li>On Admin approval of a flagged customer review, has the aggregate recomputed and propagated
+ *       and publishes the withheld {@code ReviewSubmitted} (15.5).</li>
+ *   <li>On Admin removal, deactivates the review, has the aggregate recomputed and propagated, and
+ *       writes an Audit_Log entry with the actor and reason (15.9).</li>
  * </ol>
+ *
+ * <p><strong>Rating propagation.</strong> Every path above that changes which customer reviews
+ * count toward a provider's aggregate calls {@link ProviderRatingSync#recordChange} inside its
+ * transaction. The aggregate is then recomputed from the committed reviews and set in the Provider
+ * Service after the commit, and re-sent by the sweeper until confirmed; see
+ * {@link ProviderRatingSync}. The Provider Service applies the below-threshold UNDER_REVIEW flag and
+ * its Admin alert (15.7, 15.8) as part of that update, since it owns the provider account and
+ * dispatch reads the flag there.
  */
 @Service
 public class ReviewService {
@@ -63,8 +70,7 @@ public class ReviewService {
     private final ReviewPromptRepository promptRepository;
     private final AuditLogRepository auditLogRepository;
     private final ReviewSubmittedPublisher reviewSubmittedPublisher;
-    private final ProviderRatingPort providerRatingPort;
-    private final AdminAlertPort adminAlertPort;
+    private final ProviderRatingSync providerRatingSync;
     private final ReviewerAccountPort reviewerAccountPort;
     private final RatingProperties properties;
     private final AggregateCalculator aggregateCalculator;
@@ -79,12 +85,11 @@ public class ReviewService {
                          ReviewPromptRepository promptRepository,
                          AuditLogRepository auditLogRepository,
                          ReviewSubmittedPublisher reviewSubmittedPublisher,
-                         ProviderRatingPort providerRatingPort,
-                         AdminAlertPort adminAlertPort,
+                         ProviderRatingSync providerRatingSync,
                          ReviewerAccountPort reviewerAccountPort,
                          RatingProperties properties) {
         this(reviewRepository, promptRepository, auditLogRepository, reviewSubmittedPublisher,
-                providerRatingPort, adminAlertPort, reviewerAccountPort, properties, Clock.systemUTC());
+                providerRatingSync, reviewerAccountPort, properties, Clock.systemUTC());
     }
 
     // Visible for testing so unit tests can pin the clock.
@@ -92,8 +97,7 @@ public class ReviewService {
                   ReviewPromptRepository promptRepository,
                   AuditLogRepository auditLogRepository,
                   ReviewSubmittedPublisher reviewSubmittedPublisher,
-                  ProviderRatingPort providerRatingPort,
-                  AdminAlertPort adminAlertPort,
+                  ProviderRatingSync providerRatingSync,
                   ReviewerAccountPort reviewerAccountPort,
                   RatingProperties properties,
                   Clock clock) {
@@ -101,8 +105,7 @@ public class ReviewService {
         this.promptRepository = promptRepository;
         this.auditLogRepository = auditLogRepository;
         this.reviewSubmittedPublisher = reviewSubmittedPublisher;
-        this.providerRatingPort = providerRatingPort;
-        this.adminAlertPort = adminAlertPort;
+        this.providerRatingSync = providerRatingSync;
         this.reviewerAccountPort = reviewerAccountPort;
         this.properties = properties;
         this.aggregateCalculator = new AggregateCalculator(
@@ -137,8 +140,8 @@ public class ReviewService {
 
     /**
      * Submits a customer→provider review. Enforces the review window, validates the payload, runs
-     * fraud detection, persists the review, and — when not flagged — recomputes the provider
-     * aggregate and publishes {@code ReviewSubmitted}.
+     * fraud detection, persists the review, and — when not flagged — has the provider aggregate
+     * recomputed and propagated after commit, and publishes {@code ReviewSubmitted}.
      *
      * @return the persisted review (flagged or not)
      */
@@ -170,7 +173,7 @@ public class ReviewService {
             return review;
         }
 
-        recalculateProviderAggregate(providerId, now);
+        providerRatingSync.recordChange(providerId);
         reviewSubmittedPublisher.publish(review);
         return review;
     }
@@ -201,9 +204,9 @@ public class ReviewService {
     // ---- Admin moderation (Requirement 15.5, 15.9) ---------------------------------------------
 
     /**
-     * Admin-approves a flagged review, clearing the flag so it re-enters the aggregate, then
-     * recomputes the provider's aggregate and publishes the previously-withheld
-     * {@code ReviewSubmitted} event (Requirement 15.5, 15.6).
+     * Admin-approves a flagged review, clearing the flag so it re-enters the aggregate, then has the
+     * provider's aggregate recomputed and propagated after commit and publishes the
+     * previously-withheld {@code ReviewSubmitted} event (Requirement 15.5, 15.6).
      *
      * <p>A removed review cannot be approved: 409 {@code REVIEW_REMOVED}. Removal does not clear the
      * flag, so without this guard the legacy {@code /reviews/{id}/approval} endpoint would clear it
@@ -225,16 +228,17 @@ public class ReviewService {
         reviewRepository.save(review);
 
         if (review.getReviewerRole() == ReviewerRole.CUSTOMER) {
-            recalculateProviderAggregate(review.getRevieweeId(), clock.instant());
+            providerRatingSync.recordChange(review.getRevieweeId());
         }
         reviewSubmittedPublisher.publish(review);
         return review;
     }
 
     /**
-     * Admin-removes a review for a policy violation: deactivates it, recomputes the provider
-     * aggregate, and writes an Audit_Log entry capturing the acting Admin and the reason
-     * (Requirement 15.9).
+     * Admin-removes a review for a policy violation: deactivates it, has the provider aggregate
+     * recomputed and propagated after commit, and writes an Audit_Log entry capturing the acting
+     * Admin and the reason (Requirement 15.9). Removing a review that was still flagged leaves the
+     * aggregate as it was, but is recorded as a change all the same: the recompute is idempotent.
      */
     @Transactional
     public void removeReview(UUID reviewId, UUID adminId, String reason) {
@@ -251,7 +255,7 @@ public class ReviewService {
         auditLogRepository.save(AuditLogEntry.reviewRemoval(reviewId, adminId, reason, now));
 
         if (review.getReviewerRole() == ReviewerRole.CUSTOMER) {
-            recalculateProviderAggregate(review.getRevieweeId(), now);
+            providerRatingSync.recordChange(review.getRevieweeId());
         }
         log.info("Admin {} removed review {} (reason recorded in audit log)", adminId, reviewId);
     }
@@ -307,25 +311,6 @@ public class ReviewService {
         }
         removeReview(reviewId, adminId, reason);
         return review;
-    }
-
-    // ---- Aggregate recalculation (Requirement 15.4, 15.7, 15.8, Property 16, 17) ---------------
-
-    /** Recomputes the provider aggregate over contributing reviews and applies threshold effects. */
-    BigDecimal recalculateProviderAggregate(UUID providerId, Instant now) {
-        List<Review> reviews = reviewRepository.findByRevieweeIdAndReviewerRole(
-                providerId, ReviewerRole.CUSTOMER);
-        BigDecimal aggregate = aggregateCalculator.aggregate(reviews, now);
-        providerRatingPort.updateAggregateRating(providerId, aggregate);
-
-        if (aggregate != null && aggregate.compareTo(properties.getUnderReviewThreshold()) < 0) {
-            boolean newlyFlagged = providerRatingPort.flagUnderReview(providerId);
-            if (newlyFlagged) {
-                adminAlertPort.providerBelowThreshold(providerId, aggregate,
-                        properties.getUnderReviewThreshold());
-            }
-        }
-        return aggregate;
     }
 
     // ---- Helpers -------------------------------------------------------------------------------

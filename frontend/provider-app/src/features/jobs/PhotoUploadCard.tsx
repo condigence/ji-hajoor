@@ -1,4 +1,5 @@
-import { useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
   Box,
@@ -15,7 +16,7 @@ import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import PhotoLibraryRoundedIcon from '@mui/icons-material/PhotoLibraryRounded';
 import { isApiError } from '@api/client';
 import { env } from '@config/env';
-import type { JobPhoto, PhotoKind } from './api';
+import { fetchJobPhoto, type JobPhoto, type PhotoKind } from './api';
 import { useUploadJobPhotos } from './hooks';
 
 interface PhotoUploadCardProps {
@@ -99,30 +100,7 @@ export function PhotoUploadCard({
           <ImageList cols={3} gap={8} sx={{ mt: 1.5, mb: 0 }}>
             {photos.map((photo) => (
               <ImageListItem key={photo.id}>
-                {photo.url ? (
-                  <Box
-                    component="img"
-                    src={photo.url}
-                    alt={`${kind === 'BEFORE' ? 'Before' : 'After'} photo`}
-                    loading="lazy"
-                    sx={{ borderRadius: 1, aspectRatio: '1 / 1', objectFit: 'cover' }}
-                  />
-                ) : (
-                  // Stored photos are not served back yet: show that one is on file.
-                  <Box
-                    role="img"
-                    aria-label={`${kind === 'BEFORE' ? 'Before' : 'After'} photo uploaded`}
-                    sx={{
-                      borderRadius: 1,
-                      aspectRatio: '1 / 1',
-                      bgcolor: 'action.hover',
-                      display: 'grid',
-                      placeItems: 'center',
-                    }}
-                  >
-                    <CheckCircleRoundedIcon color="success" />
-                  </Box>
-                )}
+                <StoredPhoto bookingId={bookingId} photo={photo} kind={kind} />
               </ImageListItem>
             ))}
           </ImageList>
@@ -187,5 +165,67 @@ export function PhotoUploadCard({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * One stored photo. Its bytes come from GET /bookings/{id}/photos/{photoId}, which needs the
+ * bearer header, so it is fetched through the API client as a blob and shown from an object
+ * URL rather than a plain <img src>. A photo with no stored bytes (uploads from before photos
+ * were kept) or a failed read shows a tile saying a photo is on file.
+ */
+function StoredPhoto({
+  bookingId,
+  photo,
+  kind,
+}: {
+  bookingId: string;
+  photo: JobPhoto;
+  kind: PhotoKind;
+}) {
+  const label = `${kind === 'BEFORE' ? 'Before' : 'After'} photo`;
+  const blob = useQuery({
+    queryKey: ['jobs', 'photo', bookingId, photo.id],
+    queryFn: () => fetchJobPhoto(bookingId, photo.id),
+    enabled: !photo.url,
+    staleTime: Infinity,
+    retry: false,
+  });
+  // One object URL per fetched blob, released when the blob changes or the tile unmounts.
+  const objectUrl = useMemo(() => (blob.data ? URL.createObjectURL(blob.data) : null), [blob.data]);
+  useEffect(
+    () => () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    },
+    [objectUrl],
+  );
+
+  const src = photo.url ?? objectUrl;
+  if (src) {
+    return (
+      <Box
+        component="img"
+        src={src}
+        alt={label}
+        loading="lazy"
+        sx={{ borderRadius: 1, aspectRatio: '1 / 1', objectFit: 'cover' }}
+      />
+    );
+  }
+  return (
+    <Box
+      role="img"
+      aria-label={`${label} uploaded`}
+      aria-busy={blob.isLoading}
+      sx={{
+        borderRadius: 1,
+        aspectRatio: '1 / 1',
+        bgcolor: 'action.hover',
+        display: 'grid',
+        placeItems: 'center',
+      }}
+    >
+      <CheckCircleRoundedIcon color="success" />
+    </Box>
   );
 }

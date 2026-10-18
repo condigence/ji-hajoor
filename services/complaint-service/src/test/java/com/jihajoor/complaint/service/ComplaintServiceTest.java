@@ -25,6 +25,7 @@ import com.jihajoor.complaint.domain.ComplaintRefund;
 import com.jihajoor.complaint.domain.ComplaintRefundStatus;
 import com.jihajoor.complaint.domain.ComplaintStatus;
 import com.jihajoor.complaint.domain.ServicePriority;
+import com.jihajoor.complaint.payment.RefundOutcomeUnknownException;
 import com.jihajoor.complaint.payment.RefundPort;
 import com.jihajoor.complaint.payment.RefundResult;
 import com.jihajoor.complaint.support.FixedSupportAgentDirectory;
@@ -375,9 +376,9 @@ class ComplaintServiceTest {
     }
 
     @Test
-    void portThrowingLeavesTheRefundPendingAlertsFinanceAndBlocksRetries() {
+    void portThrowingLeavesTheRefundPendingAlertsFinanceAndOnlyASameKeyRetryResendsIt() {
         UUID complaintId = newComplaint();
-        refunds.failWith(new IllegalStateException("read timed out"));
+        refunds.failWith(new RefundOutcomeUnknownException("read timed out"));
         ComplaintService service = serviceAt(NOW);
 
         Throwable thrown = catchThrowable(
@@ -385,22 +386,302 @@ class ComplaintServiceTest {
 
         assertErrorCode(thrown, "REFUND_OUTCOME_UNKNOWN");
         assertThat(((ComplaintException) thrown).getStatus()).isEqualTo(HttpStatus.BAD_GATEWAY);
+        assertThat(thrown).hasMessageContaining("same idempotencyKey");
         ComplaintRefund pending = refundRecords.findByComplaintId(complaintId).orElseThrow();
+        // Outcome unknown: neither SUCCEEDED nor FAILED. The cause is noted on the PENDING record.
         assertThat(pending.getStatus()).isEqualTo(ComplaintRefundStatus.PENDING);
-        // Outcome unknown: the customer is not told it failed and the complaint is not moved.
+        assertThat(pending.getFailureReason()).contains("read timed out");
+        assertThat(pending.getCompletedAt()).isNull();
+        // The customer is not told it failed and the complaint is not moved.
         assertThat(complaints.findById(complaintId).orElseThrow().getStatus())
                 .isEqualTo(ComplaintStatus.OPEN);
         assertThat(notifications.refundFailures()).isEmpty();
         assertThat(financeAlerts.reasons()).singleElement().asString()
                 .contains(pending.paymentIdempotencyKey());
 
-        assertErrorCode(catchThrowable(
-                () -> service.approveRefund(refund(complaintId, "50.00", "agent-req-1"))),
-                "REFUND_IN_PROGRESS");
+        // A different request is still a second refund: refused, never sent.
         assertErrorCode(catchThrowable(
                 () -> service.approveRefund(refund(complaintId, "50.00", null))),
                 "REFUND_ALREADY_REQUESTED");
+        assertErrorCode(catchThrowable(
+                () -> service.approveRefund(refund(complaintId, "50.00", "agent-req-2"))),
+                "REFUND_ALREADY_REQUESTED");
         assertThat(refunds.requests()).hasSize(1);
+
+        // The same request re-sends it, under the same Payment Service key; still unknown here.
+        assertErrorCode(catchThrowable(
+                () -> service.approveRefund(refund(complaintId, "50.00", "agent-req-1"))),
+                "REFUND_OUTCOME_UNKNOWN");
+        assertThat(refunds.idempotencyKeys()).hasSize(2).containsOnly(pending.paymentIdempotencyKey());
+        assertThat(refunds.calledInTransaction()).containsOnly(false);
+        assertThat(refundRecords.count()).isEqualTo(1);
+    }
+
+    @Test
+    void sameKeyRetryAfterAnUnknownOutcomeRecordsTheRefundOnceThePaymentServiceAnswers() {
+        UUID complaintId = newComplaint();
+        refunds.failWith(new RefundOutcomeUnknownException("Payment Service returned 503"));
+        ComplaintService service = serviceAt(NOW);
+        catchThrowable(() -> service.approveRefund(refund(complaintId, "50.00", "agent-req-1")));
+
+        refunds.failWith(null);
+        refunds.setNextResult(RefundResult.approved("pay_rf_1"));
+        Instant later = NOW.plus(Duration.ofMinutes(1));
+        ComplaintRefund refund = serviceAt(later).approveRefund(refund(complaintId, "50.00", "agent-req-1"));
+
+        assertThat(refund.getStatus()).isEqualTo(ComplaintRefundStatus.SUCCEEDED);
+        assertThat(refund.getExternalReference()).isEqualTo("pay_rf_1");
+        assertThat(refund.getFailureReason()).isNull();
+        assertThat(refund.getRequestedAt()).isEqualTo(NOW);
+        assertThat(refund.getLastAttemptAt()).isEqualTo(later);
+        assertThat(refunds.idempotencyKeys()).hasSize(2).containsOnly(refund.paymentIdempotencyKey());
+        assertThat(notifications.refundFailures()).isEmpty();
+        // Replays from now on, without calling the Payment Service again.
+        assertThat(serviceAt(later).approveRefund(refund(complaintId, "50.00", "agent-req-1"))
+                .getStatus()).isEqualTo(ComplaintRefundStatus.SUCCEEDED);
+        assertThat(refunds.requests()).hasSize(2);
+    }
+
+    @Test
+    void sameKeyRetryAfterAnUnknownOutcomeThatIsThenRejectedRunsTheRefundFailedFlow() {
+        UUID complaintId = newComplaint();
+        refunds.failWith(new RefundOutcomeUnknownException("read timed out"));
+        ComplaintService service = serviceAt(NOW);
+        catchThrowable(() -> service.approveRefund(refund(complaintId, "50.00", "agent-req-1")));
+
+        refunds.failWith(null);
+        refunds.setNextResult(RefundResult.rejected("gateway declined"));
+        ComplaintRefund refund = service.approveRefund(refund(complaintId, "50.00", "agent-req-1"));
+
+        assertThat(refund.getStatus()).isEqualTo(ComplaintRefundStatus.FAILED);
+        assertThat(refund.getFailureReason()).isEqualTo("gateway declined");
+        assertThat(complaints.findById(complaintId).orElseThrow().getStatus())
+                .isEqualTo(ComplaintStatus.REFUND_FAILED);
+        assertThat(notifications.refundFailures()).containsExactly(complaintId);
+    }
+
+    /** Two attempts of one refund must never overlap: a retry while the first is in flight is refused. */
+    @Test
+    void sameKeyRetryWhileTheFirstCallIsStillInFlightIsRefusedWithoutASecondCall() {
+        UUID complaintId = newComplaint();
+        List<Throwable> retryOutcome = new java.util.ArrayList<>();
+        List<String> keysSent = new java.util.ArrayList<>();
+        ComplaintService[] holder = new ComplaintService[1];
+        RefundPort slow = (bookingId, id, amount, key) -> {
+            keysSent.add(key);
+            // The agent presses the button again while this call has not answered yet.
+            retryOutcome.add(catchThrowable(
+                    () -> holder[0].approveRefund(refund(complaintId, "50.00", "agent-req-1"))));
+            return RefundResult.approved("pay_rf_1");
+        };
+        holder[0] = new ComplaintService(complaints, refundRecords, agents, notifications, slow,
+                settlements, financeAlerts, events, properties, transactions,
+                Clock.fixed(NOW, ZoneOffset.UTC));
+
+        ComplaintRefund refund = holder[0].approveRefund(refund(complaintId, "50.00", "agent-req-1"));
+
+        assertThat(refund.getStatus()).isEqualTo(ComplaintRefundStatus.SUCCEEDED);
+        assertThat(retryOutcome).singleElement().satisfies(t -> assertErrorCode(t, "REFUND_IN_PROGRESS"));
+        assertThat(keysSent).hasSize(1);
+    }
+
+    /**
+     * An attempt with no recorded end (the instance died mid-call) blocks retries for the attempt
+     * lease, and is then presumed lost and re-sent under the same key.
+     */
+    @Test
+    void attemptWithNoRecordedOutcomeIsResentOnlyAfterTheAttemptLease() {
+        UUID complaintId = newComplaint();
+        Complaint complaint = complaints.findById(complaintId).orElseThrow();
+        properties.setRefundAttemptLease(Duration.ofMinutes(5));
+        ComplaintRefund crashed = refundRecords.save(ComplaintRefund.reserve(complaintId,
+                complaint.getBookingId(), new BigDecimal("50.00"), null, APPROVER, "agent-req-1", NOW));
+
+        assertErrorCode(catchThrowable(() -> serviceAt(NOW.plus(Duration.ofMinutes(4)))
+                .approveRefund(refund(complaintId, "50.00", "agent-req-1"))), "REFUND_IN_PROGRESS");
+        assertThat(refunds.requests()).isEmpty();
+
+        ComplaintRefund resent = serviceAt(NOW.plus(Duration.ofMinutes(5)))
+                .approveRefund(refund(complaintId, "50.00", "agent-req-1"));
+
+        assertThat(resent.getId()).isEqualTo(crashed.getId());
+        assertThat(resent.getStatus()).isEqualTo(ComplaintRefundStatus.SUCCEEDED);
+        assertThat(refunds.idempotencyKeys()).containsExactly(crashed.paymentIdempotencyKey());
+    }
+
+    @Test
+    void unknownOutcomeOfARefundApprovedWithoutAKeyPointsTheAgentAtTheResendEndpoint() {
+        UUID complaintId = newComplaint();
+        refunds.failWith(new RefundOutcomeUnknownException("read timed out"));
+
+        Throwable thrown = catchThrowable(
+                () -> serviceAt(NOW).approveRefund(refund(complaintId, "50.00", null)));
+
+        assertErrorCode(thrown, "REFUND_OUTCOME_UNKNOWN");
+        assertThat(thrown).hasMessageContaining("without an idempotencyKey")
+                .hasMessageContaining("/complaints/" + complaintId + "/refund/resend");
+        // A second approval is still refused (and says how to re-send instead).
+        Throwable again = catchThrowable(
+                () -> serviceAt(NOW).approveRefund(refund(complaintId, "50.00", null)));
+        assertErrorCode(again, "REFUND_ALREADY_REQUESTED");
+        assertThat(again).hasMessageContaining("refund/resend");
+        assertThat(refunds.requests()).hasSize(1);
+    }
+
+    // ---- Explicit re-send of a PENDING refund (16.5, 16.6) -------------------------------------
+
+    /** The stuck case: approved without a client key, outcome unknown, then re-sent explicitly. */
+    @Test
+    void resendOfAKeylessPendingRefundResendsUnderTheSamePaymentKeyAndRecordsTheOutcome() {
+        UUID complaintId = newComplaint();
+        refunds.failWith(new RefundOutcomeUnknownException("read timed out"));
+        catchThrowable(() -> serviceAt(NOW).approveRefund(refund(complaintId, "50.00", null)));
+        ComplaintRefund pending = refundRecords.findByComplaintId(complaintId).orElseThrow();
+        assertThat(pending.getClientIdempotencyKey()).isNull();
+        assertThat(serviceAt(NOW).isRefundResendable(pending)).isTrue();
+
+        refunds.failWith(null);
+        refunds.setNextResult(RefundResult.approved("pay_rf_7"));
+        Instant later = NOW.plus(Duration.ofSeconds(30));
+        ComplaintRefund refund = serviceAt(later).resendRefund(complaintId, SUPPORT_AGENT);
+
+        assertThat(refund.getId()).isEqualTo(pending.getId());
+        assertThat(refund.getStatus()).isEqualTo(ComplaintRefundStatus.SUCCEEDED);
+        assertThat(refund.getExternalReference()).isEqualTo("pay_rf_7");
+        assertThat(refund.getFailureReason()).isNull();
+        assertThat(refund.getLastAttemptAt()).isEqualTo(later);
+        // Same amount, same Payment Service key both times, never inside a transaction.
+        assertThat(refunds.requests()).hasSize(2).allSatisfy(a -> assertThat(a).isEqualByComparingTo("50.00"));
+        assertThat(refunds.idempotencyKeys()).hasSize(2).containsOnly(pending.paymentIdempotencyKey());
+        assertThat(refunds.calledInTransaction()).containsOnly(false);
+        assertThat(refundRecords.count()).isEqualTo(1);
+        assertThat(serviceAt(later).isRefundResendable(refund)).isFalse();
+    }
+
+    @Test
+    void resendOfASettledRefundReturnsItWithoutCallingThePaymentService() {
+        UUID complaintId = newComplaint();
+        ComplaintRefund succeeded = serviceAt(NOW).approveRefund(refund(complaintId, "50.00", null));
+
+        ComplaintRefund again = serviceAt(NOW).resendRefund(complaintId, SUPPORT_AGENT);
+
+        assertThat(again.getId()).isEqualTo(succeeded.getId());
+        assertThat(again.getStatus()).isEqualTo(ComplaintRefundStatus.SUCCEEDED);
+        assertThat(refunds.requests()).hasSize(1);
+
+        UUID rejectedComplaint = newComplaint();
+        refunds.setNextResult(RefundResult.rejected("card expired"));
+        serviceAt(NOW).approveRefund(refund(rejectedComplaint, "20.00", null));
+        assertThat(serviceAt(NOW).resendRefund(rejectedComplaint, SUPPORT_AGENT).getStatus())
+                .isEqualTo(ComplaintRefundStatus.FAILED);
+        assertThat(refunds.requests()).hasSize(2);
+        assertThat(financeAlerts.alerts()).containsExactly(rejectedComplaint);
+    }
+
+    /** The re-send spacing: an attempt still in flight is not re-sent until its lease runs out. */
+    @Test
+    void resendWhileTheLatestAttemptIsInFlightIsRefusedUntilTheAttemptLease() {
+        UUID complaintId = newComplaint();
+        Complaint complaint = complaints.findById(complaintId).orElseThrow();
+        properties.setRefundAttemptLease(Duration.ofMinutes(5));
+        ComplaintRefund inFlight = refundRecords.save(ComplaintRefund.reserve(complaintId,
+                complaint.getBookingId(), new BigDecimal("50.00"), null, APPROVER, null, NOW));
+
+        assertErrorCode(catchThrowable(() -> serviceAt(NOW.plus(Duration.ofMinutes(4)))
+                .resendRefund(complaintId, SUPPORT_AGENT)), "REFUND_IN_PROGRESS");
+        assertThat(serviceAt(NOW.plus(Duration.ofMinutes(4))).isRefundResendable(inFlight)).isFalse();
+        assertThat(refunds.requests()).isEmpty();
+
+        ComplaintRefund resent = serviceAt(NOW.plus(Duration.ofMinutes(5)))
+                .resendRefund(complaintId, SUPPORT_AGENT);
+
+        assertThat(resent.getStatus()).isEqualTo(ComplaintRefundStatus.SUCCEEDED);
+        assertThat(refunds.idempotencyKeys()).containsExactly(inFlight.paymentIdempotencyKey());
+    }
+
+    /** Two attempts never overlap: a re-send pressed while the re-send is in flight is refused. */
+    @Test
+    void resendPressedAgainWhileTheResendIsInFlightIsRefusedWithoutASecondCall() {
+        UUID complaintId = newComplaint();
+        refunds.failWith(new RefundOutcomeUnknownException("read timed out"));
+        catchThrowable(() -> serviceAt(NOW).approveRefund(refund(complaintId, "50.00", null)));
+        List<Throwable> secondPress = new java.util.ArrayList<>();
+        List<String> keysSent = new java.util.ArrayList<>();
+        ComplaintService[] holder = new ComplaintService[1];
+        RefundPort slow = (bookingId, id, amount, key) -> {
+            keysSent.add(key);
+            secondPress.add(catchThrowable(() -> holder[0].resendRefund(complaintId, SUPPORT_AGENT)));
+            return RefundResult.approved("pay_rf_2");
+        };
+        holder[0] = new ComplaintService(complaints, refundRecords, agents, notifications, slow,
+                settlements, financeAlerts, events, properties, transactions,
+                Clock.fixed(NOW, ZoneOffset.UTC));
+
+        ComplaintRefund refund = holder[0].resendRefund(complaintId, SUPPORT_AGENT);
+
+        assertThat(refund.getStatus()).isEqualTo(ComplaintRefundStatus.SUCCEEDED);
+        assertThat(secondPress).singleElement().satisfies(t -> assertErrorCode(t, "REFUND_IN_PROGRESS"));
+        assertThat(keysSent).hasSize(1);
+    }
+
+    @Test
+    void resendThatIsRejectedRunsTheRefundFailedFlow() {
+        UUID complaintId = newComplaint();
+        refunds.failWith(new RefundOutcomeUnknownException("read timed out"));
+        catchThrowable(() -> serviceAt(NOW).approveRefund(refund(complaintId, "50.00", null)));
+
+        refunds.failWith(null);
+        refunds.setNextResult(RefundResult.rejected("gateway declined"));
+        ComplaintRefund refund = serviceAt(NOW).resendRefund(complaintId, SUPPORT_AGENT);
+
+        assertThat(refund.getStatus()).isEqualTo(ComplaintRefundStatus.FAILED);
+        assertThat(complaints.findById(complaintId).orElseThrow().getStatus())
+                .isEqualTo(ComplaintStatus.REFUND_FAILED);
+        assertThat(notifications.refundFailures()).containsExactly(complaintId);
+        // One alert for the unknown outcome, one for the rejection.
+        assertThat(financeAlerts.alerts()).containsExactly(complaintId, complaintId);
+    }
+
+    @Test
+    void resendWithAnUnknownOutcomeAgainStaysPendingAndAlertsFinanceAgain() {
+        UUID complaintId = newComplaint();
+        refunds.failWith(new RefundOutcomeUnknownException("read timed out"));
+        catchThrowable(() -> serviceAt(NOW).approveRefund(refund(complaintId, "50.00", null)));
+
+        Throwable thrown = catchThrowable(() -> serviceAt(NOW).resendRefund(complaintId, SUPPORT_AGENT));
+
+        assertErrorCode(thrown, "REFUND_OUTCOME_UNKNOWN");
+        ComplaintRefund pending = refundRecords.findByComplaintId(complaintId).orElseThrow();
+        assertThat(pending.getStatus()).isEqualTo(ComplaintRefundStatus.PENDING);
+        assertThat(pending.getFailureReason()).contains("read timed out");
+        assertThat(financeAlerts.alerts()).hasSize(2);
+        assertThat(refunds.idempotencyKeys()).hasSize(2).containsOnly(pending.paymentIdempotencyKey());
+        // Still re-sendable: the attempt ended (unknown), so the next press goes straight through.
+        assertThat(serviceAt(NOW).isRefundResendable(pending)).isTrue();
+    }
+
+    @Test
+    void resendWithNoRefundOrNoComplaintIsNotFound() {
+        UUID complaintId = newComplaint();
+
+        assertErrorCode(catchThrowable(() -> serviceAt(NOW).resendRefund(complaintId, SUPPORT_AGENT)),
+                "REFUND_NOT_FOUND");
+        assertErrorCode(catchThrowable(() -> serviceAt(NOW).resendRefund(UUID.randomUUID(),
+                SUPPORT_AGENT)), "COMPLAINT_NOT_FOUND");
+        assertThat(refunds.requests()).isEmpty();
+    }
+
+    @Test
+    void getRefundReturnsTheRecordedRefundOrNotFound() {
+        UUID complaintId = newComplaint();
+        assertErrorCode(catchThrowable(() -> serviceAt(NOW).getRefund(complaintId)),
+                "REFUND_NOT_FOUND");
+        assertErrorCode(catchThrowable(() -> serviceAt(NOW).getRefund(UUID.randomUUID())),
+                "COMPLAINT_NOT_FOUND");
+
+        ComplaintRefund refund = serviceAt(NOW).approveRefund(refund(complaintId, "50.00", null));
+
+        assertThat(serviceAt(NOW).getRefund(complaintId)).isSameAs(refund);
     }
 
     @Test
@@ -470,6 +751,28 @@ class ComplaintServiceTest {
     }
 
     // ---- Settlement hold placement and release (16.7, 16.8) ------------------------------------
+
+    // ---- Stats (16.9) ---------------------------------------------------------------------------
+
+    @Test
+    void aggregateStatsFromTheAggregateQueriesMatchesTheInMemoryAggregation() {
+        ComplaintService service = serviceAt(NOW);
+        UUID resolved = service.createComplaint(command(ServicePriority.STANDARD)).getId();
+        serviceAt(NOW.plus(Duration.ofMinutes(95).plusNanos(1_700_000)))
+                .closeComplaint(resolved, ComplaintStatus.RESOLVED);
+        UUID closed = service.createComplaint(command(ServicePriority.EMERGENCY)).getId();
+        serviceAt(NOW.plus(Duration.ofHours(5))).closeComplaint(closed, ComplaintStatus.CLOSED);
+        service.createComplaint(command(ServicePriority.STANDARD));
+
+        ComplaintStats stats = service.aggregateStats();
+
+        assertThat(stats).isEqualTo(new ComplaintStatsCalculator().aggregate(complaints.findAll()));
+        assertThat(stats.totalComplaints()).isEqualTo(3);
+        assertThat(stats.resolvedComplaints()).isEqualTo(2);
+        assertThat(stats.categoryCounts().get(ComplaintCategory.POOR_QUALITY)).isEqualTo(3);
+        assertThat(stats.averageResolutionTime())
+                .isEqualTo(Duration.ofMillis((95 * 60_000L + 1 + 5 * 3_600_000L) / 2));
+    }
 
     @Test
     void disputePlacesSettlementHold() {

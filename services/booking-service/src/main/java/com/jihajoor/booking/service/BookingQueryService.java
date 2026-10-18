@@ -159,12 +159,23 @@ public class BookingQueryService {
      *         its customer, its assigned provider, nor staff — deliberately indistinguishable
      */
     public BookingView detail(String bookingKey, UUID callerId, boolean staff) {
-        Booking booking = bookingRepository.findByKey(bookingKey)
+        Booking booking = visibleBooking(bookingKey, callerId, staff);
+        return new BookingView(booking, serviceName(booking, subcategoryNames()), jobFacts(booking));
+    }
+
+    /**
+     * The booking identified by {@code bookingKey}, if {@code callerId} may see it: the same rule
+     * and the same indistinguishable 404 as {@link #detail}, without the labels and job facts. For
+     * reads hanging off a booking the caller can see, such as its photos' bytes.
+     *
+     * @throws BookingException 404 when no such booking exists or the caller may not see it
+     */
+    public Booking visibleBooking(String bookingKey, UUID callerId, boolean staff) {
+        return bookingRepository.findByKey(bookingKey)
                 .filter(b -> staff
                         || callerId.equals(b.getCustomerId())
                         || callerId.equals(b.getProviderId()))
                 .orElseThrow(() -> BookingException.notFound(bookingKey));
-        return new BookingView(booking, serviceName(booking, subcategoryNames()), jobFacts(booking));
     }
 
     /**

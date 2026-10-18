@@ -45,8 +45,35 @@ jihajoor:
     # i.e. the Provider Service's batch APPROVED lookup. Same INTERNAL_API_KEY as the other
     # services. No usable default: when unset every /internal/** request is refused (fail closed).
     internal-api-key: ${INTERNAL_API_KEY:}
-    # S3 bucket for uploaded verification documents; stored with SSE-KMS (Requirement 5.3).
-    documents-bucket: ${DOCUMENTS_BUCKET:jihajoor-documents}
+    # Uploaded verification documents (Requirement 5.3). See DocumentStorage for the rules; the same
+    # model as booking-service's media-storage, under this service's own prefix and DOCUMENTS_*
+    # variables so nothing leaks to the other services sharing identity-app's JVM.
+    document-storage:
+      # Where new documents are written: 'auto' (S3 when a bucket is set and answers HeadBucket at
+      # startup, else local disk with a WARN), 's3' (S3 or fail startup), or 'local' (always local).
+      # Each document row records its store, so documents stay readable whichever mode runs.
+      provider: ${DOCUMENT_STORAGE_PROVIDER:auto}
+      local:
+        # Root directory for locally stored documents. Instance-local unless it is a shared volume.
+        directory: ${DOCUMENTS_LOCAL_DIR:${java.io.tmpdir}/jihajoor-documents}
+      s3:
+        # Blank = S3 not configured (Terraform output s3_bucket_documents in AWS).
+        bucket: ${DOCUMENTS_BUCKET:}
+        region: ${DOCUMENTS_S3_REGION:${AWS_REGION:}}
+        # Optional key prefix inside the bucket, e.g. 'prod/'.
+        prefix: ${DOCUMENTS_S3_PREFIX:}
+        # S3-compatible store (MinIO, LocalStack), e.g. http://minio:9000; blank for AWS.
+        endpoint: ${DOCUMENTS_S3_ENDPOINT:}
+        path-style-access: ${DOCUMENTS_S3_PATH_STYLE_ACCESS:false}
+        # Blank = the bucket's default encryption (SSE-KMS with the platform key on the Terraform
+        # documents bucket); AES256 or aws:kms to request one per object.
+        server-side-encryption: ${DOCUMENTS_S3_SSE:}
+        kms-key-id: ${DOCUMENTS_S3_KMS_KEY_ID:}
+        # Static keys, both or neither; otherwise the AWS SDK default chain (env, IRSA, instance role).
+        access-key-id: ${DOCUMENTS_S3_ACCESS_KEY_ID:}
+        secret-access-key: ${DOCUMENTS_S3_SECRET_ACCESS_KEY:}
+        # Bound on the startup HeadBucket check.
+        startup-check-timeout: ${DOCUMENTS_S3_STARTUP_CHECK_TIMEOUT:10s}
     required-document-types:
       - GOVERNMENT_ID
       - ADDRESS_PROOF
