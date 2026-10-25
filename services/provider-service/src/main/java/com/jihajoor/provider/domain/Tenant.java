@@ -85,6 +85,10 @@ public class Tenant {
     @Column(name = "rejection_reason", length = 500)
     private String rejectionReason;
 
+    /** Percent of a worker's net earning on this agency's jobs that goes to the agency (0-50). */
+    @Column(name = "agency_share_percent", nullable = false, precision = 5, scale = 2)
+    private BigDecimal agencySharePercent = BigDecimal.ZERO;
+
     @Version
     @Column(name = "version", nullable = false)
     private Long version;
@@ -178,6 +182,17 @@ public class Tenant {
         // Mutate the managed collection rather than swapping it, so Hibernate diffs the rows.
         this.categoryIds.retainAll(ids);
         this.categoryIds.addAll(ids);
+    }
+
+    /** Sets the agency's share of its workers' net earnings, by {@code actor}. */
+    public void changeAgencyShare(BigDecimal percent, UUID actor) {
+        this.agencySharePercent = percent;
+        this.updatedBy = actor;
+        this.updatedAt = Instant.now();
+    }
+
+    public BigDecimal getAgencySharePercent() {
+        return agencySharePercent;
     }
 
     public boolean isActive() {

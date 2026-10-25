@@ -1,5 +1,6 @@
 package com.jihajoor.provider.api;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -32,6 +33,9 @@ import com.jihajoor.provider.config.WebSecurityConfig;
 import com.jihajoor.provider.domain.Tenant;
 import com.jihajoor.provider.domain.Tenant.TenantDetails;
 import com.jihajoor.provider.service.ProviderException;
+import com.jihajoor.provider.service.AgencyEarningsService;
+import com.jihajoor.provider.service.AgencyInvitationService;
+import com.jihajoor.provider.service.AgencyInvitationService.InvitationView;
 import com.jihajoor.provider.service.TenantService;
 import com.jihajoor.provider.service.TenantTeamService;
 import com.jihajoor.provider.service.TenantViews.TeamProviderView;
@@ -69,6 +73,12 @@ class TenantPortalControllerTest {
 
     @MockitoBean
     private TenantTeamService teamService;
+
+    @MockitoBean
+    private AgencyInvitationService invitationService;
+
+    @MockitoBean
+    private AgencyEarningsService earningsService;
 
     private String token(UUID subject, String... roles) {
         return "Bearer " + Jwts.builder()
@@ -120,13 +130,17 @@ class TenantPortalControllerTest {
         Tenant mine = tenant();
         UUID provider = UUID.randomUUID();
         when(tenantService.requirePortalTenant(tenantAdmin)).thenReturn(mine);
-        when(teamService.addProvider(mine.getId(), "+919000000011", tenantAdmin)).thenReturn(new TeamProviderView(
-                provider, "Ravi", "+919000000011", "plumbing", null, BigDecimal.ZERO, true, false));
+        when(invitationService.invite(mine.getId(), "+919000000011", tenantAdmin)).thenReturn(new InvitationView(
+                UUID.randomUUID(), mine.getId(), mine.getName(), provider, "Ravi", "+919000000011", "PENDING",
+                java.time.Instant.now(), BigDecimal.ZERO));
 
+        // Adding a worker sends an invitation: nobody joins an agency without accepting.
         mockMvc.perform(post("/tenant/providers").header(HttpHeaders.AUTHORIZATION, token(tenantAdmin, "TENANT_ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"mobileNumber\":\"+919000000011\"}"))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.providerId").value(provider.toString()));
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.providerId").value(provider.toString()))
+                .andExpect(jsonPath("$.status").value("PENDING"));
+        verify(teamService, org.mockito.Mockito.never()).addProvider(any(), any(), any());
         mockMvc.perform(delete("/tenant/providers/" + provider)
                         .header(HttpHeaders.AUTHORIZATION, token(tenantAdmin, "TENANT_ADMIN")))
                 .andExpect(status().isNoContent());
@@ -184,5 +198,30 @@ class TenantPortalControllerTest {
         mockMvc.perform(get("/tenant/me")).andExpect(status().isUnauthorized());
 
         verifyNoInteractions(tenantService, teamService);
+    }
+
+    @Test
+    void invitationsAndEarnings_areTheCallersAgencyOnly() throws Exception {
+        Tenant mine = tenant();
+        UUID invitation = UUID.randomUUID();
+        when(tenantService.requirePortalTenant(tenantAdmin)).thenReturn(mine);
+        when(invitationService.pendingForAgency(mine.getId())).thenReturn(List.of());
+        when(earningsService.summary(mine.getId())).thenReturn(
+                new AgencyEarningsService.AgencyEarningsView(new BigDecimal("10.00"), new BigDecimal("45.00"), List.of()));
+        String auth = token(tenantAdmin, "TENANT_ADMIN");
+
+        mockMvc.perform(get("/tenant/invitations").header(HttpHeaders.AUTHORIZATION, auth))
+                .andExpect(status().isOk());
+        mockMvc.perform(delete("/tenant/invitations/" + invitation).header(HttpHeaders.AUTHORIZATION, auth))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/tenant/earnings").header(HttpHeaders.AUTHORIZATION, auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sharePercent").value(10.00))
+                .andExpect(jsonPath("$.totalEarned").value(45.00));
+
+        verify(invitationService).cancel(mine.getId(), invitation, tenantAdmin);
+        // A worker cannot read an agency's earnings.
+        mockMvc.perform(get("/tenant/earnings").header(HttpHeaders.AUTHORIZATION, token(UUID.randomUUID(), "SERVICE_PROVIDER")))
+                .andExpect(status().isForbidden());
     }
 }

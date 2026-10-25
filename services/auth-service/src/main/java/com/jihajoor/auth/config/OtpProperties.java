@@ -51,7 +51,8 @@ public class OtpProperties {
     /**
      * The only mobile numbers (E.164) the fixed test code works for. Every other number gets a
      * real SMS even while {@link #fixedCode} is set, so the test code cannot open a real account.
-     * Empty means no number.
+     * Empty means no number. An entry ending in {@code *} matches every number with that prefix
+     * (at least four characters before the star), for CI runs that sign up fresh numbers.
      */
     private java.util.List<String> fixedCodeNumbers = new java.util.ArrayList<>();
 
@@ -130,7 +131,11 @@ public class OtpProperties {
         }
         String number = mobileNumber.trim();
         boolean allowed = fixedCodeNumbers.stream()
-                .anyMatch(n -> n != null && !n.isBlank() && n.trim().equals(number));
+                .filter(n -> n != null && !n.isBlank())
+                .map(String::trim)
+                .anyMatch(n -> n.endsWith("*") && n.length() > 4
+                        ? number.startsWith(n.substring(0, n.length() - 1))
+                        : n.equals(number));
         return allowed ? code : null;
     }
 

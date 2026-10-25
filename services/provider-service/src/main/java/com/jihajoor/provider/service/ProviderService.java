@@ -27,6 +27,8 @@ import com.jihajoor.provider.catalog.CatalogClientPort;
 import com.jihajoor.provider.config.ProviderProperties;
 import com.jihajoor.provider.domain.AvailabilitySlot;
 import com.jihajoor.provider.domain.ProviderCategorySelection;
+import com.jihajoor.provider.domain.AgencyEarning;
+import com.jihajoor.provider.domain.AgencyEarningRepository;
 import com.jihajoor.provider.domain.EarningType;
 import com.jihajoor.provider.domain.ProviderEarning;
 import com.jihajoor.provider.domain.ProviderEarningRepository;
@@ -35,6 +37,8 @@ import com.jihajoor.provider.domain.ProviderProfileRepository;
 import com.jihajoor.provider.domain.RatingUpdateOutcome;
 import com.jihajoor.provider.domain.Settlement;
 import com.jihajoor.provider.domain.SettlementRepository;
+import com.jihajoor.provider.domain.Tenant;
+import com.jihajoor.provider.domain.TenantRepository;
 import com.jihajoor.provider.service.ProfileUpdateCommand.CategorySelectionCommand;
 
 /**
@@ -77,6 +81,17 @@ public class ProviderService {
         this.props = props;
         this.bankAccountCodec = bankAccountCodec;
         this.bankAccountVerification = bankAccountVerification;
+    }
+
+    /** Set when the agency-share tables are available; without them every job pays the worker in full. */
+    private TenantRepository tenantRepository;
+    private AgencyEarningRepository agencyEarningRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setAgencyShareRepositories(TenantRepository tenantRepository,
+                                    AgencyEarningRepository agencyEarningRepository) {
+        this.tenantRepository = tenantRepository;
+        this.agencyEarningRepository = agencyEarningRepository;
     }
 
     // ================= Profile (Requirement 4.1–4.3, 4.8) =================
@@ -298,8 +313,41 @@ public class ProviderService {
         }
         ProviderEarning earning = ProviderEarning.jobCredit(providerId, bookingId, bookingReference, gross, platformFee);
         earningRepository.saveAndFlush(earning);
-        profile.creditWallet(earning.getNet());
+        BigDecimal workerCredit = earning.getNet();
+        BigDecimal agencyShare = creditAgencyShare(profile, bookingId, bookingReference, earning.getNet());
+        if (agencyShare.signum() > 0) {
+            earningRepository.saveAndFlush(
+                    ProviderEarning.agencyShare(providerId, bookingId, bookingReference, agencyShare));
+            workerCredit = workerCredit.subtract(agencyShare);
+        }
+        profile.creditWallet(workerCredit);
         return profileRepository.save(profile);
+    }
+
+    /**
+     * Records the agency's share when the worker belongs to an agency that takes one, and returns
+     * it (zero otherwise). The job credit's unique index already makes a booking pay once; the
+     * agency ledger has its own per-booking index as well.
+     */
+    private BigDecimal creditAgencyShare(ProviderProfile worker, UUID bookingId, String bookingReference,
+                                         BigDecimal workerNet) {
+        if (bookingId == null || worker.getTenantId() == null
+                || tenantRepository == null || agencyEarningRepository == null) {
+            return BigDecimal.ZERO;
+        }
+        Tenant agency = tenantRepository.findById(worker.getTenantId()).orElse(null);
+        if (agency == null) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal share = AgencyEarningsService.shareOf(workerNet, agency.getAgencySharePercent());
+        if (share.signum() <= 0 || agencyEarningRepository.existsByBookingId(bookingId)) {
+            return BigDecimal.ZERO;
+        }
+        agencyEarningRepository.saveAndFlush(new AgencyEarning(agency.getId(), worker.getId(), bookingId,
+                bookingReference, workerNet, agency.getAgencySharePercent(), share));
+        log.info("Booking {}: agency {} share {} of worker {} net {}", bookingId, agency.getId(), share,
+                worker.getId(), workerNet);
+        return share;
     }
 
     /**
@@ -541,7 +589,7 @@ public class ProviderService {
      *
      * <p>"Today" is the civil day in {@code jihajoor.provider.earnings-day-zone}, not a rolling
      * 24-hour window, so the figure resets at local midnight the way a provider expects. Only
-     * {@link EarningType#JOB_CREDIT} rows count towards the job tally — fee and penalty rows are
+     * {@link EarningType#JOB_CREDIT} rows count towards the job tally — fee, penalty and agency-share rows are
      * itemised separately in the ledger and would otherwise inflate the count.
      */
     @Transactional(readOnly = true)

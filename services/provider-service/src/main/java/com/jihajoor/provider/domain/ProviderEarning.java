@@ -87,6 +87,13 @@ public class ProviderEarning {
                 EarningType.PENALTY_DEDUCTION, BigDecimal.ZERO, BigDecimal.ZERO, amount.negate());
     }
 
+    /** The agency's share of a job, deducted from the worker's net (itemised). */
+    public static ProviderEarning agencyShare(UUID providerId, UUID bookingId, String bookingReference,
+                                              BigDecimal amount) {
+        return new ProviderEarning(providerId, bookingId, bookingReference,
+                EarningType.AGENCY_SHARE_DEDUCTION, BigDecimal.ZERO, BigDecimal.ZERO, amount.negate());
+    }
+
     public UUID getId() {
         return id;
     }

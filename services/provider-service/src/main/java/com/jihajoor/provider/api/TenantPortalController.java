@@ -17,6 +17,10 @@ import com.jihajoor.provider.api.dto.MobileNumberRequest;
 import com.jihajoor.provider.api.dto.TeamProviderResponse;
 import com.jihajoor.provider.api.dto.TenantResponse;
 import com.jihajoor.provider.domain.Tenant;
+import com.jihajoor.provider.service.AgencyEarningsService;
+import com.jihajoor.provider.service.AgencyEarningsService.AgencyEarningsView;
+import com.jihajoor.provider.service.AgencyInvitationService;
+import com.jihajoor.provider.service.AgencyInvitationService.InvitationView;
 import com.jihajoor.provider.service.TenantService;
 import com.jihajoor.provider.service.TenantTeamService;
 
@@ -39,12 +43,17 @@ public class TenantPortalController {
 
     private final TenantService tenantService;
     private final TenantTeamService teamService;
+    private final AgencyInvitationService invitationService;
+    private final AgencyEarningsService earningsService;
     private final CallerIdentity callerIdentity;
 
     public TenantPortalController(TenantService tenantService, TenantTeamService teamService,
-                                  CallerIdentity callerIdentity) {
+                                  AgencyInvitationService invitationService,
+                                  AgencyEarningsService earningsService, CallerIdentity callerIdentity) {
         this.tenantService = tenantService;
         this.teamService = teamService;
+        this.invitationService = invitationService;
+        this.earningsService = earningsService;
         this.callerIdentity = callerIdentity;
     }
 
@@ -63,13 +72,39 @@ public class TenantPortalController {
                 .map(TeamProviderResponse::from).toList());
     }
 
-    /** {@code POST /tenant/providers} — adds a provider by mobile number (errors of Requirement MT-3.2). */
+    /**
+     * {@code POST /tenant/providers} — invites a worker by mobile number. The worker joins only by
+     * accepting in the provider app, so the answer is 202 with the pending invitation.
+     */
     @PostMapping("/providers")
-    public ResponseEntity<TeamProviderResponse> addProvider(@Valid @RequestBody MobileNumberRequest request) {
+    public ResponseEntity<InvitationView> addProvider(@Valid @RequestBody MobileNumberRequest request) {
         UUID caller = callerIdentity.requireCallerId();
         Tenant tenant = tenantService.requirePortalTenant(caller);
-        return ResponseEntity.status(HttpStatus.CREATED).body(TeamProviderResponse.from(
-                teamService.addProvider(tenant.getId(), request.mobileNumber(), caller)));
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(invitationService.invite(tenant.getId(), request.mobileNumber(), caller));
+    }
+
+    /** {@code GET /tenant/invitations} — invitations the workers have not answered yet. */
+    @GetMapping("/invitations")
+    public ResponseEntity<List<InvitationView>> invitations() {
+        Tenant tenant = tenantService.requirePortalTenant(callerIdentity.requireCallerId());
+        return ResponseEntity.ok(invitationService.pendingForAgency(tenant.getId()));
+    }
+
+    /** {@code DELETE /tenant/invitations/{id}} — withdraws one of the agency's own invitations. */
+    @DeleteMapping("/invitations/{invitationId}")
+    public ResponseEntity<Void> cancelInvitation(@PathVariable("invitationId") UUID invitationId) {
+        UUID caller = callerIdentity.requireCallerId();
+        Tenant tenant = tenantService.requirePortalTenant(caller);
+        invitationService.cancel(tenant.getId(), invitationId, caller);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** {@code GET /tenant/earnings} — the agency's share setting and what it has earned. */
+    @GetMapping("/earnings")
+    public ResponseEntity<AgencyEarningsView> earnings() {
+        Tenant tenant = tenantService.requirePortalTenant(callerIdentity.requireCallerId());
+        return ResponseEntity.ok(earningsService.summary(tenant.getId()));
     }
 
     /** {@code DELETE /tenant/providers/{providerId}} — removes one of the caller's own providers. */
