@@ -42,7 +42,7 @@ export function ReviewModerationScreen() {
   const moderate = useModerateReview();
 
   const columns: Column<AdminReview>[] = [
-    { key: 'provider', header: 'Provider', render: (row) => row.providerName ?? '—' },
+    { key: 'provider', header: 'Worker', render: (row) => row.providerName ?? '—' },
     { key: 'reviewer', header: 'Reviewer', render: (row) => row.reviewerName ?? '—' },
     {
       key: 'rating',

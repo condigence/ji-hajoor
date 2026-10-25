@@ -125,7 +125,7 @@ export function TenantMembersDialog({ tenant, onClose }: TenantMembersDialogProp
       <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3 }}>
         <Tabs value={tab} onChange={(_, value: 'admins' | 'providers') => setTab(value)}>
           <Tab value="admins" label={`Administrators (${admins.length})`} />
-          <Tab value="providers" label={`Providers (${providers.length})`} />
+          <Tab value="providers" label={`Workers (${providers.length})`} />
         </Tabs>
       </Box>
       <DialogContent sx={{ minHeight: 320 }}>
@@ -155,9 +155,9 @@ export function TenantMembersDialog({ tenant, onClose }: TenantMembersDialogProp
           <Stack spacing={2}>
             <AddByMobileForm
               key="providers"
-              label="Provider's mobile number"
-              submitLabel="Add provider"
-              helperText="They must have signed up in the provider app with a provider profile."
+              label="Worker's mobile number"
+              submitLabel="Add worker"
+              helperText="They must have signed up in the partner app with a worker profile. Platform admins add them directly; agencies send an invitation."
               onAdd={(mobile) => addProvider.mutateAsync(mobile)}
               isPending={addProvider.isPending}
               error={addProvider.error}
@@ -168,7 +168,7 @@ export function TenantMembersDialog({ tenant, onClose }: TenantMembersDialogProp
               error={membersQuery.error}
               onRetry={() => void membersQuery.refetch()}
               isEmpty={providers.length === 0}
-              emptyMessage="No providers in this agency yet."
+              emptyMessage="No workers in this agency yet."
             >
               <DataTable
                 columns={providerColumns}
@@ -185,11 +185,11 @@ export function TenantMembersDialog({ tenant, onClose }: TenantMembersDialogProp
 
       {removal ? (
         <ConfirmRemoveDialog
-          title={removal.kind === 'admin' ? 'Remove administrator?' : 'Remove provider?'}
+          title={removal.kind === 'admin' ? 'Remove administrator?' : 'Remove worker?'}
           message={
             removal.kind === 'admin'
               ? `${removal.admin.mobileNumber ? formatMobileNumber(removal.admin.mobileNumber) : 'This person'} loses access to ${tenant.name}'s portal from their next sign-in or token refresh.`
-              : `${removal.provider.displayName ?? 'This provider'} leaves ${tenant.name}. Jobs already assigned to them are unaffected.`
+              : `${removal.provider.displayName ?? 'This worker'} leaves ${tenant.name}. Jobs already assigned to them are unaffected.`
           }
           confirmLabel="Remove"
           isPending={remove.isPending}

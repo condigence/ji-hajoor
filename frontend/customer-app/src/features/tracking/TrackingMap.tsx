@@ -48,7 +48,7 @@ export function TrackingMap({
   return (
     <Box
       role="img"
-      aria-label="Map showing the provider's current location"
+      aria-label="Map showing the worker's current location"
       sx={{
         position: 'relative',
         width: '100%',
@@ -102,7 +102,7 @@ export function TrackingMap({
         </MapMarker>
       ) : null}
 
-      <MapMarker x={providerPos.x} y={providerPos.y} label="Provider location">
+      <MapMarker x={providerPos.x} y={providerPos.y} label="Worker location">
         <Box
           sx={{
             width: 40,

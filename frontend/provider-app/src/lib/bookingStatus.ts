@@ -44,8 +44,8 @@ export interface StatusDescriptor {
  */
 const STATUS_MAP: Record<BookingStatus, StatusDescriptor> = {
   CREATED: { label: 'Created', color: 'default' },
-  SEARCHING_PROVIDER: { label: 'Finding a provider', color: 'info' },
-  SEARCHING_FAILED: { label: 'No provider found', color: 'error' },
+  SEARCHING_PROVIDER: { label: 'Finding a worker', color: 'info' },
+  SEARCHING_FAILED: { label: 'No worker found', color: 'error' },
   // With a partner agency, before any provider is chosen (Requirement MT-4.2).
   AWAITING_ASSIGNMENT: { label: 'Awaiting assignment', color: 'default' },
   // Assigned by the provider's agency: the provider still has to accept or

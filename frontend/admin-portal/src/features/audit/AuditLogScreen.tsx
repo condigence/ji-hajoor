@@ -89,7 +89,7 @@ export function AuditLogScreen() {
         <TextField
           size="small"
           label="Entity type"
-          placeholder="e.g. Coupon, Provider"
+          placeholder="e.g. Coupon, Provider (worker)"
           value={entityInput}
           onChange={(event) => setEntityInput(event.target.value)}
           sx={{ minWidth: 220 }}

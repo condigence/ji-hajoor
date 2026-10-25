@@ -27,7 +27,7 @@ export function ProviderManagementScreen() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const columns: Column<AdminProvider>[] = [
-    { key: 'name', header: 'Provider', render: (row) => row.displayName },
+    { key: 'name', header: 'Worker', render: (row) => row.displayName },
     { key: 'mobile', header: 'Mobile', render: (row) => row.mobileNumber ?? '—' },
     { key: 'skill', header: 'Primary skill', render: (row) => row.primarySkill ?? '—' },
     {
@@ -160,10 +160,7 @@ export function ProviderManagementScreen() {
   ];
 
   return (
-    <ModuleScreen
-      title="Provider Management"
-      description="Search, review, and manage service provider accounts."
-    >
+    <ModuleScreen title="Workers" description="Search, review, and manage worker accounts.">
       <Stack
         component="form"
         direction="row"
@@ -206,7 +203,7 @@ export function ProviderManagementScreen() {
         error={providersQuery.error}
         onRetry={() => void providersQuery.refetch()}
         isEmpty={(providersQuery.data?.length ?? 0) === 0}
-        emptyMessage="No providers match your search."
+        emptyMessage="No workers match your search."
       >
         <DataTable columns={columns} rows={providersQuery.data ?? []} rowKey={(row) => row.id} />
       </QueryStateView>

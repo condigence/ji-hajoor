@@ -20,7 +20,7 @@ export function ChatButton({ bookingId, onOpen }: { bookingId: string; onOpen: (
       startIcon={<ChatRoundedIcon />}
       onClick={onOpen}
       disabled={disabled}
-      aria-label="Open chat with your provider"
+      aria-label="Open chat with your worker"
     >
       {channel.data && !channel.data.active ? 'Chat closed' : 'Message your pro'}
     </Button>

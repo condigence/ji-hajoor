@@ -280,8 +280,8 @@ export function TenantManagementScreen() {
 
   return (
     <ModuleScreen
-      title="Tenants"
-      description="Service agencies that take over requests no provider accepted automatically."
+      title="Agencies"
+      description="Service agencies run teams of workers and take over requests no independent worker accepted automatically."
       actions={
         <Button
           variant="contained"
@@ -289,7 +289,7 @@ export function TenantManagementScreen() {
           disabled={!categoriesQuery.data}
           onClick={() => setEditing({ mode: 'create' })}
         >
-          New tenant
+          New agency
         </Button>
       }
     >
@@ -326,10 +326,10 @@ export function TenantManagementScreen() {
         isEmpty={rows.length === 0}
         emptyMessage={
           filter
-            ? 'No tenant matches that name.'
+            ? 'No agency matches that name.'
             : view === 'pending'
               ? 'No agency applications are waiting for a decision.'
-              : 'No tenants yet. Create the first agency.'
+              : 'No agencies yet. Create the first one.'
         }
       >
         <DataTable

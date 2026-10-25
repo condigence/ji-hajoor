@@ -166,7 +166,7 @@ export function ProfileScreen() {
             color: 'text.secondary',
           }}
         >
-          Ji-Hajoor Provider — Earn More. Serve Better.
+          Ji-Hajoor Worker — Earn More. Serve Better.
         </Typography>
       </Stack>
     </AppShell>

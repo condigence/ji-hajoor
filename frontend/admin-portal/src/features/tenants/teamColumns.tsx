@@ -16,7 +16,7 @@ export function teamProviderColumns(onRemove?: (provider: TeamProvider) => void)
   const columns: Column<TeamProvider>[] = [
     {
       key: 'name',
-      header: 'Provider',
+      header: 'Worker',
       render: (row) => (
         <Stack spacing={0.25}>
           <Typography

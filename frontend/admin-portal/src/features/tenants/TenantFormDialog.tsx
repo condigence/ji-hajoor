@@ -123,7 +123,7 @@ export function TenantFormDialog({ tenant, categories, onClose, onSaved }: Tenan
       fullWidth
       fullScreen={phone}
     >
-      <DialogTitle>{tenant ? `Edit ${tenant.name}` : 'New tenant'}</DialogTitle>
+      <DialogTitle>{tenant ? `Edit ${tenant.name}` : 'New agency'}</DialogTitle>
       <form
         noValidate
         onSubmit={(event) => {
@@ -143,7 +143,7 @@ export function TenantFormDialog({ tenant, categories, onClose, onSaved }: Tenan
             Cancel
           </Button>
           <Button type="submit" variant="contained" disabled={save.isPending}>
-            {save.isPending ? 'Saving…' : tenant ? 'Save changes' : 'Create tenant'}
+            {save.isPending ? 'Saving…' : tenant ? 'Save changes' : 'Create agency'}
           </Button>
         </DialogActions>
       </form>

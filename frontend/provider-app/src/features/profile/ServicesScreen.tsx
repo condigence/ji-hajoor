@@ -59,7 +59,7 @@ export function ServicesScreen() {
           void catalog.refetch();
         }}
         isEmpty={catalog.data?.length === 0}
-        emptyMessage="No services are open for providers yet. Please check back later."
+        emptyMessage="No services are open for workers yet. Please check back later."
       >
         {catalog.data && profile.data !== undefined ? (
           <ServicesForm

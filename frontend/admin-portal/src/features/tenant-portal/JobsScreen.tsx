@@ -92,7 +92,7 @@ export function JobsScreen() {
     { key: 'status', header: 'Status', render: (row) => <StatusChip status={row.status} /> },
     {
       key: 'provider',
-      header: 'Provider',
+      header: 'Worker',
       render: (row) => (
         <Typography variant="body2" noWrap>
           {row.providerId

@@ -165,7 +165,7 @@ export function TenantDetailsFields({
           }}
         >
           A circle around the agency&apos;s base. Bookings inside it, in the categories below, are
-          offered to the agency when no provider accepts them automatically.
+          offered to the agency when no independent worker accepts them automatically.
         </Typography>
       </Grid>
       <Grid size={{ xs: 12, sm: 4 }}>

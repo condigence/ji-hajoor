@@ -92,7 +92,7 @@ export function AssignProviderDialog({
     assign.mutate(
       { bookingId: booking.id, providerId: chosen.providerId },
       {
-        onSuccess: () => onAssigned(chosen.displayName ?? 'the provider'),
+        onSuccess: () => onAssigned(chosen.displayName ?? 'the worker'),
         onError: (error) => {
           if (
             hasErrorCode(error, 'BOOKING_NOT_ASSIGNABLE') ||
@@ -128,8 +128,7 @@ export function AssignProviderDialog({
             color: 'text.secondary',
           }}
         >
-          The provider confirms or declines in their app. A decline returns the request to your
-          queue.
+          The worker confirms or declines in their app. A decline returns the request to your queue.
         </Typography>
       </DialogTitle>
       <DialogContent dividers>
@@ -172,7 +171,7 @@ export function AssignProviderDialog({
           <Alert severity="error">{tenantErrorMessage(teamQuery.error)}</Alert>
         ) : assignableCount === 0 ? (
           <Alert severity="info">
-            Nobody in your team can be assigned right now: providers must be verified by Ji-Hajoor
+            Nobody in your team can be assigned right now: workers must be verified by Ji-Hajoor
             first.{' '}
             <Link component={RouterLink} to="/tenant/team">
               Review your team
@@ -182,7 +181,7 @@ export function AssignProviderDialog({
 
         {team.length > 0 ? (
           <RadioGroup
-            aria-label="Provider"
+            aria-label="Worker"
             value={selected}
             onChange={(event) => setSelected(event.target.value)}
             sx={{ gap: 1 }}

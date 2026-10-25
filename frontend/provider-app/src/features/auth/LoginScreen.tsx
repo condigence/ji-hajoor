@@ -138,7 +138,7 @@ export function LoginScreen() {
 
   return (
     <AuthLayout
-      title={step === 'mobile' ? 'Ji-Hajoor for Providers' : 'Verify your number'}
+      title={step === 'mobile' ? 'Ji-Hajoor for Workers & Agents' : 'Verify your number'}
       subtitle={subtitle}
       below={
         step === 'mobile' ? (

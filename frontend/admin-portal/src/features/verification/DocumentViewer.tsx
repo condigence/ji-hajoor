@@ -108,7 +108,7 @@ function NotStored() {
         <Typography variant="subtitle2">File not stored</Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
           This document was uploaded before document storage was enabled, so there is no file to
-          show. Ask the provider to submit it again if you need to check it.
+          show. Ask the worker to submit it again if you need to check it.
         </Typography>
       </Stack>
     </Box>

@@ -22,7 +22,7 @@ interface VerifyBankAccountDialogProps {
 function verifyErrorMessage(error: unknown): string {
   if (!isApiError(error)) return 'Could not mark the bank account verified. Try again.';
   if (error.status === 404 && error.code === 'BANK_ACCOUNT_NOT_FOUND') {
-    return 'This provider no longer has a bank account on file. The list has been refreshed.';
+    return 'This worker no longer has a bank account on file. The list has been refreshed.';
   }
   return error.message;
 }
