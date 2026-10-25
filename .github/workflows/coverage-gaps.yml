@@ -1,0 +1,40 @@
+name: Coverage gaps (temporary)
+
+on:
+  push:
+    branches:
+      - 'work/coverage'
+
+permissions:
+  contents: read
+
+jobs:
+  gaps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Test the low-coverage modules
+        run: mvn -B -q verify -pl services/location-service,services/catalog-service,services/customer-service,services/admin-service -am -DskipITs=false || true
+      - name: Report uncovered lines per class
+        run: |
+          for m in location-service catalog-service customer-service admin-service; do
+            f="services/$m/target/site/jacoco/jacoco.csv"
+            [ -f "$f" ] || { echo "::notice title=$m::no report"; continue; }
+            tot=$(awk -F',' 'NR>1 {m+=$8;c+=$9} END {printf "missed=%d covered=%d pct=%.2f", m, c, c*100/(m+c)}' "$f")
+            body=$(awk -F',' 'NR>1 && $8>0 {print $8" missed / "$9" covered  "$2"."$3}' "$f" | sort -rn | head -60 | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::notice title=$m $tot::$body"
+          done
+      - name: Failing tests
+        if: always()
+        run: |
+          for r in services/*/target/surefire-reports/*.txt; do
+            grep -l "FAILURE\|ERROR" "$r" 2>/dev/null
+          done | head -20 | while read -r r; do
+            echo "::warning title=$(basename "$r")::$(grep -A12 'FAILURE\|ERROR' "$r" | head -30 | cut -c1-200 | sed ':a;N;$!ba;s/\n/%0A/g')"
+          done
