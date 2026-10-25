@@ -48,6 +48,14 @@ public class OtpProperties {
      */
     private String fixedCode;
 
+    /**
+     * The only mobile numbers (E.164) the fixed test code works for. Every other number gets a
+     * real SMS even while {@link #fixedCode} is set, so the test code cannot open a real account.
+     * Empty means no number. An entry ending in {@code *} matches every number with that prefix
+     * (at least four characters before the star), for CI runs that sign up fresh numbers.
+     */
+    private java.util.List<String> fixedCodeNumbers = new java.util.ArrayList<>();
+
     public Duration getTtl() {
         return ttl;
     }
@@ -104,8 +112,35 @@ public class OtpProperties {
         this.fixedCode = fixedCode;
     }
 
+    public java.util.List<String> getFixedCodeNumbers() {
+        return fixedCodeNumbers;
+    }
+
+    public void setFixedCodeNumbers(java.util.List<String> fixedCodeNumbers) {
+        this.fixedCodeNumbers = fixedCodeNumbers == null ? new java.util.ArrayList<>() : fixedCodeNumbers;
+    }
+
+    /**
+     * The fixed test code for this mobile number, or null when test mode is off, the value is not
+     * numeric, or the number is not one of {@link #fixedCodeNumbers}.
+     */
+    public String activeFixedCode(String mobileNumber) {
+        String code = activeFixedCode();
+        if (code == null || mobileNumber == null) {
+            return null;
+        }
+        String number = mobileNumber.trim();
+        boolean allowed = fixedCodeNumbers.stream()
+                .filter(n -> n != null && !n.isBlank())
+                .map(String::trim)
+                .anyMatch(n -> n.endsWith("*") && n.length() > 4
+                        ? number.startsWith(n.substring(0, n.length() - 1))
+                        : n.equals(number));
+        return allowed ? code : null;
+    }
+
     /** The fixed test code, or null when test mode is off or the value is not numeric. */
-    public String activeFixedCode() {
+    private String activeFixedCode() {
         if (fixedCode == null || fixedCode.isBlank()) {
             return null;
         }

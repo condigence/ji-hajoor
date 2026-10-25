@@ -25,7 +25,7 @@ export function ChatScreen() {
   const channelQuery = useChatChannel(bookingId);
   const channelId = channelQuery.data?.channelId ?? '';
   const historyQuery = useChatHistory(channelId);
-  const { state, send } = useChatSocket(channelId);
+  const { state, send, undelivered } = useChatSocket(channelId, bookingId);
 
   const [draft, setDraft] = useState('');
   const listEndRef = useRef<HTMLDivElement | null>(null);
@@ -40,10 +40,17 @@ export function ChatScreen() {
   const channelActive = channelQuery.data?.active ?? false;
   const canSend = channelActive && state === 'open' && draft.trim().length > 0;
 
+  // The chat closed as a message went out: give the text back rather than lose it.
+  // Adjusted during render (not in an effect) when `undelivered` changes.
+  const [restoredUndelivered, setRestoredUndelivered] = useState<string | null>(null);
+  if (undelivered !== restoredUndelivered) {
+    setRestoredUndelivered(undelivered);
+    if (undelivered) setDraft((current) => current || undelivered);
+  }
+
   const handleSend = () => {
     if (!canSend) return;
-    send(draft);
-    setDraft('');
+    if (send(draft)) setDraft('');
   };
 
   return (
@@ -65,6 +72,7 @@ export function ChatScreen() {
         {channelQuery.data && !channelActive ? (
           <Alert severity="info" sx={{ mb: 1.5, mt: { md: 2 } }}>
             This chat is no longer active.
+            {undelivered ? ' Your last message was not delivered.' : ''}
           </Alert>
         ) : null}
 

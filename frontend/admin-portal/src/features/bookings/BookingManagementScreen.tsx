@@ -75,7 +75,7 @@ export function BookingManagementScreen() {
       ),
     },
     { key: 'customer', header: 'Customer', render: (row) => row.customerName ?? '—' },
-    { key: 'provider', header: 'Provider', render: (row) => row.providerName ?? '—' },
+    { key: 'provider', header: 'Worker', render: (row) => row.providerName ?? '—' },
     { key: 'service', header: 'Service', render: (row) => row.serviceName ?? '—' },
     { key: 'status', header: 'Status', render: (row) => <StatusChip status={row.status} /> },
     {
@@ -115,7 +115,7 @@ export function BookingManagementScreen() {
       >
         <TextField
           size="small"
-          label="Search by reference, customer, or provider"
+          label="Search by reference, customer, or worker"
           value={searchInput}
           onChange={(event) => setSearchInput(event.target.value)}
           sx={{ maxWidth: 380, flexGrow: 1 }}

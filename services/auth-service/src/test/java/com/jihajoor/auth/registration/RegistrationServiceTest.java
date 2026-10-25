@@ -344,6 +344,7 @@ class RegistrationServiceTest {
     @Test
     void fixedCodeMode_acceptsTheFixedCodeWithoutSendingSms() {
         otpProperties.setFixedCode("123456");
+        otpProperties.setFixedCodeNumbers(java.util.List.of(PHONE));
         stubUserCreation();
 
         service.requestOtp(PHONE, "CUSTOMER");
@@ -356,6 +357,7 @@ class RegistrationServiceTest {
     @Test
     void fixedCodeMode_wrongCodeIsStillRejected() {
         otpProperties.setFixedCode("123456");
+        otpProperties.setFixedCodeNumbers(java.util.List.of(PHONE));
 
         service.requestOtp(PHONE, "CUSTOMER");
 
@@ -368,6 +370,7 @@ class RegistrationServiceTest {
     @Test
     void fixedCodeMode_neverOpensAStaffAccount() {
         otpProperties.setFixedCode("123456");
+        otpProperties.setFixedCodeNumbers(java.util.List.of(PHONE));
         UserAccount admin = UserAccount.createVerified(PHONE, Role.SUPER_ADMIN);
         when(userRepository.findByMobileNumber(PHONE)).thenReturn(Optional.of(admin));
 
@@ -387,6 +390,52 @@ class RegistrationServiceTest {
     @Test
     void fixedCodeMode_ignoresANonNumericValue() {
         otpProperties.setFixedCode("abc");
+        otpProperties.setFixedCodeNumbers(java.util.List.of(PHONE));
+
+        service.requestOtp(PHONE, "CUSTOMER");
+
+        assertThat(smsGateway.sentMessages()).hasSize(1);
+    }
+
+    @Test
+    void fixedCodeMode_aNumberOutsideTheTestListGetsARealSms() {
+        otpProperties.setFixedCode("123456");
+        otpProperties.setFixedCodeNumbers(java.util.List.of("+919000090001"));
+
+        service.requestOtp(PHONE, "CUSTOMER");
+
+        assertThat(smsGateway.sentMessages()).hasSize(1);
+        assertThatThrownBy(() -> service.verifyOtp(PHONE, "123456"))
+                .isInstanceOf(RegistrationException.class)
+                .satisfies(ex -> assertThat(((RegistrationException) ex).getErrorCode())
+                        .isEqualTo("OTP_INCORRECT"));
+    }
+
+    @Test
+    void fixedCodeMode_withNoTestNumbersEveryoneGetsARealSms() {
+        otpProperties.setFixedCode("123456");
+
+        service.requestOtp(PHONE, "CUSTOMER");
+
+        assertThat(smsGateway.sentMessages()).hasSize(1);
+    }
+
+    @Test
+    void fixedCodeMode_aPrefixEntryMatchesNumbersStartingWithIt() {
+        otpProperties.setFixedCode("123456");
+        otpProperties.setFixedCodeNumbers(java.util.List.of("+91987*"));
+        stubUserCreation();
+
+        service.requestOtp(PHONE, "CUSTOMER");
+
+        assertThat(smsGateway.sentMessages()).isEmpty();
+        assertThat(service.verifyOtp(PHONE, "123456").roles()).containsExactly("CUSTOMER");
+    }
+
+    @Test
+    void fixedCodeMode_aBareStarMatchesNobody() {
+        otpProperties.setFixedCode("123456");
+        otpProperties.setFixedCodeNumbers(java.util.List.of("*"));
 
         service.requestOtp(PHONE, "CUSTOMER");
 

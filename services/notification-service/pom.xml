@@ -81,6 +81,18 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- SMTP email channel (NOTIFICATION_EMAIL_PROVIDER=smtp): Mailpit locally, Amazon SES SMTP in AWS. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <!-- Boot ships the JavaMail implementation runtime-only; compiled against for its SMTP reply
+             types (SMTPAddressFailedException, SMTPSendFailedException), which tell a permanent
+             (5xx) refusal from a temporary (4xx) one. Version managed by Boot. -->
+        <dependency>
+            <groupId>org.eclipse.angus</groupId>
+            <artifactId>angus-mail</artifactId>
+        </dependency>
 
         <!-- ===== Kafka: consumption of the 11 lifecycle events ===== -->
         <dependency>

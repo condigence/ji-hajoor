@@ -22,3 +22,12 @@ docker/test-users.generated.txt
 
 # Generated diagram-rendered preview of docs/ARCHITECTURE.md
 docs/ARCHITECTURE.html
+
+# Load-test working files (loadtest/run.sh): copied jars and raw k6 summaries
+loadtest/.images/
+loadtest/results/
+
+# Office lock files and JVM crash dumps
+~$*
+hs_err_pid*.log
+replay_pid*.log

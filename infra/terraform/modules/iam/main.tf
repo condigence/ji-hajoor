@@ -1,63 +1,36 @@
 ##############################################################
 # IAM Module — Ji-Hajoor
-# Service-level IAM roles with IRSA (IAM Roles for Service
-# Accounts) so each microservice has least-privilege access.
+# IAM roles with IRSA (IAM Roles for Service Accounts), one per
+# deployable, scoped to what the services it hosts need.
 ##############################################################
 
 locals {
-  # Namespace → list of service-account names that need IRSA roles
-  service_accounts = {
-    "auth-customer-provider" = [
-      "auth-service",
-      "customer-service",
-      "provider-service",
-    ]
-    "booking-dispatch-location" = [
-      "booking-service",
-      "dispatch-engine",
-      "location-service",
-    ]
-    "payment-invoice-rating" = [
-      "payment-service",
-      "invoice-service",
-      "rating-review-service",
-    ]
-    "notification-chat-complaint" = [
-      "notification-service",
-      "chat-service",
-      "complaint-service",
-    ]
-    "admin-reporting-promotion" = [
-      "admin-service",
-      "reporting-service",
-      "promotion-service",
-    ]
-    "catalog-pricing-verification" = [
-      "catalog-service",
-      "pricing-engine",
-      "verification-service",
-      "outbox-processor",
-    ]
+  # One IRSA role per deployable. The Helm chart (helm/jihajoor-service, serviceAccount.create)
+  # creates a ServiceAccount named after the deployable, in the namespace the deploy pipeline
+  # uses: var.namespace, which must equal the GitHub environment's K8S_NAMESPACE. A deployable
+  # hosts several services in one JVM, so its role carries the union of what they need.
+  deployables = {
+    # Routing only; reads its secrets.
+    "api-gateway" = { s3 = false, pii = false }
+    # auth, customer, provider, verification: profile photos and verification documents in S3,
+    # PII encryption.
+    "identity-app" = { s3 = true, pii = true }
+    # booking (job photos in S3), catalog, pricing, dispatch, location, chat, promotion.
+    "jobs-app" = { s3 = true, pii = false }
+    # payment (PII: settlement bank details), invoice (invoice PDFs in S3).
+    "money-app" = { s3 = true, pii = true }
+    # notification, complaint and rating-review (attachments in S3), admin, reporting, outbox.
+    "engagement-app" = { s3 = true, pii = false }
   }
-
-  # Flatten to a map keyed by "<namespace>/<service-account>"
-  flat_service_accounts = merge([
-    for ns, sas in local.service_accounts : {
-      for sa in sas : "${ns}/${sa}" => {
-        namespace       = ns
-        service_account = sa
-      }
-    }
-  ]...)
 }
 
 # ─────────────────────────────────────────────
-# IRSA Role per Microservice
+# IRSA Role per Deployable
 # ─────────────────────────────────────────────
 resource "aws_iam_role" "service" {
-  for_each = local.flat_service_accounts
+  for_each = local.deployables
 
-  name = "${var.name_prefix}-irsa-${each.value.service_account}"
+  name = "${var.name_prefix}-irsa-${each.key}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -67,7 +40,7 @@ resource "aws_iam_role" "service" {
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
         StringEquals = {
-          "${var.eks_oidc_provider_url}:sub" = "system:serviceaccount:${each.value.namespace}:${each.value.service_account}"
+          "${var.eks_oidc_provider_url}:sub" = "system:serviceaccount:${var.namespace}:${each.key}"
           "${var.eks_oidc_provider_url}:aud" = "sts.amazonaws.com"
         }
       }
@@ -75,9 +48,9 @@ resource "aws_iam_role" "service" {
   })
 
   tags = merge(var.tags, {
-    Name             = "${var.name_prefix}-irsa-${each.value.service_account}"
-    Namespace        = each.value.namespace
-    ServiceAccount   = each.value.service_account
+    Name           = "${var.name_prefix}-irsa-${each.key}"
+    Namespace      = var.namespace
+    ServiceAccount = each.key
   })
 }
 
@@ -116,7 +89,7 @@ resource "aws_iam_policy" "secrets_read" {
 }
 
 resource "aws_iam_role_policy_attachment" "secrets_read" {
-  for_each = local.flat_service_accounts
+  for_each = local.deployables
 
   policy_arn = aws_iam_policy.secrets_read.arn
   role       = aws_iam_role.service[each.key].name
@@ -165,21 +138,13 @@ resource "aws_iam_policy" "s3_rw" {
   tags = var.tags
 }
 
-# Only services that touch S3 get this policy
+# Only deployables hosting a service that touches S3 get this policy
 locals {
-  s3_services = toset([
-    "auth-customer-provider/customer-service",
-    "auth-customer-provider/provider-service",
-    "booking-dispatch-location/booking-service",
-    "payment-invoice-rating/invoice-service",
-    "payment-invoice-rating/rating-review-service",
-    "notification-chat-complaint/complaint-service",
-    "catalog-pricing-verification/verification-service",
-  ])
+  s3_deployables = toset([for name, d in local.deployables : name if d.s3])
 }
 
 resource "aws_iam_role_policy_attachment" "s3_rw" {
-  for_each = local.s3_services
+  for_each = local.s3_deployables
 
   policy_arn = aws_iam_policy.s3_rw.arn
   role       = aws_iam_role.service[each.key].name
@@ -212,16 +177,11 @@ resource "aws_iam_policy" "kms_pii" {
 }
 
 locals {
-  pii_services = toset([
-    "auth-customer-provider/customer-service",
-    "auth-customer-provider/provider-service",
-    "payment-invoice-rating/payment-service",
-    "catalog-pricing-verification/verification-service",
-  ])
+  pii_deployables = toset([for name, d in local.deployables : name if d.pii])
 }
 
 resource "aws_iam_role_policy_attachment" "kms_pii" {
-  for_each = local.pii_services
+  for_each = local.pii_deployables
 
   policy_arn = aws_iam_policy.kms_pii.arn
   role       = aws_iam_role.service[each.key].name
@@ -252,7 +212,7 @@ resource "aws_iam_policy" "kms_rds" {
 }
 
 resource "aws_iam_role_policy_attachment" "kms_rds" {
-  for_each = local.flat_service_accounts
+  for_each = local.deployables
 
   policy_arn = aws_iam_policy.kms_rds.arn
   role       = aws_iam_role.service[each.key].name

@@ -96,3 +96,9 @@ export async function rejectTenantApplication(id: string, reason: string): Promi
   const { data } = await apiClient.post<Tenant>(`/admin/tenants/${id}/rejection`, { reason });
   return data;
 }
+
+/** Sets the agency's share (0-50 %) of its workers' net earning on future jobs. */
+export async function setAgencyShare(id: string, percent: number): Promise<Tenant> {
+  const { data } = await apiClient.put<Tenant>(`/admin/tenants/${id}/agency-share`, { percent });
+  return data;
+}

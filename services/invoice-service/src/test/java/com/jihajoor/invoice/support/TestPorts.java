@@ -5,7 +5,10 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.jihajoor.invoice.alert.OpsAlertPort;
@@ -119,6 +122,7 @@ public final class TestPorts {
         public volatile String lastKey;
         public volatile int stores;
         public volatile Duration lastTtl;
+        private final Map<String, byte[]> objects = new ConcurrentHashMap<>();
 
         public RecordingStoragePort(Clock clock) {
             this.clock = clock;
@@ -128,7 +132,13 @@ public final class TestPorts {
         public String store(String objectKey, byte[] pdfBytes) {
             stores++;
             lastKey = objectKey;
+            objects.put(objectKey, pdfBytes.clone());
             return objectKey;
+        }
+
+        @Override
+        public Optional<byte[]> load(String objectKey) {
+            return Optional.ofNullable(objects.get(objectKey));
         }
 
         @Override

@@ -118,6 +118,9 @@ public class ProviderRbacConfig {
      */
     private static final List<String> TENANT_ADMIN_TIER = List.of("TENANT_ADMIN");
 
+    /** The worker themself: answering an agency's invitation or leaving an agency. */
+    private static final List<String> WORKER_ONLY_TIER = List.of("SERVICE_PROVIDER");
+
     private final RbacProperties rbacProperties;
 
     public ProviderRbacConfig(RbacProperties rbacProperties) {
@@ -152,6 +155,11 @@ public class ProviderRbacConfig {
         for (String method : List.of("GET", "POST", "PUT", "PATCH", "DELETE")) {
             rules.put(method + " /tenant/**", TENANT_ADMIN_TIER);
         }
+        // A worker's own agency membership (invitations, leaving): the worker alone, never staff,
+        // since joining or leaving an agency is the worker's decision. Listed before the PUT
+        // catch-all; these are GET/POST, so nothing below can shadow them.
+        rules.put("GET /providers/me/agency", WORKER_ONLY_TIER);
+        rules.put("POST /providers/me/agency/**", WORKER_ONLY_TIER);
         // Mutating provider self-service: profile, radius, availability, emergency availability
         // (Requirements 4.1-4.6, 4.8). The settlement bank account (Requirements 4.9, 14.2) is
         // written by the same tier; it is named explicitly so its rule cannot change by accident

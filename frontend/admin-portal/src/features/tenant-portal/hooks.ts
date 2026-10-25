@@ -3,16 +3,24 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
 import type { ApiError } from '@api/client';
 import type { BookingStatus } from '@features/bookings/api';
-import type { Tenant, TeamProvider } from '@features/tenants/model';
+import type {
+  AgencyEarnings,
+  AgencyInvitation,
+  Tenant,
+  TeamProvider,
+} from '@features/tenants/model';
 import { TENANT_ROLES, hasAnyRole } from '@config/roles';
 import { useAuthStore } from '@stores/authStore';
 import {
-  addTeamProvider,
   assignBooking,
+  cancelInvitation,
+  fetchAgencyEarnings,
+  fetchInvitations,
   fetchMyTenant,
   fetchQueue,
   fetchTeam,
   fetchTenantBookings,
+  inviteWorker,
   removeTeamProvider,
   type TenantBooking,
 } from './api';
@@ -28,6 +36,8 @@ export const tenantPortalKeys = {
   all: ['tenant'] as const,
   me: ['tenant', 'me'] as const,
   team: ['tenant', 'team'] as const,
+  invitations: ['tenant', 'invitations'] as const,
+  earnings: ['tenant', 'earnings'] as const,
   queue: ['tenant', 'queue'] as const,
   bookings: (status: BookingStatus | '') => ['tenant', 'bookings', { status }] as const,
 };
@@ -119,13 +129,47 @@ export function useAssignBooking(): UseMutationResult<
   });
 }
 
-export function useAddTeamProvider(): UseMutationResult<TeamProvider, ApiError, string> {
+/** Invites a worker; the pending list refreshes, the team changes once they accept. */
+export function useInviteWorker(): UseMutationResult<AgencyInvitation, ApiError, string> {
   const queryClient = useQueryClient();
-  return useMutation<TeamProvider, ApiError, string>({
-    mutationFn: addTeamProvider,
+  return useMutation<AgencyInvitation, ApiError, string>({
+    mutationFn: inviteWorker,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: tenantPortalKeys.team });
+      void queryClient.invalidateQueries({ queryKey: tenantPortalKeys.invitations });
     },
+  });
+}
+
+/** Invitations the workers have not answered yet; polled so an acceptance shows up. */
+export function useInvitations(): UseQueryResult<AgencyInvitation[], ApiError> {
+  const queryClient = useQueryClient();
+  return useQuery<AgencyInvitation[], ApiError>({
+    queryKey: tenantPortalKeys.invitations,
+    queryFn: async () => {
+      const rows = await fetchInvitations();
+      // Someone may have accepted since the last look: refresh the team with it.
+      void queryClient.invalidateQueries({ queryKey: tenantPortalKeys.team });
+      return rows;
+    },
+    refetchInterval: 60_000,
+  });
+}
+
+export function useCancelInvitation(): UseMutationResult<void, ApiError, string> {
+  const queryClient = useQueryClient();
+  return useMutation<void, ApiError, string>({
+    mutationFn: cancelInvitation,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: tenantPortalKeys.invitations });
+    },
+  });
+}
+
+/** The agency's share setting and what it has earned from its workers' jobs. */
+export function useAgencyEarnings(): UseQueryResult<AgencyEarnings, ApiError> {
+  return useQuery<AgencyEarnings, ApiError>({
+    queryKey: tenantPortalKeys.earnings,
+    queryFn: fetchAgencyEarnings,
   });
 }
 

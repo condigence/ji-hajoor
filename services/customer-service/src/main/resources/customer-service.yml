@@ -60,6 +60,8 @@ jihajoor:
   booking:
     # Base URL of the Booking Service used to check active-booking references.
     base-url: ${BOOKING_SERVICE_URL:http://booking-service:8084}
+    # Connect and read timeout for that check; a timeout fails the address deletion.
+    timeout: ${BOOKING_CLIENT_TIMEOUT:3s}
 
 management:
   endpoints:

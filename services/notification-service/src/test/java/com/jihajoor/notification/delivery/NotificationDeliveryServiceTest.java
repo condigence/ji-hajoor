@@ -10,9 +10,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.jihajoor.notification.channel.EmailPort;
 import com.jihajoor.notification.channel.InAppPort;
+import com.jihajoor.notification.channel.NotificationDeliveryException;
 import com.jihajoor.notification.channel.PushPort;
 import com.jihajoor.notification.channel.SmsPort;
 import com.jihajoor.notification.domain.DeliveryStatus;
@@ -201,6 +203,38 @@ class NotificationDeliveryServiceTest {
                     assertThat(r.getDeliveryStatus()).isEqualTo(DeliveryStatus.PERMANENTLY_FAILED);
                     assertThat(r.getRetryCount()).isEqualTo(3);
                     assertThat(r.getErrorDescription()).isNotBlank();
+                });
+    }
+
+    @Test
+    void permanentFailure_isRecordedAtOnceWithoutRetries() {
+        InMemoryDeliveryLogStore store = new InMemoryDeliveryLogStore();
+        AtomicInteger emailAttempts = new AtomicInteger();
+        // e.g. the SMTP adapter given an address that cannot be parsed: retrying cannot help.
+        EmailPort email = (address, subject, body) -> {
+            emailAttempts.incrementAndGet();
+            throw NotificationDeliveryException.permanent("invalid email message: AddressException", null);
+        };
+        List<Long> sleeps = new ArrayList<>();
+
+        FixedPreferencePort prefs = FixedPreferencePort.of(
+                NotificationPreferences.of(NotificationChannel.EMAIL));
+
+        NotificationDeliveryService svc = service(store, prefs, new RecordingSmsPort(), email,
+                new RecordingPushPort(), new RecordingInAppPort(),
+                new RetrySchedule(3, Duration.ofSeconds(1)), sleeps);
+
+        svc.dispatch(event(NotificationEventType.PAYMENT_COMPLETED, UUID.randomUUID()));
+
+        assertThat(emailAttempts.get()).isEqualTo(1);
+        assertThat(sleeps).isEmpty();
+        assertThat(store.records)
+                .filteredOn(r -> r.getChannel() == NotificationChannel.EMAIL)
+                .singleElement()
+                .satisfies(r -> {
+                    assertThat(r.getDeliveryStatus()).isEqualTo(DeliveryStatus.PERMANENTLY_FAILED);
+                    assertThat(r.getRetryCount()).isEqualTo(1);
+                    assertThat(r.getErrorDescription()).isEqualTo("invalid email message: AddressException");
                 });
     }
 

@@ -20,6 +20,19 @@ import org.springframework.stereotype.Component;
 public class CallerIdentity {
 
     /**
+     * Who is calling, for audit columns such as {@code dispatch_settings.updated_by}: the
+     * authenticated principal's name (the JWT subject, i.e. the user id), or {@code null} when the
+     * request is not authenticated. Never throws: an audit field must not fail the request.
+     */
+    public String auditName() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return null;
+        }
+        return authentication.getName();
+    }
+
+    /**
      * @return the authenticated caller's user id (the JWT subject)
      * @throws OfferApiException 401 when unauthenticated or the principal name is not a UUID
      */

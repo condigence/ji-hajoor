@@ -6,7 +6,9 @@ name: Deploy services (reusable)
 # Everything below must exist before this can succeed; none of it is created by
 # this repository (see the header of cd-production.yml for the full list):
 #   - an EKS cluster per environment, a namespace in it, and an IAM role GitHub
-#     can assume through OIDC that may describe ECR images and deploy there;
+#     can assume through OIDC that may describe ECR images and deploy there.
+#     infra/terraform creates the namespace (k8s_namespace, default "jihajoor") and
+#     the per-deployable IRSA roles that trust it; K8S_NAMESPACE must equal it;
 #   - ECR repositories named after each service, holding the image for the tag;
 #   - a Secret "<service>-secrets" per service in the namespace, with the keys
 #     helm/services/<service>.yaml lists (checked below before anything deploys);

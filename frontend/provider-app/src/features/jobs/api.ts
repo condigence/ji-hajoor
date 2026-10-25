@@ -51,7 +51,7 @@ export interface JobMediaReference {
 export interface JobPhoto {
   id: string;
   kind: PhotoKind;
-  /** Displayable URL; absent while the Booking Service does not serve stored media back. */
+  /** Displayable URL, if the server ever sends one; otherwise see {@link fetchJobPhoto}. */
   url?: string;
   uploadedAt: string;
 }
@@ -206,6 +206,17 @@ export function toJobDetail(raw: unknown): JobDetail {
 export async function fetchJobDetail(bookingId: string): Promise<JobDetail> {
   const { data } = await apiClient.get<unknown>(`/bookings/${bookingId}`);
   return toJobDetail(data);
+}
+
+/**
+ * GET /bookings/{bookingId}/photos/{photoId} — one stored photo's bytes, from S3 or the Booking
+ * Service's disk. 404 `MEDIA_NOT_FOUND` for a photo uploaded before photos were kept.
+ */
+export async function fetchJobPhoto(bookingId: string, photoId: string): Promise<Blob> {
+  const { data } = await apiClient.get<Blob>(`/bookings/${bookingId}/photos/${photoId}`, {
+    responseType: 'blob',
+  });
+  return data;
 }
 
 /**

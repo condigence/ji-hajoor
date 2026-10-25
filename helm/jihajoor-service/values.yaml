@@ -56,8 +56,8 @@ imagePullSecrets: []
 
 serviceAccount:
   create: true
-  # IRSA role ARN goes here per service/environment, e.g.
-  #   eks.amazonaws.com/role-arn: arn:aws:iam::<acct>:role/<prefix>-irsa-<service>
+  # IRSA role ARN goes here per deployable/environment (Terraform output irsa_role_arns), e.g.
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::<acct>:role/<prefix>-irsa-<deployable>
   annotations: {}
   # Defaults to the service name.
   name: ""
@@ -151,6 +151,29 @@ autoscaling:
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
   targetMemoryUtilizationPercentage: 80
+
+# Kafka consumer-lag autoscaling with KEDA. Rendered only when enabled AND the deployable
+# lists triggers (helm/services/<deployable>.yaml); it then replaces the HPA above, because
+# KEDA manages its own HPA for the Deployment and two HPAs on one Deployment fight. Needs the
+# KEDA operator and a TriggerAuthentication in the release namespace
+# (infra/k8s/observability/keda-kafka-trigger-auth.yaml).
+keda:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  pollingInterval: 15
+  cooldownPeriod: 180
+  # Also scale on CPU, as the HPA would.
+  cpuUtilization: 70
+  # MSK bootstrap brokers (comma-separated). Required when enabled.
+  bootstrapServers: ""
+  triggerAuthentication: keda-kafka-trigger-auth
+  # One kafka trigger per consumer group the deployable's services use. Omit `topic` to
+  # measure the lag over every topic the group reads.
+  #   - consumerGroup: dispatch-engine.booking-created
+  #     topic: BookingCreated
+  #     lagThreshold: 50
+  triggers: []
 
 # Spring Boot health groups. management.endpoints.web.base-path is "/" in every
 # service and probes are enabled, so these live on the server port at

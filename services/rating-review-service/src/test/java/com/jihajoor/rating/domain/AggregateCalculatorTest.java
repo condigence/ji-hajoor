@@ -84,4 +84,67 @@ class AggregateCalculatorTest {
                 reviewAgedDays(1, 5, true)); // flagged -> excluded
         assertThat(calculator.aggregate(reviews, NOW)).isEqualByComparingTo("5.00");
     }
+
+    // ---- summarize: what the Provider Service is sent (Requirements 4.7, 15.4) ------------------
+
+    @Test
+    void summaryCountsOnlyTheReviewsInTheAggregate() {
+        Review removed = reviewAgedDays(1, 3, false);
+        removed.deactivate();
+        List<Review> reviews = List.of(
+                reviewAgedDays(5, 10, false),
+                reviewAgedDays(4, 120, false),
+                reviewAgedDays(1, 5, true), // flagged -> excluded
+                removed);                   // removed by an Admin -> excluded
+
+        AggregateCalculator.Summary summary = calculator.summarize(reviews, NOW);
+
+        // (1.5*5 + 1.0*4) / 2.5 = 11.5 / 2.5 = 4.60, over the 2 counted reviews.
+        assertThat(summary.average()).isEqualByComparingTo("4.60");
+        assertThat(summary.count()).isEqualTo(2);
+    }
+
+    /** A provider's rating of a customer is never part of a provider's aggregate (15.10). */
+    @Test
+    void providerToCustomerReviewsAreExcluded() {
+        Review providerRatingACustomer = Review.providerReview(UUID.randomUUID(), PROVIDER,
+                UUID.randomUUID(), 1, null, null, false, NOW.minus(Duration.ofDays(1)));
+        List<Review> reviews = List.of(reviewAgedDays(5, 10, false), providerRatingACustomer);
+
+        AggregateCalculator.Summary summary = calculator.summarize(reviews, NOW);
+
+        assertThat(summary.average()).isEqualByComparingTo("5.00");
+        assertThat(summary.count()).isEqualTo(1);
+        assertThat(calculator.summarize(List.of(providerRatingACustomer), NOW))
+                .isEqualTo(AggregateCalculator.Summary.NONE);
+    }
+
+    @Test
+    void noCountedReviewIsAnEmptySummaryNotAZeroRating() {
+        Review removed = reviewAgedDays(5, 3, false);
+        removed.deactivate();
+
+        AggregateCalculator.Summary summary = calculator.summarize(
+                List.of(removed, reviewAgedDays(4, 3, true)), NOW);
+
+        assertThat(summary.average()).isNull();
+        assertThat(summary.count()).isZero();
+    }
+
+    /** Exactly half a cent rounds up (HALF_UP), not to the even neighbour. */
+    @Test
+    void summaryRoundsHalfUpToTwoDecimalPlaces() {
+        AggregateCalculator unweighted = new AggregateCalculator(
+                Duration.ofDays(90), BigDecimal.ONE, BigDecimal.ONE);
+        // 5*5 + 3*4 = 37 over 8 reviews = 4.625 -> 4.63 (HALF_EVEN would give 4.62).
+        List<Review> reviews = List.of(
+                reviewAgedDays(5, 1, false), reviewAgedDays(5, 2, false), reviewAgedDays(5, 3, false),
+                reviewAgedDays(5, 4, false), reviewAgedDays(5, 5, false), reviewAgedDays(4, 6, false),
+                reviewAgedDays(4, 7, false), reviewAgedDays(4, 8, false));
+
+        AggregateCalculator.Summary summary = unweighted.summarize(reviews, NOW);
+
+        assertThat(summary.average()).isEqualTo(new BigDecimal("4.63"));
+        assertThat(summary.count()).isEqualTo(8);
+    }
 }

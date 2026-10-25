@@ -5,6 +5,7 @@ import { AppShell } from '@components/AppShell';
 import { QueryStateView } from '@components/QueryStateView';
 import { useAuthStore } from '@stores/authStore';
 import { ProfileCompletionPrompt } from '@features/profile/ProfileCompletionPrompt';
+import { AgencyCard } from '@features/agency/AgencyCard';
 import { EarningsSummaryCard } from './EarningsSummaryCard';
 import { readDashboardNotice } from '@features/jobs/assignmentNotice';
 import { isAwaitingProviderAnswer } from '@features/jobs/status';
@@ -91,6 +92,8 @@ export function DashboardScreen() {
         ) : null}
 
         <ProfileCompletionPrompt />
+
+        <AgencyCard invitationsOnly />
 
         <PendingOffersSection onOpen={openOffer} />
 

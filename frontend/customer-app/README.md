@@ -41,10 +41,9 @@ Bookings, Help and Profile.
 | `/categories/:categoryId` | Subcategory | The category's services as rows with "from" price, typical duration and 24×7 flag; desktop adds a jump rail and a sticky promise card |
 | `/book/:subcategoryId` | Service request | Where (saved address, manual entry or "use my current location"), when (≥ 2 h ahead, ≤ 90 days), what (description, emergency toggle, up to 10 photos/videos — JPEG/PNG/MP4/MOV, ≤ 50 MB each; a **Take a photo** button in the native apps) |
 | `/book/:subcategoryId/estimate` | Price estimate | Itemised estimate from the Pricing Engine, coupon check, confirm creates the booking; a pricing outage blocks confirmation |
-| `/book/:bookingId/professionals` | Available professionals | Verified candidates with rating, jobs done, distance, ETA and starting price, re-sortable. Informational only: dispatch offers the job itself |
 | `/bookings/:bookingId/track` | Live tracking | See [below](#live-tracking) |
 | `/bookings/:bookingId/chat` | Chat | Booking chat over WebSocket; no phone numbers exchanged, read-only once the channel closes |
-| `/bookings/:bookingId` | Booking detail | Progress timeline, links to tracking and chat while active, pay a completed job, download the invoice PDF |
+| `/bookings/:bookingId` | Booking detail | Progress timeline, links to tracking and chat while active, pay a completed job, before/after job photos, download the invoice PDF once paid |
 | `/history` | Service history | Paginated bookings with status chip, date and amount |
 | `/profile` | Profile | Signed-in identity, an **Email & password** card (add and verify an email, set or change the password) and links into the rest of the app |
 | `/help` | Help & support | Inline answers on pricing, verification, cancellation and payment, plus routes to a booking or the 24×7 path |

@@ -51,7 +51,7 @@ export function VerificationQueueScreen() {
   return (
     <ModuleScreen
       title="Verification Queue"
-      description="Review providers' documents, then record their background check to approve them for jobs."
+      description="Review workers' documents, then record their background check to approve them for jobs."
     >
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
         <Tabs value={step} onChange={(_, next: Step) => setStep(next)}>
@@ -73,7 +73,7 @@ function DocumentReviewQueue() {
   const [selected, setSelected] = useState<VerificationQueueEntry | null>(null);
 
   const columns: Column<VerificationQueueEntry>[] = [
-    { key: 'name', header: 'Provider', render: (row) => row.displayName ?? '—' },
+    { key: 'name', header: 'Worker', render: (row) => row.displayName ?? '—' },
     { key: 'mobile', header: 'Mobile', render: (row) => row.mobileNumber ?? '—' },
     { key: 'skill', header: 'Primary skill', render: (row) => row.primarySkill ?? '—' },
     {
@@ -107,7 +107,7 @@ function DocumentReviewQueue() {
         error={queueQuery.error}
         onRetry={() => void queueQuery.refetch()}
         isEmpty={(queueQuery.data?.length ?? 0) === 0}
-        emptyMessage="No providers are waiting for document review."
+        emptyMessage="No workers are waiting for document review."
       >
         <DataTable
           columns={columns}
@@ -184,7 +184,7 @@ function ReviewDialog({ entry, onClose }: ReviewDialogProps) {
             mt: 2,
           }}
         >
-          Accepting the documents starts the background check. The provider moves to the Background
+          Accepting the documents starts the background check. The worker moves to the Background
           check tab, where you record its result to approve them for jobs.
         </Typography>
 
@@ -202,7 +202,7 @@ function ReviewDialog({ entry, onClose }: ReviewDialogProps) {
               helperText={
                 rejecting && !reason.trim()
                   ? 'A reason is required to reject a submission.'
-                  : 'Shared with the provider.'
+                  : 'Shared with the worker.'
               }
             />
           </Box>
@@ -234,7 +234,7 @@ function BackgroundCheckQueue() {
   const [selected, setSelected] = useState<BackgroundCheckEntry | null>(null);
 
   const columns: Column<BackgroundCheckEntry>[] = [
-    { key: 'name', header: 'Provider', render: (row) => row.displayName ?? '—' },
+    { key: 'name', header: 'Worker', render: (row) => row.displayName ?? '—' },
     { key: 'skill', header: 'Primary skill', render: (row) => row.primarySkill ?? '—' },
     {
       key: 'started',
@@ -277,7 +277,7 @@ function BackgroundCheckQueue() {
         error={checksQuery.error}
         onRetry={() => void checksQuery.refetch()}
         isEmpty={(checksQuery.data?.length ?? 0) === 0}
-        emptyMessage="No providers are waiting on a background check."
+        emptyMessage="No workers are waiting on a background check."
       >
         <DataTable
           columns={columns}
@@ -379,7 +379,7 @@ function BackgroundCheckDialog({ entry, onClose }: BackgroundCheckDialogProps) {
             helperText={
               attempted && resultMissing
                 ? 'Record what the check found.'
-                : 'For example: "Identity confirmed, no criminal records found." Kept on the provider\'s record.'
+                : 'For example: "Identity confirmed, no criminal records found." Kept on the worker\'s record.'
             }
             slotProps={{
               htmlInput: { maxLength: 2000 },
@@ -397,8 +397,8 @@ function BackgroundCheckDialog({ entry, onClose }: BackgroundCheckDialogProps) {
               error={attempted && reasonMissing}
               helperText={
                 attempted && reasonMissing
-                  ? 'A reason is required to reject a provider.'
-                  : 'Shared with the provider.'
+                  ? 'A reason is required to reject a worker.'
+                  : 'Shared with the worker.'
               }
               slotProps={{
                 htmlInput: { maxLength: 1000 },

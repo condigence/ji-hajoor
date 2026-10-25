@@ -1,4 +1,4 @@
-output "namespace_names" {
-  description = "List of created Kubernetes namespace names"
-  value       = [for ns in kubernetes_namespace.this : ns.metadata[0].name]
+output "namespace_name" {
+  description = "The namespace the platform runs in (set the GitHub environment's K8S_NAMESPACE to this)"
+  value       = kubernetes_namespace.this.metadata[0].name
 }

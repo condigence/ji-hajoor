@@ -129,6 +129,20 @@ public class CustomerProfileService {
     }
 
     /**
+     * The customer's saved addresses, the default first and then newest first, with the street
+     * address decrypted (Requirement 2.5). Lets the app offer addresses saved from another device.
+     */
+    @Transactional(readOnly = true)
+    public List<SavedAddress> listAddresses(UUID customerId) {
+        return addressRepository.findByCustomerIdAndIsActiveTrueOrderByCreatedAtDesc(customerId).stream()
+                .sorted(java.util.Comparator.comparing((Address a) -> !a.isDefault()))
+                .map(a -> new SavedAddress(a.getId(), a.getLabel(), a.getLat(), a.getLng(),
+                        a.getAddressTextEncrypted() == null ? null : kms.decrypt(a.getAddressTextEncrypted()),
+                        a.isDefault(), a.getCreatedAt()))
+                .toList();
+    }
+
+    /**
      * Deletes a saved address. Rejected if an active booking references it (Requirement
      * 2.6). If the deleted address was the default and other addresses remain, the most
      * recently added remaining address is promoted to default (Requirement 2.4).

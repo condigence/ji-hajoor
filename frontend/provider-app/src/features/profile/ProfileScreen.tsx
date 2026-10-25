@@ -27,6 +27,7 @@ import { formatMobileNumber } from '@features/auth/phone';
 import { useVerificationState } from '@features/verification/hooks';
 import { describeVerificationStatus } from '@features/verification/status';
 import { useAuthStore } from '@stores/authStore';
+import { AgencyCard } from '@features/agency/AgencyCard';
 import { BankAccountCard } from './BankAccountCard';
 import { EmailPasswordCard } from './EmailPasswordCard';
 import { WorkProfileCard } from './WorkProfileCard';
@@ -116,6 +117,8 @@ export function ProfileScreen() {
 
         <WorkProfileCard />
 
+        <AgencyCard />
+
         <BankAccountCard />
 
         <EmailPasswordCard />
@@ -163,7 +166,7 @@ export function ProfileScreen() {
             color: 'text.secondary',
           }}
         >
-          Ji-Hajoor Provider — Earn More. Serve Better.
+          Ji-Hajoor Worker — Earn More. Serve Better.
         </Typography>
       </Stack>
     </AppShell>

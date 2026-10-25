@@ -206,4 +206,20 @@ class PaymentRbacConfigTest {
     void gatewayCallback_withNoAuthentication_passesThrough() throws Exception {
         assertPassedThrough(invoke("POST", "/payments/callbacks/" + UUID.randomUUID()));
     }
+
+    // ------------------------------------------------------ internal refund surface
+
+    /**
+     * {@code /internal/**} is guarded by the internal API key and the chain's
+     * {@code hasAuthority(ROLE_INTERNAL)}, not by a role rule: the calling service holds only
+     * {@code ROLE_INTERNAL}, so any rule here would 403 the Complaint Service's refunds.
+     */
+    @Test
+    void internalRefund_hasNoRoleRule_soTheInternalCallerPassesThrough() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("internal-service", null,
+                        List.of(new SimpleGrantedAuthority(InternalApiKeyFilter.INTERNAL_AUTHORITY))));
+
+        assertPassedThrough(invoke("POST", "/internal/payments/refunds"));
+    }
 }

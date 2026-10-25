@@ -1,39 +1,54 @@
-import { useState } from 'react';
-import { Box, Link, Stack, Tab, Tabs, Typography } from '@mui/material';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, Box, Button, CircularProgress, Stack, Tab, Tabs, Typography } from '@mui/material';
+import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
+import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
 import type { VerificationDocument } from './api';
+import { useVerificationDocumentContent } from './hooks';
 
 interface DocumentViewerProps {
   documents: readonly VerificationDocument[];
 }
 
-/** True when the content type is a PDF the browser can render in an iframe. */
-function isPdf(contentType: string | null | undefined): boolean {
-  return (contentType ?? '').toLowerCase().includes('pdf');
+/** Image types every supported browser renders in an <img>. */
+const RENDERABLE_IMAGES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
+/** The bare, lower-case MIME type ("image/png"), or '' when absent. */
+function mimeOf(contentType: string | null | undefined): string {
+  return (contentType ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
 }
 
-/** True when the content type is a browser-renderable image. */
-function isImage(contentType: string | null | undefined): boolean {
-  return (contentType ?? '').toLowerCase().startsWith('image/');
+/** A file name for saving: the original upload name, else one made from the type. */
+function downloadName(doc: VerificationDocument, mime: string): string {
+  if (doc.fileName) return doc.fileName;
+  const ext = mime === 'application/pdf' ? 'pdf' : (mime.split('/')[1] ?? 'bin');
+  return `${doc.type.replace(/[^\w-]+/g, '-').toLowerCase()}.${ext}`;
 }
 
-/**
- * Sandbox for the document frames. These files are uploaded by providers and
- * served from storage, so they are untrusted content rendered inside an admin
- * session: the sandbox withholds forms, popups, top-level navigation, downloads
- * and plugin access. `allow-scripts`/`allow-same-origin` are what the browser's
- * built-in PDF viewer needs to render at all; together they would let framed
- * *same-origin* content lift its own sandbox, which does not apply here because
- * documents are served from the storage origin, not the portal's.
- */
-const DOCUMENT_SANDBOX = 'allow-same-origin allow-scripts';
+const frameSx = {
+  border: 1,
+  borderColor: 'divider',
+  borderRadius: 1,
+  overflow: 'hidden',
+  bgcolor: 'grey.100',
+  minHeight: 480,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+} as const;
 
 /**
- * Inline document viewer (Requirement 19.3). Renders each submitted document
- * inside the dashboard without a separate download: PDFs are embedded in an
- * <iframe> (which uses the browser's native PDF renderer) and images in an
- * <img>. A tab strip switches between documents when a provider submitted more
- * than one. A document without a URL (storage could not sign one) is named but
- * not previewed, so the reviewer knows it exists and why it is not shown.
+ * Document viewer for the verification review (Requirement 19.3). Each
+ * submitted document's bytes come from the Verification Service
+ * (GET /admin/verification/{id}/documents/{documentId}, the document's `url`),
+ * which needs the bearer header, so they are fetched through the API client as
+ * a blob and shown from an object URL, released when the document changes or
+ * the dialog closes. Images render inline; a PDF is offered to open in a new
+ * tab or to download, as is anything else the server serves as a plain file.
+ * A tab strip switches between documents when there is more than one.
+ *
+ * A document whose file was never stored (uploaded before document storage
+ * was enabled: no `url`, or a 404) is named and marked as such, so the
+ * reviewer knows it exists but cannot be checked here.
  */
 export function DocumentViewer({ documents }: DocumentViewerProps) {
   const [active, setActive] = useState(0);
@@ -55,14 +70,12 @@ export function DocumentViewer({ documents }: DocumentViewerProps) {
 
   const current = documents[Math.min(active, documents.length - 1)];
   if (!current) return null;
-  const url = current.url ?? null;
-  const label = current.fileName ? `${current.type} — ${current.fileName}` : current.type;
 
   return (
     <Stack spacing={1.5}>
       {documents.length > 1 ? (
         <Tabs
-          value={active}
+          value={Math.min(active, documents.length - 1)}
           onChange={(_event, value: number) => setActive(value)}
           variant="scrollable"
           scrollButtons="auto"
@@ -76,70 +89,131 @@ export function DocumentViewer({ documents }: DocumentViewerProps) {
         <Typography variant="subtitle2">{current.type}</Typography>
       )}
 
-      <Box
-        sx={{
-          border: (t) => `1px solid ${t.palette.divider}`,
-          borderRadius: 1,
-          overflow: 'hidden',
-          bgcolor: 'grey.100',
-          minHeight: 480,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        {!url ? (
-          <Typography
-            variant="body2"
-            sx={{
-              color: 'text.secondary',
-              p: 3,
-              textAlign: 'center',
-            }}
-          >
-            Preview isn&apos;t available for this document.
-          </Typography>
-        ) : isPdf(current.contentType) ? (
-          <Box
-            component="iframe"
-            src={url}
-            title={label}
-            sandbox={DOCUMENT_SANDBOX}
-            sx={{ width: '100%', height: 560, border: 0 }}
-          />
-        ) : isImage(current.contentType) ? (
-          <Box
-            component="img"
-            src={url}
-            alt={label}
-            sx={{ maxWidth: '100%', maxHeight: 560, objectFit: 'contain' }}
-          />
-        ) : (
-          <Box
-            component="iframe"
-            src={url}
-            title={label}
-            sandbox={DOCUMENT_SANDBOX}
-            sx={{ width: '100%', height: 560, border: 0 }}
-          />
-        )}
-      </Box>
+      {/* Keyed by document so each one starts from a clean fetch and object URL. */}
+      <DocumentContent key={current.id} doc={current} />
+
       {current.fileName ? (
-        <Typography
-          variant="caption"
-          sx={{
-            color: 'text.secondary',
-          }}
-        >
-          {url ? (
-            <Link href={url} target="_blank" rel="noopener noreferrer">
-              {current.fileName}
-            </Link>
-          ) : (
-            current.fileName
-          )}
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          {current.fileName}
         </Typography>
       ) : null}
     </Stack>
+  );
+}
+
+function NotStored() {
+  return (
+    <Box sx={frameSx}>
+      <Stack spacing={0.5} sx={{ p: 3, textAlign: 'center', maxWidth: 420 }}>
+        <Typography variant="subtitle2">File not stored</Typography>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          This document was uploaded before document storage was enabled, so there is no file to
+          show. Ask the worker to submit it again if you need to check it.
+        </Typography>
+      </Stack>
+    </Box>
+  );
+}
+
+function DocumentContent({ doc }: { doc: VerificationDocument }) {
+  const url = doc.url ?? null;
+  const content = useVerificationDocumentContent(url);
+  const blob = content.data;
+  // One object URL per fetched blob, released when the blob changes or this unmounts.
+  const objectUrl = useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob]);
+  useEffect(
+    () => () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    },
+    [objectUrl],
+  );
+
+  if (!url || content.error?.status === 404) {
+    return <NotStored />;
+  }
+
+  if (content.isError) {
+    return (
+      <Box sx={frameSx}>
+        <Alert
+          severity="error"
+          action={
+            <Button color="inherit" size="small" onClick={() => void content.refetch()}>
+              Retry
+            </Button>
+          }
+        >
+          {content.error.message || 'This document could not be loaded.'}
+        </Alert>
+      </Box>
+    );
+  }
+
+  if (!blob || !objectUrl) {
+    return (
+      <Box sx={frameSx} aria-busy="true">
+        <CircularProgress size={32} aria-label="Loading document" />
+      </Box>
+    );
+  }
+
+  // The server's type wins over the listed one: it serves anything it will not
+  // let a browser render as application/octet-stream.
+  const mime = mimeOf(blob.type) || mimeOf(doc.contentType);
+  const label = doc.fileName ? `${doc.type} — ${doc.fileName}` : doc.type;
+  const name = downloadName(doc, mime);
+
+  if (RENDERABLE_IMAGES.has(mime)) {
+    return (
+      <Stack spacing={1}>
+        <Box sx={frameSx}>
+          <Box
+            component="img"
+            src={objectUrl}
+            alt={label}
+            sx={{ maxWidth: '100%', maxHeight: 560, objectFit: 'contain' }}
+          />
+        </Box>
+        <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
+          <Button size="small" startIcon={<DownloadRoundedIcon />} href={objectUrl} download={name}>
+            Download
+          </Button>
+        </Stack>
+      </Stack>
+    );
+  }
+
+  const isPdf = mime === 'application/pdf';
+  return (
+    <Box sx={frameSx}>
+      <Stack spacing={1.5} sx={{ p: 3, alignItems: 'center', textAlign: 'center' }}>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          {isPdf
+            ? 'PDF document. Open it in a new tab to review it, or download it.'
+            : 'This file cannot be previewed here. Download it to review it.'}
+        </Typography>
+        <Stack direction="row" spacing={1}>
+          {isPdf ? (
+            <Button
+              variant="contained"
+              startIcon={<OpenInNewRoundedIcon />}
+              href={objectUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open PDF
+            </Button>
+          ) : null}
+          <Button
+            variant={isPdf ? 'outlined' : 'contained'}
+            startIcon={<DownloadRoundedIcon />}
+            href={objectUrl}
+            download={name}
+          >
+            Download
+          </Button>
+        </Stack>
+      </Stack>
+    </Box>
   );
 }

@@ -27,6 +27,25 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  # SMTP server for EMAIL_PROVIDER=smtp (SmtpEmailSenderAdapter): Mailpit locally (port 1025, no
+  # credentials, no TLS), the Amazon SES SMTP interface in AWS (email-smtp.<region>.amazonaws.com,
+  # port 587, SES SMTP credentials, SMTP_STARTTLS=true). SMTP AUTH is switched on when a username
+  # is set. Unused by the other providers: the mail sender only connects when an email is sent.
+  # The variables are SMTP_* rather than SPRING_MAIL_*: services sharing a JVM share its
+  # environment, and a SPRING_MAIL_HOST would configure mail (and a mail health check) in every
+  # one of them.
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    default-encoding: UTF-8
+    properties:
+      mail.smtp.starttls.enable: ${SMTP_STARTTLS:false}
+      mail.smtp.starttls.required: ${SMTP_STARTTLS:false}
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
 
 server:
   port: ${SERVER_PORT:8081}
@@ -63,6 +82,8 @@ jihajoor:
       # TEMPORARY TEST MODE: every OTP is this code and no SMS is sent; staff accounts are
       # refused (they use username/password). Unset it once SMS delivery works.
       fixed-code: ${OTP_FIXED_CODE:}
+      # The code works only for these test numbers; every other number gets a real SMS.
+      fixed-code-numbers: ${OTP_FIXED_CODE_NUMBERS:+919000090001,+919000090002,+919000090011,+919000090012}
     # Username/password sign-in. The lockout mirrors the OTP flow so both
     # authentication surfaces resist brute force identically (Requirement 1.3).
     password:
@@ -126,8 +147,11 @@ jihajoor:
     # Selects the email adapter behind EmailSenderPort (email-auth Requirement 7).
     #   logging - record that an email was accepted, by subject only (default; delivers nothing)
     #   file    - LOCAL DEV ONLY: append whole emails, codes and links included, to a file
+    #   smtp    - deliver over SMTP (spring.mail above): Mailpit locally, Amazon SES in AWS
     provider: ${EMAIL_PROVIDER:logging}
     file-path: ${EMAIL_FILE_PATH:/var/log/jihajoor/dev-mail.log}
+    # From header of every email the smtp provider sends. With SES it must be a verified identity.
+    from: "${EMAIL_FROM:Ji-Hajoor <no-reply@jihajoor.local>}"
 
 management:
   endpoints:
@@ -139,6 +163,12 @@ management:
     health:
       probes:
         enabled: true
+  health:
+    # Boot's mail health indicator opens an SMTP connection on every health check. Off: an email
+    # outage must not mark the service down (sign-in works without email), and with any provider
+    # but smtp there is no server to reach. MANAGEMENT_HEALTH_MAIL_ENABLED=true turns it on.
+    mail:
+      enabled: false
   metrics:
     tags:
       application: auth-service

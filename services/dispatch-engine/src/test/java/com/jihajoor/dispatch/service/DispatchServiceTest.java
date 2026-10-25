@@ -2,8 +2,8 @@ package com.jihajoor.dispatch.service;
 
 import com.jihajoor.dispatch.config.DispatchProperties;
 import com.jihajoor.dispatch.domain.DispatchRequest;
+import com.jihajoor.dispatch.domain.DispatchSettings;
 import com.jihajoor.dispatch.domain.MatchingWeights;
-import com.jihajoor.dispatch.domain.MatchingWeightsStore;
 import com.jihajoor.dispatch.domain.ProviderCandidate;
 import com.jihajoor.dispatch.domain.ProviderSearchUnavailableException;
 import com.jihajoor.dispatch.domain.ScoreComponents;
@@ -11,6 +11,7 @@ import com.jihajoor.dispatch.port.JobOfferPort.OfferOutcome;
 import com.jihajoor.dispatch.service.fake.FlagCancellation;
 import com.jihajoor.dispatch.service.fake.InMemoryAcceptanceLedger;
 import com.jihajoor.dispatch.service.fake.InMemoryAcceptanceLedger.Announcement;
+import com.jihajoor.dispatch.service.fake.InMemoryDispatchSettingsStore;
 import com.jihajoor.dispatch.service.fake.InMemoryLock;
 import com.jihajoor.dispatch.service.fake.MutableClock;
 import com.jihajoor.dispatch.service.fake.RecordingBookingTransition;
@@ -28,6 +29,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.UnaryOperator;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -45,7 +47,7 @@ class DispatchServiceTest {
     private RecordingNotification notification;
     private InMemoryAcceptanceLedger acceptanceLedger;
     private RecordingProviderRejectedPublisher rejectedPublisher;
-    private MatchingWeightsStore weightsStore;
+    private DispatchSettingsService settings;
     private DispatchProperties properties;
     private FlagCancellation cancellation;
     private MutableClock clock;
@@ -62,10 +64,10 @@ class DispatchServiceTest {
         notification = new RecordingNotification();
         acceptanceLedger = new InMemoryAcceptanceLedger();
         rejectedPublisher = new RecordingProviderRejectedPublisher();
-        weightsStore = new MatchingWeightsStore();
         properties = new DispatchProperties(); // defaults: 10 km, +5 km, 3 cycles, 60 s
         cancellation = new FlagCancellation();
         clock = new MutableClock(Instant.parse("2026-10-02T10:00:00Z"));
+        settings = new DispatchSettingsService(new InMemoryDispatchSettingsStore(), properties, clock);
         onPause = () -> { };
 
         service = newService(rejectedPublisher);
@@ -73,11 +75,16 @@ class DispatchServiceTest {
 
     private DispatchService newService(RecordingProviderRejectedPublisher rejections) {
         return new DispatchService(providerQuery, lock, jobOffer, bookingTransition,
-                notification, weightsStore, properties, acceptanceLedger, rejections, cancellation,
+                notification, settings, properties, acceptanceLedger, rejections, cancellation,
                 clock, pause -> {
                     clock.advance(pause);
                     onPause.run();
                 });
+    }
+
+    /** Saves a change to the Admin dispatch rules, as the Admin Portal would. */
+    private void tune(UnaryOperator<DispatchSettings> change) {
+        settings.update(change, "admin");
     }
 
     private static DispatchRequest emergencyRequest() {
@@ -288,7 +295,7 @@ class DispatchServiceTest {
     void usesActiveCustomWeightsForRanking() {
         // Put all weight on availability. The provider with the higher availability score should be
         // offered first, even though it has a lower distance score.
-        weightsStore.update(MatchingWeights.of(0.0, 1.0, 0.0, 0.0, 0.0));
+        tune(s -> s.withWeights(MatchingWeights.of(0.0, 1.0, 0.0, 0.0, 0.0)));
         UUID hiAvailId = UUID.randomUUID();
         UUID hiDistId = UUID.randomUUID();
         ProviderCandidate highAvailability = new ProviderCandidate(hiAvailId,
@@ -308,7 +315,7 @@ class DispatchServiceTest {
 
     @Test
     void declinedOfferPublishesProviderRejectedWithBookingCustomerProviderAndReason() {
-        properties.setOfferBatchSize(1);
+        tune(s -> s.withOfferBatchSize(1));
         ProviderCandidate decliner = candidate(0.9);
         ProviderCandidate acceptor = candidate(0.6);
         providerQuery.whenRadiusAtLeast(10.0, decliner, acceptor);
@@ -618,8 +625,8 @@ class DispatchServiceTest {
 
     @Test
     void handsTheBookingToTheAgenciesOnceTheFallbackTimeHasPassed() {
-        properties.setAgencyFallbackMinutes(2);
-        properties.setOfferBatchSize(2);
+        tune(s -> s.withAgencyFallbackMinutes(2));
+        tune(s -> s.withOfferBatchSize(2));
         List<ProviderCandidate> pool = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
             pool.add(candidate(0.9 - i * 0.05));
@@ -644,9 +651,9 @@ class DispatchServiceTest {
 
     @Test
     void noWaveRunsPastTheFallbackTime() {
-        properties.setAgencyFallbackMinutes(1);
-        properties.setOfferTimeoutSeconds(45);
-        properties.setOfferBatchSize(1);
+        tune(s -> s.withAgencyFallbackMinutes(1));
+        tune(s -> s.withOfferTimeoutSeconds(45));
+        tune(s -> s.withOfferBatchSize(1));
         providerQuery.whenRadiusAtLeast(10.0, candidate(0.9), candidate(0.8), candidate(0.7));
         jobOffer.whenNobodyAccepts(clock::advance);
 
@@ -660,8 +667,8 @@ class DispatchServiceTest {
 
     @Test
     void anAcceptanceInsideTheFallbackTimeIsKept() {
-        properties.setAgencyFallbackMinutes(2);
-        properties.setOfferBatchSize(1);
+        tune(s -> s.withAgencyFallbackMinutes(2));
+        tune(s -> s.withOfferBatchSize(1));
         ProviderCandidate first = candidate(0.9);
         ProviderCandidate second = candidate(0.8);
         providerQuery.whenRadiusAtLeast(10.0, first, second);

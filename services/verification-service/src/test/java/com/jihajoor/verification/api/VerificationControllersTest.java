@@ -141,9 +141,9 @@ class VerificationControllersTest {
     void submitDocuments_readsMultipartAndDelegates() {
         authenticateProvider(provider);
         MultipartFile gov = new MockMultipartFile("GOVERNMENT_ID", "id.jpg", "image/jpeg",
-                new byte[]{1, 2, 3});
+                new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0});
         MultipartFile addr = new MockMultipartFile("ADDRESS_PROOF", "addr.pdf", "application/pdf",
-                new byte[]{4, 5});
+                "%PDF-1.4".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
         when(service.submitDocuments(eq(provider), anyList(), eq(provider)))
                 .thenReturn(verification());
 
@@ -154,7 +154,10 @@ class VerificationControllersTest {
         @SuppressWarnings("unchecked")
         var captor = org.mockito.ArgumentCaptor.forClass(java.util.List.class);
         verify(service).submitDocuments(eq(provider), captor.capture(), eq(provider));
-        assertThat((java.util.List<DocumentUpload>) captor.getValue()).hasSize(2);
+        assertThat((java.util.List<DocumentUpload>) captor.getValue()).hasSize(2)
+                // The original file name travels with the bytes, for the admin viewer.
+                .extracting(DocumentUpload::originalFilename)
+                .containsExactlyInAnyOrder("id.jpg", "addr.pdf");
     }
 
     @Test
@@ -166,6 +169,19 @@ class VerificationControllersTest {
                 .isInstanceOf(VerificationException.class)
                 .satisfies(e -> assertThat(((VerificationException) e).getErrorCode())
                         .isEqualTo("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void submitDocuments_contentThatIsNotAnImageOrPdf_isRejected_whateverItClaims() {
+        authenticateProvider(provider);
+        MultipartFile page = new MockMultipartFile("GOVERNMENT_ID", "id.jpg", "image/jpeg",
+                "<svg onload=alert(1)>".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> providerController.submitDocuments(provider, Map.of("GOVERNMENT_ID", page)))
+                .isInstanceOf(VerificationException.class)
+                .satisfies(e -> assertThat(((VerificationException) e).getErrorCode())
+                        .isEqualTo("UNSUPPORTED_DOCUMENT_TYPE"));
+        verify(service, never()).submitDocuments(any(), anyList(), any());
     }
 
     @Test
@@ -208,7 +224,7 @@ class VerificationControllersTest {
     void submitDocuments_forAnotherProvider_isForbidden() {
         authenticateProvider(otherProvider);
         MultipartFile gov = new MockMultipartFile("GOVERNMENT_ID", "id.jpg", "image/jpeg",
-                new byte[]{1, 2, 3});
+                new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0});
 
         assertThatThrownBy(() -> providerController.submitDocuments(provider,
                 Map.of("GOVERNMENT_ID", gov)))

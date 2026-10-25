@@ -8,8 +8,6 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 import com.jihajoor.booking.catalog.StubCatalogClientAdapter;
-import com.jihajoor.booking.media.LocalMediaStorageAdapter;
-import com.jihajoor.booking.media.MediaFile;
 import com.jihajoor.booking.pricing.PartsRecalculationRequest;
 import com.jihajoor.booking.pricing.PriceEstimate;
 import com.jihajoor.booking.pricing.PriceEstimateRequest;
@@ -19,8 +17,9 @@ import com.jihajoor.booking.service.DefaultSubcategoryCancellationFeeAdapter;
 /**
  * Unit tests for the default local/dev adapters. They keep the booking flow functional without
  * external systems: the catalog stub treats well-formed references as active, the pricing stub
- * returns a deterministic itemized estimate, the local media adapter derives an S3-shaped key,
- * and the default cancellation-fee adapter returns no per-subcategory override.
+ * returns a deterministic itemized estimate, and the default cancellation-fee adapter returns no
+ * per-subcategory override. The local media adapter has its own test
+ * ({@code LocalMediaStorageAdapterTest}), now that it stores bytes.
  */
 class StubAdaptersTest {
 
@@ -87,17 +86,6 @@ class StubAdaptersTest {
         PriceEstimate updated = pricing.recalculateWithParts(req);
 
         assertThat(updated.total()).isEqualByComparingTo("0.00");
-    }
-
-    @Test
-    void localMediaAdapterDerivesBookingScopedKey() {
-        LocalMediaStorageAdapter storage = new LocalMediaStorageAdapter();
-        UUID booking = UUID.randomUUID();
-        MediaFile file = new MediaFile("photo.jpg", "image/jpeg", 100L, new byte[]{1, 2, 3});
-
-        String key = storage.store(booking, file);
-
-        assertThat(key).startsWith("bookings/" + booking + "/media/");
     }
 
     @Test

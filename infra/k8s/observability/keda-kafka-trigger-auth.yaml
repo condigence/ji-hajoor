@@ -1,0 +1,38 @@
+# KEDA TriggerAuthentication for the Kafka-lag ScaledObjects the Helm chart renders
+# (helm/jihajoor-service/templates/keda-scaledobject.yaml, enabled with keda.enabled).
+#
+# The platform runs in ONE namespace per environment: the one the deploy pipeline uses
+# (the K8S_NAMESPACE variable of the GitHub environment, see
+# .github/workflows/deploy-services.yml). This file therefore names no namespace; apply it
+# into that namespace:
+#
+#   helm upgrade --install keda kedacore/keda -n keda --create-namespace   # once per cluster
+#   kubectl -n "$K8S_NAMESPACE" create secret generic keda-kafka-auth \
+#     --from-literal=sasl=scram_sha512 \
+#     --from-literal=username=<msk user> --from-literal=password=<msk password> \
+#     --from-literal=tls=enable
+#   kubectl -n "$K8S_NAMESPACE" apply -f keda-kafka-trigger-auth.yaml
+#
+# MSK uses TLS + SASL/SCRAM (infra/terraform), hence the parameters below. Keep the Secret
+# out of git; populate it from Secrets Manager (External Secrets Operator) in real clusters.
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-kafka-trigger-auth
+  labels:
+    app.kubernetes.io/part-of: jihajoor
+    component: keda
+spec:
+  secretTargetRef:
+    - parameter: sasl
+      name: keda-kafka-auth
+      key: sasl
+    - parameter: username
+      name: keda-kafka-auth
+      key: username
+    - parameter: password
+      name: keda-kafka-auth
+      key: password
+    - parameter: tls
+      name: keda-kafka-auth
+      key: tls

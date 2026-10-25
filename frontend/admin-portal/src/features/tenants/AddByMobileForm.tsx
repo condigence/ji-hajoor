@@ -7,7 +7,7 @@ import { mobileSchema, type MobileFormValues } from './schemas';
 interface AddByMobileFormProps {
   /** Field label, e.g. "Provider's mobile number". */
   label: string;
-  /** Submit button text, e.g. "Add provider". */
+  /** Submit button text, e.g. "Add worker". */
   submitLabel: string;
   /** Explains who can be added; shown under the field until there is an error. */
   helperText: string;

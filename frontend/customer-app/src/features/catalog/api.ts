@@ -3,9 +3,9 @@ import { apiClient } from '@api/client';
 /**
  * Service Catalog Service API bindings (Requirement 3).
  *
- * Endpoints (see design.md — Service Catalog Service, routed via API Gateway):
- * - GET /catalog/categories                    — active categories
- * - GET /catalog/categories/{categoryId}/subcategories — active subcategories
+ * Endpoint (Service Catalog Service, routed via API Gateway):
+ * - GET /catalog/categories — active categories with their active
+ *   subcategories nested
  *
  * The Catalog Service only returns active categories/subcategories to
  * customer-facing APIs (Requirement 3.5) and its responses reflect DB state as
@@ -18,9 +18,11 @@ export interface ServiceCategory {
   id: string;
   name: string;
   description?: string;
-  /** Icon key/name (server-defined) used to pick a display icon. */
-  icon?: string;
-  /** Icon reference as the Catalog Service names it; may be null. */
+  /**
+   * Icon reference as the Catalog Service names it: an icon key ("plumbing")
+   * or a URL whose file name is one. Usually null, in which case the art is
+   * picked from the category name; read it through {@link categoryIconKey}.
+   */
   iconUrl?: string | null;
   displayOrder: number;
   /** Active subcategories, returned nested by GET /catalog/categories. */
@@ -48,24 +50,16 @@ export async function fetchCategories(): Promise<ServiceCategory[]> {
   return [...data].sort((a, b) => a.displayOrder - b.displayOrder);
 }
 
-/** GET /catalog/categories/{categoryId} — a single active category. */
-export async function fetchCategory(categoryId: string): Promise<ServiceCategory> {
-  const { data } = await apiClient.get<ServiceCategory>(`/catalog/categories/${categoryId}`);
-  return data;
-}
-
-/** GET /catalog/categories/{categoryId}/subcategories — list active subcategories. */
-export async function fetchSubcategories(categoryId: string): Promise<ServiceSubcategory[]> {
-  const { data } = await apiClient.get<ServiceSubcategory[]>(
-    `/catalog/categories/${categoryId}/subcategories`,
-  );
-  return data;
-}
-
-/** GET /catalog/subcategories/{subcategoryId} — a single active subcategory. */
-export async function fetchSubcategory(subcategoryId: string): Promise<ServiceSubcategory> {
-  const { data } = await apiClient.get<ServiceSubcategory>(
-    `/catalog/subcategories/${subcategoryId}`,
-  );
-  return data;
+/**
+ * The icon key carried by a category's `iconUrl`: the value itself, or the file
+ * name (without extension) of a URL/path. `undefined` when the catalog has
+ * none, so callers fall back to matching on the category name.
+ */
+export function categoryIconKey(
+  category: Pick<ServiceCategory, 'iconUrl'> | null | undefined,
+): string | undefined {
+  const raw = category?.iconUrl?.trim();
+  if (!raw) return undefined;
+  const fileName = raw.split(/[?#]/)[0]?.split('/').pop() ?? '';
+  return fileName.replace(/\.[a-z0-9]+$/i, '') || undefined;
 }

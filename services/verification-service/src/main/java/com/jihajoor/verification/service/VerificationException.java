@@ -33,6 +33,28 @@ public class VerificationException extends RuntimeException {
         return new VerificationException(HttpStatus.NOT_FOUND, "VERIFICATION_NOT_FOUND", message);
     }
 
+    /** 404: no document {@code documentId} on this provider's record. */
+    public static VerificationException documentNotFound(java.util.UUID documentId) {
+        return new VerificationException(HttpStatus.NOT_FOUND, "DOCUMENT_NOT_FOUND",
+                "No document " + documentId + " on this provider's verification record");
+    }
+
+    /**
+     * 404: the document is on record but its bytes are not stored, e.g. it was uploaded before the
+     * service kept document content.
+     */
+    public static VerificationException documentNotStored(java.util.UUID documentId) {
+        return new VerificationException(HttpStatus.NOT_FOUND, "DOCUMENT_NOT_STORED",
+                "Document " + documentId + " is on record but its file is not stored "
+                        + "(uploaded before document storage was enabled)");
+    }
+
+    /** 503: the document store cannot be written or read right now; retriable. */
+    public static VerificationException documentStorageUnavailable() {
+        return new VerificationException(HttpStatus.SERVICE_UNAVAILABLE, "DOCUMENT_STORAGE_UNAVAILABLE",
+                "Document storage is unavailable right now; try again shortly");
+    }
+
     public static VerificationException validation(String message) {
         return new VerificationException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", message);
     }

@@ -32,7 +32,7 @@ const PROMISES = [
   {
     icon: VerifiedUserRoundedIcon,
     title: 'Verified professionals',
-    body: 'Every provider is identity-checked and reviewed before taking a job.',
+    body: 'Every worker is identity-checked and reviewed before taking a job.',
   },
   {
     icon: CurrencyRupeeRoundedIcon,
@@ -151,7 +151,7 @@ export function HomeScreen() {
                 size="large"
                 sx={{ color: '#FFFFFF', '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' } }}
               >
-                Become a provider
+                Become a worker or agency
               </Button>
             </Stack>
           </Box>

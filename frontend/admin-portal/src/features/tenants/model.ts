@@ -43,6 +43,40 @@ export interface Tenant {
   applicantUserId?: string | null;
   /** Why the application was rejected; shown to the applicant (Requirement 5.4). */
   rejectionReason?: string | null;
+  /** The agency's share (0-50 %) of its workers' net earning on each job. */
+  agencySharePercent?: number | null;
+}
+
+/** An agency's invitation to a worker; the worker joins only by accepting it. */
+export interface AgencyInvitation {
+  id: string;
+  tenantId: string;
+  agencyName?: string | null;
+  providerId: string;
+  workerName?: string | null;
+  mobileNumber?: string | null;
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELLED';
+  createdAt: string;
+  agencySharePercent?: number | null;
+}
+
+/** One job's split as the agency sees it. */
+export interface AgencyEarningEntry {
+  bookingId: string;
+  bookingReference?: string | null;
+  providerId: string;
+  workerName?: string | null;
+  workerNet: number;
+  sharePercent: number;
+  amount: number;
+  creditedAt: string;
+}
+
+/** The agency's earnings: its share setting, total and latest entries. */
+export interface AgencyEarnings {
+  sharePercent: number;
+  totalEarned: number;
+  entries: AgencyEarningEntry[];
 }
 
 /**
@@ -128,12 +162,17 @@ const TENANT_ERROR_MESSAGES: Record<string, string> = {
     'No Ji-Hajoor account uses that mobile number. The person must sign up before they can be made an administrator.',
   ADMIN_OF_OTHER_TENANT: 'That person already administers another agency.',
   PROVIDER_NOT_FOUND:
-    'No service provider uses that mobile number. The person must sign up in the Ji-Hajoor provider app and create a profile first.',
-  PROVIDER_IN_OTHER_TENANT: 'That provider already belongs to another agency.',
+    'No worker uses that mobile number. The person must sign up in the Ji-Hajoor partner app and create a profile first.',
+  PROVIDER_IN_OTHER_TENANT: 'That worker already belongs to another agency.',
+  PROVIDER_ALREADY_ON_TEAM: 'That worker is already on your team.',
+  TOO_MANY_PENDING_INVITATIONS:
+    'You have too many unanswered invitations. Cancel some before inviting more workers.',
+  INVITATION_NOT_FOUND: 'That invitation no longer exists. Refresh the list.',
+  VALIDATION_ERROR: 'Check the value and try again.',
   BOOKING_NOT_ASSIGNABLE:
     'This request was just assigned by another partner or has moved on, so it has left the queue.',
   PROVIDER_NOT_ASSIGNABLE:
-    'That provider can no longer be assigned (their verification changed or they left the team). Choose someone else.',
+    'That worker can no longer be assigned (their verification changed or they left the team). Choose someone else.',
   APPLICATION_NOT_DECIDED:
     'This agency is still an application. Approve it from Pending applications first; approval makes the applicant its administrator.',
   APPLICATION_NOT_PENDING:

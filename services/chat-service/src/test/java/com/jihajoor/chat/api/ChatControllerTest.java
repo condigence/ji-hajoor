@@ -14,6 +14,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
+import com.jihajoor.chat.api.dto.ChannelResponse;
 import com.jihajoor.chat.api.dto.MessageResponse;
 import com.jihajoor.chat.api.dto.SendMessageRequest;
 import com.jihajoor.chat.domain.ChatChannel;
@@ -72,6 +73,7 @@ class ChatControllerTest {
         UUID booking = UUID.randomUUID();
         when(chatService.sendMessage(eq(booking), eq(user), eq("call me")))
                 .thenReturn(message(booking, user, "call me"));
+        when(chatService.channelFor(booking, user)).thenReturn(channelWithCustomer(booking, user));
 
         var response = controller.send(booking, new SendMessageRequest("call me"));
 
@@ -86,10 +88,16 @@ class ChatControllerTest {
         UUID booking = UUID.randomUUID();
         when(chatService.readMessages(booking, user))
                 .thenReturn(List.of(message(booking, user, "hi"), message(booking, user, "there")));
+        when(chatService.channelFor(booking, user)).thenReturn(channelWithCustomer(booking, user));
 
         List<MessageResponse> history = controller.history(booking);
 
         assertThat(history).extracting(MessageResponse::body).containsExactly("hi", "there");
+        assertThat(history).extracting(MessageResponse::senderRole).containsOnly("CUSTOMER");
+    }
+
+    private static ChatChannel channelWithCustomer(UUID booking, UUID customer) {
+        return ChatChannel.activate(booking, customer, UUID.randomUUID(), Instant.now(), Instant.now());
     }
 
     @Test
@@ -188,5 +196,53 @@ class ChatControllerTest {
         List<MessageResponse> history = real.history(bookingId);
 
         assertThat(history).extracting(MessageResponse::body).containsExactly("hello");
+        assertThat(history).extracting(MessageResponse::senderRole).containsExactly("CUSTOMER");
+    }
+
+    // ----- Channel lookup (Requirement 18.1) ----------------------------------------------------
+
+    @Test
+    void channel_forAParticipant_reportsItsStatus() {
+        UUID bookingId = UUID.randomUUID();
+        InMemoryChatStore store = storeWithActiveChannel(bookingId);
+        ChatChannelController channels = new ChatChannelController(new ChatService(store,
+                new RecordingDeliveryPort(), FixedPresenceRegistry.allOffline(), new RecordingPushPort(),
+                Duration.ofDays(90), Clock.systemUTC()));
+        authenticateAs(providerId.toString());
+
+        ChannelResponse response = channels.channel(bookingId);
+
+        assertThat(response.channelId()).isEqualTo(bookingId);
+        assertThat(response.bookingId()).isEqualTo(bookingId);
+        assertThat(response.active()).isTrue();
+    }
+
+    @Test
+    void channel_forANonParticipant_isForbidden() {
+        UUID bookingId = UUID.randomUUID();
+        ChatChannelController channels = new ChatChannelController(new ChatService(
+                storeWithActiveChannel(bookingId), new RecordingDeliveryPort(),
+                FixedPresenceRegistry.allOffline(), new RecordingPushPort(), Duration.ofDays(90),
+                Clock.systemUTC()));
+        authenticateAs(UUID.randomUUID().toString());
+
+        assertThatThrownBy(() -> channels.channel(bookingId))
+                .isInstanceOf(ChatException.class)
+                .satisfies(e -> assertThat(((ChatException) e).getStatus())
+                        .isEqualTo(HttpStatus.FORBIDDEN));
+    }
+
+    @Test
+    void channel_beforeTheProviderAccepts_isNotFound() {
+        ChatChannelController channels = new ChatChannelController(new ChatService(
+                new InMemoryChatStore(), new RecordingDeliveryPort(),
+                FixedPresenceRegistry.allOffline(), new RecordingPushPort(), Duration.ofDays(90),
+                Clock.systemUTC()));
+        authenticateAs(customerId.toString());
+
+        assertThatThrownBy(() -> channels.channel(UUID.randomUUID()))
+                .isInstanceOf(ChatException.class)
+                .satisfies(e -> assertThat(((ChatException) e).getStatus())
+                        .isEqualTo(HttpStatus.NOT_FOUND));
     }
 }

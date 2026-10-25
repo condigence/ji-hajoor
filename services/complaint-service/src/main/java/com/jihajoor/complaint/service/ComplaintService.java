@@ -214,9 +214,7 @@ public class ComplaintService {
     @Transactional
     public int enforceSlaBreaches() {
         Instant now = clock.instant();
-        List<Complaint> breached = complaintRepository
-                .findByStatusNotInAndEscalatedFalseAndSlaDeadlineLessThanEqual(
-                        List.of(ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED), now);
+        List<Complaint> breached = complaintRepository.findSlaBreachCandidates(now);
 
         int escalated = 0;
         for (Complaint complaint : breached) {
@@ -273,14 +271,25 @@ public class ComplaintService {
      * </ol>
      *
      * <p><strong>Idempotency.</strong> A retry carrying the same client {@code idempotencyKey} and
-     * amount returns the recorded refund without calling the Payment Service again (409
-     * {@code REFUND_IN_PROGRESS} while it is still PENDING); the same key with a different amount is
-     * 409 {@code IDEMPOTENCY_KEY_REUSED}. A retry without a key is refused like any second approval,
-     * so it can never refund twice either.
+     * amount returns a SUCCEEDED or FAILED refund without calling the Payment Service again; the
+     * same key with a different amount is 409 {@code IDEMPOTENCY_KEY_REUSED}. A retry without a key
+     * is refused like any second approval, so it can never refund twice either.
      *
-     * <p>If the Payment Service call throws, its outcome is unknown: the refund stays PENDING (which
-     * keeps blocking further refunds), Finance_Admin is alerted to reconcile it using the idempotency
-     * key, and the caller gets 502 {@code REFUND_OUTCOME_UNKNOWN}.
+     * <p><strong>Unknown outcome.</strong> If the Payment Service call throws (no answer, a timeout,
+     * a 5xx, the gateway not confirming), money may or may not have moved, so the refund is recorded
+     * neither SUCCEEDED nor FAILED: it stays PENDING (which keeps blocking any other refund of the
+     * complaint) with the cause noted, Finance_Admin is alerted with the idempotency key, and the
+     * caller gets 502 {@code REFUND_OUTCOME_UNKNOWN}. A same-key retry then <em>re-sends</em> the
+     * refund under the same {@link ComplaintRefund#paymentIdempotencyKey()}, which the Payment
+     * Service de-duplicates (it replays a refund that executed, and re-sends a PENDING one under its
+     * original gateway refund id), and records whatever it answers. This is how the Support_Agent
+     * finishes a refund once the Payment Service or the gateway is back, rather than leaving the
+     * complaint stuck. While an attempt is still in flight (no outcome recorded, and younger than
+     * {@code jihajoor.complaint.refund-attempt-lease}) a same-key retry is 409
+     * {@code REFUND_IN_PROGRESS}, so two attempts of one refund never overlap at the gateway; an
+     * attempt older than the lease is presumed lost (for example the instance died mid-call) and may
+     * be re-sent. A refund approved without a client key (or whose key was lost) is re-sent the same
+     * way through {@link #resendRefund}.
      *
      * @return the recorded refund, SUCCEEDED or FAILED (or the replayed earlier refund)
      */
@@ -292,7 +301,8 @@ public class ComplaintService {
         // Phase 1: validate and reserve. Any refusal here happens before money moves.
         RefundReservation reservation;
         try {
-            reservation = transactions.execute(status -> reserveRefund(command, reason, clientKey));
+            reservation = transactions.execute(status -> reserveRefund(command, reason, clientKey,
+                    clock.instant()));
         } catch (DataIntegrityViolationException e) {
             // The unique complaint_id constraint is the last line of defence behind the row lock.
             throw ComplaintException.refundAlreadyRequested(
@@ -305,6 +315,93 @@ public class ComplaintService {
             return refund;
         }
 
+        return submitRefund(refund);
+    }
+
+    /**
+     * Re-sends a PENDING refund whose outcome is unknown (Requirement 16.5, 16.6), whether or not
+     * it was approved with a client {@code idempotencyKey}: the explicit way out of the
+     * unknown-outcome state, used by the Admin Portal's "Re-send" action.
+     *
+     * <p>It re-sends the <em>recorded</em> refund (same amount, same booking) under the same
+     * {@link ComplaintRefund#paymentIdempotencyKey()}, derived from the refund id, which the
+     * Payment Service de-duplicates: it replays a refund that executed and re-sends a PENDING one
+     * under its original gateway refund id, so this can never refund twice. The re-send spacing of
+     * the same-key retry applies: a refund whose latest attempt is still in flight (no outcome
+     * recorded and younger than {@code jihajoor.complaint.refund-attempt-lease}) is 409
+     * {@code REFUND_IN_PROGRESS}, so two attempts never overlap at the gateway. The complaint's own
+     * status does not matter, as for a same-key retry: the refund was approved while it was
+     * refundable, and money may already have moved.
+     *
+     * <p>A refund that is already SUCCEEDED or FAILED is returned as recorded, without calling the
+     * Payment Service, so a repeated click is harmless. No refund on record is 404
+     * {@code REFUND_NOT_FOUND}. The outcome is recorded exactly as on approval, including the 502
+     * {@code REFUND_OUTCOME_UNKNOWN} and Finance_Admin alert if the outcome is unknown again.
+     *
+     * @param complaintId the complaint whose refund is re-sent
+     * @param requestedBy the staff member re-sending it (JWT subject), for the audit log
+     * @return the refund with its new outcome, or the settled refund unchanged
+     */
+    public ComplaintRefund resendRefund(UUID complaintId, UUID requestedBy) {
+        if (complaintId == null) {
+            throw ComplaintException.validation("complaintId is required");
+        }
+        RefundReservation reservation = transactions.execute(status ->
+                reserveResend(complaintId, requestedBy, clock.instant()));
+        ComplaintRefund refund = reservation.refund();
+        if (reservation.replayed()) {
+            log.info("Re-send of refund {} of complaint {} requested by {}: already {}, not re-sent",
+                    refund.getId(), complaintId, requestedBy, refund.getStatus());
+            return refund;
+        }
+        return submitRefund(refund);
+    }
+
+    /** Phase 1 of {@link #resendRefund}: under the complaint's row lock, like a same-key retry. */
+    private RefundReservation reserveResend(UUID complaintId, UUID requestedBy, Instant now) {
+        complaintRepository.findByIdForUpdate(complaintId)
+                .orElseThrow(() -> ComplaintException.notFound("complaint not found: " + complaintId));
+        ComplaintRefund refund = refundRepository.findByComplaintId(complaintId)
+                .orElseThrow(() -> ComplaintException.refundNotFound(
+                        "complaint " + complaintId + " has no refund to re-send"));
+        if (refund.getStatus() != ComplaintRefundStatus.PENDING) {
+            return new RefundReservation(refund, true);
+        }
+        if (!refund.isResendable(now, properties.getRefundAttemptLease())) {
+            throw ComplaintException.refundInProgress("refund " + refund.getId()
+                    + " is still awaiting its Payment Service outcome; it can be re-sent once that "
+                    + "attempt ends or its " + properties.getRefundAttemptLease() + " lease expires");
+        }
+        refund.beginResend(now);
+        ComplaintRefund resending = refundRepository.save(refund);
+        log.warn("Re-sending PENDING refund {} of complaint {} under key {} (requested by {})",
+                resending.getId(), complaintId, resending.paymentIdempotencyKey(), requestedBy);
+        return new RefundReservation(resending, false);
+    }
+
+    /**
+     * The complaint's refund as recorded (Requirement 16.5, 16.6), for the Admin Portal to show
+     * and poll. 404 {@code COMPLAINT_NOT_FOUND} for an unknown complaint, 404
+     * {@code REFUND_NOT_FOUND} when no refund was ever approved on it.
+     */
+    @Transactional(readOnly = true)
+    public ComplaintRefund getRefund(UUID complaintId) {
+        requireComplaint(complaintId);
+        return refundRepository.findByComplaintId(complaintId)
+                .orElseThrow(() -> ComplaintException.refundNotFound(
+                        "complaint " + complaintId + " has no refund"));
+    }
+
+    /** Whether {@link #resendRefund} would re-send {@code refund} right now. */
+    public boolean isRefundResendable(ComplaintRefund refund) {
+        return refund.isResendable(clock.instant(), properties.getRefundAttemptLease());
+    }
+
+    /**
+     * Phases 2 and 3 of a refund attempt, shared by approval and re-send: calls the Payment
+     * Service with no transaction open, under the refund's stable key, and records the outcome.
+     */
+    private ComplaintRefund submitRefund(ComplaintRefund refund) {
         // Phase 2: call the Payment Service with no transaction open.
         String paymentKey = refund.paymentIdempotencyKey();
         RefundResult result;
@@ -312,14 +409,22 @@ public class ComplaintService {
             result = refundPort.requestRefund(refund.getBookingId(), refund.getComplaintId(),
                     refund.getAmount(), paymentKey);
         } catch (RuntimeException e) {
-            log.error("Refund call for complaint {} (refund {}) threw; outcome unknown: {}",
-                    refund.getComplaintId(), refund.getId(), e.getMessage());
+            log.error("Refund call for complaint {} (refund {}) threw; outcome unknown, it stays "
+                    + "PENDING: {}", refund.getComplaintId(), refund.getId(), e.getMessage());
+            recordUnknownOutcome(refund, e);
             financeAlertPort.refundRequiresManualProcessing(refund.getComplaintId(),
                     refund.getBookingId(), refund.getAmount(),
-                    "refund call to the Payment Service failed with an unknown outcome; reconcile "
-                            + "using idempotency key " + paymentKey + ": " + e.getMessage());
+                    "refund call to the Payment Service ended with an unknown outcome; it stays "
+                            + "PENDING until re-sent (same key) or reconciled using idempotency "
+                            + "key " + paymentKey + ": " + e.getMessage());
+            String resendPath = "POST /complaints/" + refund.getComplaintId() + "/refund/resend";
             throw ComplaintException.refundOutcomeUnknown("refund " + refund.getId()
-                    + " was submitted but its outcome is unknown; Finance_Admin has been alerted");
+                    + " was submitted but its outcome is unknown; Finance_Admin has been alerted. "
+                    + (refund.getClientIdempotencyKey() != null
+                            ? "Retry with the same idempotencyKey, or " + resendPath
+                                    + ", to re-send it safely"
+                            : "It was approved without an idempotencyKey; re-send it safely with "
+                                    + resendPath));
         }
         if (result == null) {
             result = RefundResult.rejected("the Payment Service returned no result");
@@ -333,7 +438,7 @@ public class ComplaintService {
 
     /** Phase 1 of {@link #approveRefund}: runs in a transaction holding the complaint's row lock. */
     private RefundReservation reserveRefund(ApproveRefundCommand command, String reason,
-                                            String clientKey) {
+                                            String clientKey, Instant now) {
         Complaint complaint = complaintRepository.findByIdForUpdate(command.complaintId())
                 .orElseThrow(() -> ComplaintException.notFound(
                         "complaint not found: " + command.complaintId()));
@@ -342,7 +447,7 @@ public class ComplaintService {
         // the state precondition so a retry still replays after the complaint has moved on.
         Optional<ComplaintRefund> prior = refundRepository.findByComplaintId(complaint.getId());
         if (prior.isPresent()) {
-            return replayRefund(prior.get(), command.amount(), clientKey);
+            return replayRefund(prior.get(), command.amount(), clientKey, now);
         }
 
         if (!REFUNDABLE_STATES.contains(complaint.getStatus())) {
@@ -353,23 +458,42 @@ public class ComplaintService {
 
         ComplaintRefund refund = refundRepository.save(ComplaintRefund.reserve(complaint.getId(),
                 complaint.getBookingId(), command.amount(), reason, command.approvedBy(), clientKey,
-                clock.instant()));
+                now));
         return new RefundReservation(refund, false);
     }
 
-    private RefundReservation replayRefund(ComplaintRefund prior, BigDecimal amount, String clientKey) {
+    /**
+     * A second approval of a complaint that already has a refund: replayed, re-sent, or refused.
+     * Runs under the complaint's row lock, so two retries of one PENDING refund cannot both start
+     * an attempt: the first moves it back in flight, the second then sees it in flight.
+     */
+    private RefundReservation replayRefund(ComplaintRefund prior, BigDecimal amount, String clientKey,
+                                           Instant now) {
         if (clientKey == null || !clientKey.equals(prior.getClientIdempotencyKey())) {
             throw ComplaintException.refundAlreadyRequested("complaint " + prior.getComplaintId()
                     + " already has a " + prior.getStatus() + " refund (" + prior.getId()
-                    + "); a complaint is refunded at most once");
+                    + "); a complaint is refunded at most once"
+                    + (prior.getStatus() == ComplaintRefundStatus.PENDING
+                            ? "; re-send it with POST /complaints/" + prior.getComplaintId()
+                                    + "/refund/resend"
+                            : ""));
         }
         if (prior.getAmount().compareTo(amount) != 0) {
             throw ComplaintException.idempotencyKeyReused(
                     "refund idempotency key was already used for amount " + prior.getAmount());
         }
         if (prior.getStatus() == ComplaintRefundStatus.PENDING) {
-            throw ComplaintException.refundInProgress(
-                    "refund " + prior.getId() + " is still awaiting its Payment Service outcome");
+            if (!prior.isResendable(now, properties.getRefundAttemptLease())) {
+                throw ComplaintException.refundInProgress("refund " + prior.getId()
+                        + " is still awaiting its Payment Service outcome");
+            }
+            // Same refund, same Payment Service key: the Payment Service replays it if it executed
+            // and re-sends it under its original gateway refund id if not, so this cannot refund twice.
+            prior.beginResend(now);
+            ComplaintRefund resending = refundRepository.save(prior);
+            log.warn("Re-sending PENDING refund {} of complaint {} under key {}", resending.getId(),
+                    resending.getComplaintId(), resending.paymentIdempotencyKey());
+            return new RefundReservation(resending, false);
         }
         return new RefundReservation(prior, true);
     }
@@ -379,6 +503,11 @@ public class ComplaintService {
         try {
             ComplaintRefund refund = transactions.execute(status -> {
                 ComplaintRefund fresh = requireRefund(reserved.getId());
+                if (fresh.getStatus() == ComplaintRefundStatus.SUCCEEDED) {
+                    // An overlapping attempt of this same refund (one presumed lost that answered
+                    // after all) recorded it first. Same key, so the same Payment Service refund.
+                    return fresh;
+                }
                 fresh.markSucceeded(result.transactionRef(), clock.instant());
                 return refundRepository.save(fresh);
             });
@@ -411,6 +540,10 @@ public class ComplaintService {
             failed = transactions.execute(status -> {
                 Instant now = clock.instant();
                 ComplaintRefund fresh = requireRefund(reserved.getId());
+                if (fresh.getStatus() != ComplaintRefundStatus.PENDING) {
+                    // An overlapping attempt of this same refund already recorded its outcome.
+                    return new FailedRefund(fresh, null, false);
+                }
                 fresh.markFailed(reason, now);
                 refundRepository.save(fresh);
 
@@ -422,7 +555,7 @@ public class ComplaintService {
                     complaintRepository.save(complaint);
                     eventPublisher.publishStatusChanged(complaint, previous, now);
                 }
-                return new FailedRefund(fresh, complaint.getCustomerId());
+                return new FailedRefund(fresh, complaint.getCustomerId(), true);
             });
         } catch (RuntimeException e) {
             // No money moved, but the refund stays PENDING; Finance_Admin still owns it (16.6).
@@ -434,12 +567,38 @@ public class ComplaintService {
             throw e;
         }
 
+        if (!failed.recorded()) {
+            log.warn("Refund {} of complaint {} was rejected, but its outcome ({}) had already been "
+                    + "recorded; keeping it", reserved.getId(), reserved.getComplaintId(),
+                    failed.refund().getStatus());
+            return failed.refund();
+        }
         notificationPort.notifyRefundFailed(failed.customerId(), reserved.getComplaintId());
         financeAlertPort.refundRequiresManualProcessing(reserved.getComplaintId(),
                 reserved.getBookingId(), reserved.getAmount(), reason);
         log.warn("Refund {} rejected for complaint {}; recorded FAILED and alerted Finance_Admin",
                 reserved.getId(), reserved.getComplaintId());
         return failed.refund();
+    }
+
+    /**
+     * Notes on the PENDING refund that its latest attempt ended without an outcome, so a same-key
+     * retry may re-send it at once. Best effort: if it cannot be written, the attempt still becomes
+     * re-sendable when its lease expires.
+     */
+    private void recordUnknownOutcome(ComplaintRefund refund, RuntimeException cause) {
+        try {
+            transactions.executeWithoutResult(status -> {
+                ComplaintRefund fresh = requireRefund(refund.getId());
+                if (fresh.getStatus() == ComplaintRefundStatus.PENDING) {
+                    fresh.recordUnknownOutcome("Payment Service outcome unknown: " + cause.getMessage());
+                    refundRepository.save(fresh);
+                }
+            });
+        } catch (RuntimeException e) {
+            log.error("Could not record the unknown outcome of refund {}: {}; it can be re-sent once "
+                    + "its attempt lease expires", refund.getId(), e.getMessage());
+        }
     }
 
     private ComplaintRefund requireRefund(UUID refundId) {
@@ -483,8 +642,11 @@ public class ComplaintService {
     private record RefundReservation(ComplaintRefund refund, boolean replayed) {
     }
 
-    /** Phase-3 outcome of a rejected refund, carrying what the post-commit notifications need. */
-    private record FailedRefund(ComplaintRefund refund, UUID customerId) {
+    /**
+     * Phase-3 outcome of a rejected refund, carrying what the post-commit notifications need;
+     * {@code recorded} is false when another attempt had already recorded the outcome.
+     */
+    private record FailedRefund(ComplaintRefund refund, UUID customerId, boolean recorded) {
     }
 
     // ---- Dispute hold lifecycle (Requirement 16.7, 16.8) ---------------------------------------
@@ -634,10 +796,15 @@ public class ComplaintService {
 
     // ---- Stats aggregation (Requirement 16.9) --------------------------------------------------
 
-    /** Aggregates complaint statistics for Admin reports (Requirement 16.9). */
+    /**
+     * Aggregates complaint statistics for Admin reports (Requirement 16.9). Computed by two
+     * aggregate queries (a {@code GROUP BY} category count and the resolution totals), so the cost
+     * does not grow with the number of complaints loaded into memory.
+     */
     @Transactional(readOnly = true)
     public ComplaintStats aggregateStats() {
-        return statsCalculator.aggregate(complaintRepository.findAll());
+        return statsCalculator.fromTotals(complaintRepository.countByCategory(),
+                complaintRepository.resolutionTotals());
     }
 
     // ---- Helpers -------------------------------------------------------------------------------

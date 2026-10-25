@@ -12,7 +12,8 @@ import com.jihajoor.provider.domain.ProviderProfile;
 /**
  * Read model for a provider profile. Never exposes the encrypted bank account ciphertext;
  * only whether a verified account is on file. {@code baseLatitude}/{@code baseLongitude} are
- * {@code null} until the provider sets a base service location.
+ * {@code null} until the provider sets a base service location. {@code aggregateRating} is 0 and
+ * {@code ratingCount} is 0 until a customer review counts.
  */
 public record ProfileResponse(
         UUID id,
@@ -22,6 +23,7 @@ public record ProfileResponse(
         Double baseLatitude,
         Double baseLongitude,
         BigDecimal aggregateRating,
+        int ratingCount,
         BigDecimal walletBalance,
         boolean emergencyAvailable,
         boolean underReview,
@@ -51,6 +53,7 @@ public record ProfileResponse(
                 p.getBaseLatitude(),
                 p.getBaseLongitude(),
                 p.getAggregateRating(),
+                p.getRatingCount(),
                 p.getWalletBalance(),
                 p.isEmergencyAvailable(),
                 p.isUnderReview(),

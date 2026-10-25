@@ -25,6 +25,27 @@
         Built on the shared security, observability, and outbox libraries (Tasks 4-6).
     </description>
 
+    <properties>
+        <!-- AWS SDK for Java v2, for the S3 document storage adapter. Not managed by the Spring
+             Boot BOM; the SDK's own BOM is imported below, exactly as booking-service does, so
+             every software.amazon.awssdk artifact resolves to one version. Keep this the same
+             version as booking-service's (both can end up in one deployable's classpath); with two
+             users it belongs in the root pom. -->
+        <aws-sdk.version>2.55.4</aws-sdk.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws-sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <!-- ===== Ji-Hajoor shared libraries (Tasks 4-6) ===== -->
         <dependency>
@@ -79,6 +100,21 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- ===== Object storage: verification documents in S3 (Requirement 5.3) =====
+             Only the synchronous S3Client is used, over the SDK's default Apache HTTP client. The
+             Netty client exists only for the async client, so it is excluded rather than shipped
+             in every deployable that hosts this service (as in booking-service). -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- ===== Runtime persistence driver ===== -->

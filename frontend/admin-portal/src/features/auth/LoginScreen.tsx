@@ -64,7 +64,7 @@ const HIGHLIGHTS = [
   {
     icon: VerifiedUserRoundedIcon,
     title: 'Verified supply',
-    body: 'Review provider documents and background checks before they go live.',
+    body: 'Review worker documents and background checks before they go live.',
   },
   {
     icon: BoltRoundedIcon,
@@ -294,8 +294,8 @@ export function LoginScreen() {
               variant="body1"
               sx={{ mt: 2, maxWidth: 420, color: 'rgba(255,255,255,0.76)' }}
             >
-              Ji-Hajoor Operations brings bookings, providers, payments and support into a single
-              workspace.
+              Ji-Hajoor Operations brings bookings, workers, agencies, payments and support into a
+              single workspace.
             </Typography>
           </Box>
 

@@ -166,7 +166,9 @@ spec:
 
         - alert: PodCrashLooping
           expr: |
-            increase(kube_pod_container_status_restarts_total{namespace=~".*(auth-customer-provider|booking-dispatch-location|payment-invoice-rating|notification-chat-complaint|admin-reporting-promotion|catalog-pricing-verification).*"}[15m]) > 3
+            # The chart names each container after its deployable; matching by container keeps the
+            # rule independent of the namespace the pipeline deploys into (K8S_NAMESPACE).
+            increase(kube_pod_container_status_restarts_total{container=~"api-gateway|identity-app|jobs-app|money-app|engagement-app"}[15m]) > 3
           for: 5m
           labels:
             severity: critical

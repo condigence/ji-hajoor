@@ -35,6 +35,7 @@ import { SystemConfigScreen } from '@features/system/SystemConfigScreen';
 import { TenantManagementScreen } from '@features/tenants/TenantManagementScreen';
 import { RequestsScreen } from '@features/tenant-portal/RequestsScreen';
 import { TeamScreen } from '@features/tenant-portal/TeamScreen';
+import { EarningsScreen } from '@features/tenant-portal/EarningsScreen';
 import { JobsScreen } from '@features/tenant-portal/JobsScreen';
 
 /**
@@ -246,6 +247,14 @@ export const router = createBrowserRouter([
     element: (
       <RequireAuth roles={TENANT_ROLES}>
         <TeamScreen />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/tenant/earnings',
+    element: (
+      <RequireAuth roles={TENANT_ROLES}>
+        <EarningsScreen />
       </RequireAuth>
     ),
   },

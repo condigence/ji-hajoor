@@ -104,6 +104,9 @@ module "iam" {
   kms_key_s3_arn  = module.kms.key_s3_arn
   kms_key_pii_arn = module.kms.key_pii_arn
 
+  # The deployables' service accounts live in this one namespace (see k8s_namespaces).
+  namespace = var.k8s_namespace
+
   s3_bucket_arns = [
     module.s3.bucket_documents_arn,
     module.s3.bucket_photos_arn,
@@ -243,6 +246,8 @@ module "secrets_manager" {
 # ─────────────────────────────────────────────
 module "k8s_namespaces" {
   source = "./modules/k8s_namespaces"
+
+  namespace = var.k8s_namespace
 
   # Explicit dependency on EKS cluster being ready
   depends_on = [module.eks]

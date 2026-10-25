@@ -46,7 +46,7 @@ export function DispatchRuleScreen() {
   return (
     <ModuleScreen
       title="Dispatch Rules"
-      description="Provider matching weights and search radius configuration."
+      description="Worker matching weights and search radius configuration."
     >
       <QueryStateView
         isLoading={configQuery.isLoading}
@@ -246,7 +246,7 @@ function DispatchForm({ initial }: { initial: DispatchConfig }) {
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <TextField
-                label="Providers per wave"
+                label="Workers per wave"
                 type="number"
                 fullWidth
                 value={offerBatchSize}

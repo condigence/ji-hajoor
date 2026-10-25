@@ -31,7 +31,9 @@ import com.jihajoor.verification.domain.VerificationDocument;
 import com.jihajoor.verification.domain.VerificationQueueRow;
 import com.jihajoor.verification.domain.VerificationStatus;
 import com.jihajoor.verification.notification.ProviderNotificationPort;
-import com.jihajoor.verification.storage.DocumentStoragePort;
+import com.jihajoor.verification.domain.DocumentStorageKind;
+import com.jihajoor.verification.storage.DocumentStorage;
+import com.jihajoor.verification.storage.StoredDocument;
 import com.jihajoor.verification.support.InMemoryVerificationRepository;
 
 /**
@@ -48,7 +50,7 @@ class VerificationServiceTest {
     private InMemoryVerificationRepository repository;
 
     @Mock
-    private DocumentStoragePort documentStorage;
+    private DocumentStorage documentStorage;
     @Mock
     private BackgroundCheckPort backgroundCheck;
     @Mock
@@ -77,7 +79,7 @@ class VerificationServiceTest {
     /** Stubs the storage port to return a synthetic ref for any upload. */
     private void stubStorage() {
         lenient().when(documentStorage.store(any(), any(), any(), any()))
-                .thenAnswer(inv -> "s3://bucket/" + inv.getArgument(1));
+                .thenAnswer(inv -> new StoredDocument(DocumentStorageKind.LOCAL, "providers/" + inv.getArgument(1)));
     }
 
     /** Drives a provider all the way to APPROVED and returns its id. */

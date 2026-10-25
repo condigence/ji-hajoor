@@ -17,6 +17,7 @@ import { JobDetailsScreen } from '@features/jobs/JobDetailsScreen';
 import { ActiveJobScreen } from '@features/jobs/ActiveJobScreen';
 import { JobCompletionScreen } from '@features/jobs/JobCompletionScreen';
 import { EarningsScreen } from '@features/earnings/EarningsScreen';
+import { ChatScreen } from '@features/chat/ChatScreen';
 
 /**
  * Provider App routes. Screen set follows Requirement 28.8:
@@ -90,6 +91,14 @@ export const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <ActiveJobScreen />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/jobs/:bookingId/chat',
+    element: (
+      <RequireAuth>
+        <ChatScreen />
       </RequireAuth>
     ),
   },

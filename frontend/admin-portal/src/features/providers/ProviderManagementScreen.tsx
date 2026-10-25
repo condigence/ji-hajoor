@@ -27,7 +27,7 @@ export function ProviderManagementScreen() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const columns: Column<AdminProvider>[] = [
-    { key: 'name', header: 'Provider', render: (row) => row.displayName },
+    { key: 'name', header: 'Worker', render: (row) => row.displayName },
     { key: 'mobile', header: 'Mobile', render: (row) => row.mobileNumber ?? '—' },
     { key: 'skill', header: 'Primary skill', render: (row) => row.primarySkill ?? '—' },
     {
@@ -112,10 +112,14 @@ export function ProviderManagementScreen() {
       render: (row) => {
         const { bankAccount } = row;
         const canVerifyBank = bankAccount != null && !bankAccount.verified;
-        // Unknown status (verification service unreachable): offer no toggle
-        // rather than guess which way it should go.
+        // Verification allows only APPROVED -> SUSPENDED and back, so offer the
+        // toggle only then: a pending or rejected provider would get a 409. An
+        // unknown status (verification service unreachable) offers none either.
         const suspend = row.status === 'ACTIVE';
-        if (!row.status && !canVerifyBank) return null;
+        const canToggle =
+          (suspend && row.verificationStatus === 'APPROVED') ||
+          (row.status === 'SUSPENDED' && row.verificationStatus === 'SUSPENDED');
+        if (!canToggle && !canVerifyBank) return null;
         return (
           <Stack
             spacing={1}
@@ -123,7 +127,7 @@ export function ProviderManagementScreen() {
               alignItems: 'flex-end',
             }}
           >
-            {row.status ? (
+            {canToggle ? (
               <Button
                 size="small"
                 color={suspend ? 'error' : 'success'}
@@ -156,10 +160,7 @@ export function ProviderManagementScreen() {
   ];
 
   return (
-    <ModuleScreen
-      title="Provider Management"
-      description="Search, review, and manage service provider accounts."
-    >
+    <ModuleScreen title="Workers" description="Search, review, and manage worker accounts.">
       <Stack
         component="form"
         direction="row"
@@ -202,7 +203,7 @@ export function ProviderManagementScreen() {
         error={providersQuery.error}
         onRetry={() => void providersQuery.refetch()}
         isEmpty={(providersQuery.data?.length ?? 0) === 0}
-        emptyMessage="No providers match your search."
+        emptyMessage="No workers match your search."
       >
         <DataTable columns={columns} rows={providersQuery.data ?? []} rowKey={(row) => row.id} />
       </QueryStateView>

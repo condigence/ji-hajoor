@@ -67,7 +67,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: <DashboardRoundedIcon />, roles: ADMIN_ROLES },
   { label: 'User Management', path: '/users', icon: <PeopleRoundedIcon />, roles: ADMIN_ROLES },
   {
-    label: 'Provider Management',
+    label: 'Workers',
     path: '/providers',
     icon: <EngineeringRoundedIcon />,
     roles: ADMIN_ROLES,
@@ -81,7 +81,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     // Agencies that take over bookings automatic matching could not place
     // (Requirement MT-12). Platform administrators only.
-    label: 'Tenants',
+    label: 'Agencies',
     path: '/tenants',
     icon: <ApartmentRoundedIcon />,
     roles: ADMIN_ROLES,
@@ -164,4 +164,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
   },
   { label: 'Team', path: '/tenant/team', icon: <GroupsRoundedIcon />, roles: TENANT_ROLES },
   { label: 'Jobs', path: '/tenant/jobs', icon: <WorkHistoryRoundedIcon />, roles: TENANT_ROLES },
+  {
+    label: 'Earnings',
+    path: '/tenant/earnings',
+    icon: <PaymentsRoundedIcon />,
+    roles: TENANT_ROLES,
+  },
 ] as const;

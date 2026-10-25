@@ -18,7 +18,9 @@ import com.jihajoor.rating.domain.Review;
 import com.jihajoor.rating.event.ReviewSubmittedEvent;
 import com.jihajoor.rating.event.ReviewSubmittedPublisher;
 import com.jihajoor.rating.provider.LoggingProviderRatingAdapter;
+import com.jihajoor.rating.provider.ProviderRatingSnapshot;
 import com.jihajoor.rating.service.ReviewException;
+import com.jihajoor.rating.support.RecordingAdminAlertPort;
 import com.jihajoor.shared.outbox.OutboxEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -29,15 +31,34 @@ import org.springframework.http.HttpStatus;
  */
 class RatingAdaptersTest {
 
+    /** Standing in for the Provider Service: below threshold flags and alerts Admin once (15.7, 15.8). */
     @Test
-    void loggingProviderRatingAdapter_flagsUnderReviewOnlyOncePerProvider() {
-        LoggingProviderRatingAdapter adapter = new LoggingProviderRatingAdapter();
+    void loggingProviderRatingAdapter_flagsUnderReviewAndAlertsOnlyOncePerProvider() {
+        RecordingAdminAlertPort alerts = new RecordingAdminAlertPort();
+        LoggingProviderRatingAdapter adapter = new LoggingProviderRatingAdapter(new RatingProperties(), alerts);
         UUID provider = UUID.randomUUID();
 
-        adapter.updateAggregateRating(provider, new BigDecimal("2.50"));
-        assertThat(adapter.flagUnderReview(provider)).isTrue();
-        // Idempotent: a second flag for the same provider returns false (already under review).
-        assertThat(adapter.flagUnderReview(provider)).isFalse();
+        adapter.updateAggregateRating(provider, new ProviderRatingSnapshot(new BigDecimal("2.50"), 1, 1));
+        assertThat(adapter.isUnderReview(provider)).isTrue();
+        // Already under review: a second low aggregate does not alert again.
+        adapter.updateAggregateRating(provider, new ProviderRatingSnapshot(new BigDecimal("2.00"), 2, 2));
+
+        assertThat(alerts.alerted).containsExactly(provider);
+    }
+
+    @Test
+    void loggingProviderRatingAdapter_doesNotFlagAtThresholdOrWithoutReviews() {
+        RecordingAdminAlertPort alerts = new RecordingAdminAlertPort();
+        LoggingProviderRatingAdapter adapter = new LoggingProviderRatingAdapter(new RatingProperties(), alerts);
+        UUID atThreshold = UUID.randomUUID();
+        UUID unrated = UUID.randomUUID();
+
+        adapter.updateAggregateRating(atThreshold, new ProviderRatingSnapshot(new BigDecimal("3.00"), 4, 1));
+        adapter.updateAggregateRating(unrated, new ProviderRatingSnapshot(null, 0, 1));
+
+        assertThat(adapter.isUnderReview(atThreshold)).isFalse();
+        assertThat(adapter.isUnderReview(unrated)).isFalse();
+        assertThat(alerts.alerted).isEmpty();
     }
 
     @Test

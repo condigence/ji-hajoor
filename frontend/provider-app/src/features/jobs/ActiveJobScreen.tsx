@@ -9,6 +9,7 @@ import { PartsEntryCard } from './PartsEntryCard';
 import { PauseResumeCard } from './PauseResumeCard';
 import { PaymentStatusNotice } from './PaymentStatusNotice';
 import { AssignmentDecisionCard } from './AssignmentDecisionCard';
+import { ChatButton } from '@features/chat/ChatScreen';
 import { declinedNotice, type DashboardNoticeState } from './assignmentNotice';
 import { isAwaitingProviderAnswer, isJobFinished } from './status';
 import {
@@ -169,6 +170,11 @@ function ActiveContent({ job }: { job: JobDetail }) {
           ) : null}
         </Box>
       ) : null}
+
+      <ChatButton
+        bookingId={job.bookingId}
+        onOpen={() => void navigate(`/jobs/${job.bookingId}/chat`)}
+      />
 
       {notSetOff ? (
         <TransitionButton label="I'm on my way" pendingLabel="Updating…" mutation={onTheWay} />

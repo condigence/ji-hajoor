@@ -17,11 +17,16 @@ import java.util.UUID;
 
 import com.jihajoor.invoice.api.dto.InvoiceSummary;
 import com.jihajoor.invoice.api.dto.ProviderEarningsStatement;
+import com.jihajoor.invoice.domain.Invoice;
+import com.jihajoor.invoice.service.InvoiceDocumentService;
 import com.jihajoor.invoice.service.InvoiceException;
 import com.jihajoor.invoice.service.InvoiceQueryService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -42,8 +47,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 class InvoiceControllerTest {
 
     private final InvoiceQueryService queryService = mock(InvoiceQueryService.class);
+    private final InvoiceDocumentService documentService = mock(InvoiceDocumentService.class);
     private final InvoiceController controller =
-            new InvoiceController(queryService, new CallerIdentity());
+            new InvoiceController(queryService, documentService, new CallerIdentity());
 
     @AfterEach
     void clearContext() {
@@ -162,5 +168,126 @@ class InvoiceControllerTest {
                 .isInstanceOf(InvoiceException.class)
                 .satisfies(e -> assertThat(((InvoiceException) e).getStatus())
                         .isEqualTo(HttpStatus.UNAUTHORIZED));
+    }
+
+    // ------------------------------------------------- single invoice: by booking, download
+
+    private static Invoice invoice(UUID customerId, UUID providerId) {
+        return Invoice.create("INV-2026-10-000042", UUID.randomUUID(), UUID.randomUUID(),
+                customerId, providerId, "invoices/" + customerId + "/INV-2026-10-000042.pdf",
+                new BigDecimal("590.00"), new BigDecimal("118.00"), new BigDecimal("472.00"),
+                Instant.parse("2026-10-01T09:00:00Z"));
+    }
+
+    private static InvoiceSummary summaryOf(Invoice invoice) {
+        return new InvoiceSummary(invoice.getId(), invoice.getInvoiceNumber(), invoice.getBookingId(),
+                invoice.getPaymentId(), invoice.getGeneratedAt(), "https://example/inv.pdf",
+                Instant.parse("2026-10-04T09:00:00Z"));
+    }
+
+    private static void assertNotFound(Throwable e) {
+        InvoiceException ex = (InvoiceException) e;
+        assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(ex.getErrorCode()).isEqualTo("INVOICE_NOT_FOUND");
+    }
+
+    @Test
+    void download_byInvoiceCustomer_streamsPdfAsNamedAttachment() {
+        UUID customerId = UUID.randomUUID();
+        Invoice invoice = invoice(customerId, UUID.randomUUID());
+        authenticate(customerId, "CUSTOMER");
+        byte[] pdf = "%PDF-1.4 bytes".getBytes();
+        when(queryService.findInvoice(invoice.getId())).thenReturn(invoice);
+        when(documentService.pdf(invoice)).thenReturn(pdf);
+
+        ResponseEntity<byte[]> response = controller.download(invoice.getId());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(pdf);
+        assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PDF);
+        assertThat(response.getHeaders().getContentLength()).isEqualTo(pdf.length);
+        assertThat(response.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
+                .isEqualTo("attachment; filename=\"INV-2026-10-000042.pdf\"");
+        assertThat(response.getHeaders().getCacheControl()).contains("no-store");
+    }
+
+    @Test
+    void download_byInvoiceProvider_isAllowed() {
+        UUID providerId = UUID.randomUUID();
+        Invoice invoice = invoice(UUID.randomUUID(), providerId);
+        authenticate(providerId, "SERVICE_PROVIDER");
+        when(queryService.findInvoice(invoice.getId())).thenReturn(invoice);
+        when(documentService.pdf(invoice)).thenReturn(new byte[]{1});
+
+        assertThat(controller.download(invoice.getId()).getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void download_byFinanceStaff_isAllowedForAnyInvoice() {
+        Invoice invoice = invoice(UUID.randomUUID(), UUID.randomUUID());
+        authenticate(UUID.randomUUID(), "FINANCE_ADMIN");
+        when(queryService.findInvoice(invoice.getId())).thenReturn(invoice);
+        when(documentService.pdf(invoice)).thenReturn(new byte[]{1});
+
+        assertThat(controller.download(invoice.getId()).getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void download_ofAnotherCustomersInvoice_isNotFound_andNeverReadsTheDocument() {
+        Invoice invoice = invoice(UUID.randomUUID(), UUID.randomUUID());
+        authenticate(UUID.randomUUID(), "CUSTOMER");
+        when(queryService.findInvoice(invoice.getId())).thenReturn(invoice);
+
+        assertThatThrownBy(() -> controller.download(invoice.getId()))
+                .isInstanceOf(InvoiceException.class)
+                .satisfies(InvoiceControllerTest::assertNotFound);
+        verify(documentService, never()).pdf(any());
+    }
+
+    @Test
+    void download_byUnrelatedProvider_isNotFound() {
+        Invoice invoice = invoice(UUID.randomUUID(), UUID.randomUUID());
+        authenticate(UUID.randomUUID(), "SERVICE_PROVIDER");
+        when(queryService.findInvoice(invoice.getId())).thenReturn(invoice);
+
+        assertThatThrownBy(() -> controller.download(invoice.getId()))
+                .isInstanceOf(InvoiceException.class)
+                .satisfies(InvoiceControllerTest::assertNotFound);
+        verify(documentService, never()).pdf(any());
+    }
+
+    @Test
+    void download_ofUnknownInvoice_isNotFound() {
+        UUID unknown = UUID.randomUUID();
+        authenticate(UUID.randomUUID(), "CUSTOMER");
+        when(queryService.findInvoice(unknown)).thenThrow(InvoiceException.notFound("invoice not found"));
+
+        assertThatThrownBy(() -> controller.download(unknown))
+                .isInstanceOf(InvoiceException.class)
+                .satisfies(InvoiceControllerTest::assertNotFound);
+    }
+
+    @Test
+    void bookingInvoice_byInvoiceCustomer_returnsSummary() {
+        UUID customerId = UUID.randomUUID();
+        Invoice invoice = invoice(customerId, UUID.randomUUID());
+        InvoiceSummary summary = summaryOf(invoice);
+        authenticate(customerId, "CUSTOMER");
+        when(queryService.findForBooking(invoice.getBookingId())).thenReturn(invoice);
+        when(queryService.toSummary(invoice)).thenReturn(summary);
+
+        assertThat(controller.bookingInvoice(invoice.getBookingId())).isEqualTo(summary);
+    }
+
+    @Test
+    void bookingInvoice_ofAnotherCustomersBooking_isNotFound() {
+        Invoice invoice = invoice(UUID.randomUUID(), UUID.randomUUID());
+        authenticate(UUID.randomUUID(), "CUSTOMER");
+        when(queryService.findForBooking(invoice.getBookingId())).thenReturn(invoice);
+
+        assertThatThrownBy(() -> controller.bookingInvoice(invoice.getBookingId()))
+                .isInstanceOf(InvoiceException.class)
+                .satisfies(InvoiceControllerTest::assertNotFound);
+        verify(queryService, never()).toSummary(any());
     }
 }

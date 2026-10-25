@@ -84,7 +84,7 @@ function MetricsGrid({ metrics }: { metrics: DashboardMetrics }) {
       icon: <EventNoteRoundedIcon fontSize="small" />,
     },
     {
-      label: 'Providers online',
+      label: 'Workers online',
       value: formatNumber(metrics.activeProvidersOnline),
       icon: <EngineeringRoundedIcon fontSize="small" />,
     },
@@ -100,7 +100,7 @@ function MetricsGrid({ metrics }: { metrics: DashboardMetrics }) {
       tone: 'positive' as const,
     },
     {
-      label: 'Avg. provider response (24h)',
+      label: 'Avg. worker response (24h)',
       value: formatResponseTime(metrics.avgProviderResponseTimeSeconds),
       icon: <TimerRoundedIcon fontSize="small" />,
     },

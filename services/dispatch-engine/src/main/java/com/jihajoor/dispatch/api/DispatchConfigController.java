@@ -21,8 +21,9 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>The weights obey the same accept-iff-valid rule as {@link DispatchWeightsController} and fail
  * with the same {@code INVALID_DISPATCH_WEIGHTS} code; the radius / cycle / timeout values fail
- * with {@code INVALID_DISPATCH_SETTINGS}. Either way nothing is changed. Updates apply to new
- * dispatches immediately and last until the service restarts (see {@link DispatchSettingsService}).
+ * with {@code INVALID_DISPATCH_SETTINGS}. Either way nothing is changed. Updates are saved in the
+ * database, so they survive restarts and reach every replica's new dispatches within the settings
+ * cache lifetime (see {@link DispatchSettingsService}); the GET reads the saved rules afresh.
  *
  * <p>RBAC is enforced upstream by the shared {@code RbacEnforcementFilter}: dispatchers may read the
  * rules they work under, but changing them is System Configuration and needs SUPER_ADMIN
@@ -33,21 +34,25 @@ import org.springframework.web.bind.annotation.RestController;
 public class DispatchConfigController {
 
     private final DispatchSettingsService settingsService;
+    private final CallerIdentity callerIdentity;
 
-    public DispatchConfigController(DispatchSettingsService settingsService) {
+    public DispatchConfigController(DispatchSettingsService settingsService, CallerIdentity callerIdentity) {
         this.settingsService = settingsService;
+        this.callerIdentity = callerIdentity;
     }
 
     @GetMapping
     public DispatchConfigDto current() {
-        return DispatchConfigDto.from(settingsService.current());
+        return DispatchConfigDto.from(settingsService.latest());
     }
 
     @PutMapping
     public DispatchConfigDto update(@Valid @RequestBody DispatchConfigDto request) {
         // toSettings validates the weights before the service validates the rest, and the service
-        // applies nothing until everything has passed.
-        return DispatchConfigDto.from(settingsService.update(request.toSettings(settingsService.current())));
+        // saves nothing until everything has passed. The omitted optional fields are taken from the
+        // rules saved at that moment, not from this replica's cache.
+        return DispatchConfigDto.from(
+                settingsService.update(request::toSettings, callerIdentity.auditName()));
     }
 
     @ExceptionHandler(WeightValidationException.class)

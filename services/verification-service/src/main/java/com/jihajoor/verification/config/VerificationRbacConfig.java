@@ -113,6 +113,9 @@ public class VerificationRbacConfig {
         // The Admin Portal's Verification Queue (Requirement 19.3): the review queue, a provider's
         // documents and the approve/reject decision. The catch-alls below would cover them too;
         // they are pinned explicitly so narrowing a catch-all can never open them.
+        // The bytes of a provider's identity documents, for the review dialog: the same admins who
+        // see the queue, nobody else (SUPPORT_AGENT reads the record, never the documents).
+        rules.put("GET /admin/verification/*/documents/*", ADMIN_TIER);
         rules.put("GET /admin/verification/**", ADMIN_TIER);
         rules.put("POST /admin/verification/**", ADMIN_TIER);
         rules.put("GET /admin/**", ADMIN_TIER);
@@ -124,6 +127,11 @@ public class VerificationRbacConfig {
         rules.put("DELETE /admin/**", ADMIN_TIER);
         // Provider document upload (Requirement 5.3).
         rules.put("POST /verifications/*/documents", DOCUMENT_SUBMIT_TIER);
+        // A provider reading back one of their own documents (ownership is asserted by the
+        // controller). The record-read tier minus SUPPORT_AGENT: identity documents are not
+        // something support needs to open. Without this rule the path would be unruled, i.e. open
+        // to any authenticated caller at the role level.
+        rules.put("GET /verifications/*/documents/*", DOCUMENT_SUBMIT_TIER);
         // Dispatch eligibility gate (Requirement 5.10) — must precede the catch-all GET rule below,
         // otherwise DISPATCHER would be shadowed out of it.
         rules.put("GET /verifications/*/job-assignment-eligibility", ELIGIBILITY_READ_TIER);

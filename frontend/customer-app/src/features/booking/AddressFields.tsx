@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { UseFormRegister, FieldErrors, UseFormSetValue } from 'react-hook-form';
 import { Alert, Button, Chip, Stack, TextField, Typography } from '@mui/material';
 import MyLocationRoundedIcon from '@mui/icons-material/MyLocationRounded';
@@ -6,6 +7,7 @@ import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
 import { useAuthStore } from '@stores/authStore';
 import type { ServiceRequestFormValues } from './schemas';
 import { useSavedAddressStore, type SavedAddress } from './savedAddresses';
+import { fetchSavedAddresses } from './api';
 
 interface AddressFieldsProps {
   register: UseFormRegister<ServiceRequestFormValues>;
@@ -15,8 +17,8 @@ interface AddressFieldsProps {
 
 /**
  * Address input for the Service Request screen (Requirement 7.1). Supports
- * GPS detection (Geolocation API) that stores coordinates, picking an address
- * this device saved on an earlier booking, and entry of the address lines,
+ * GPS detection (Geolocation API) that stores coordinates, picking one of the
+ * customer's saved addresses (from the Customer Service), and entry of the address lines,
  * city, and PIN code.
  *
  * Coordinates are required: dispatch locates the job only from a saved address,
@@ -31,6 +33,18 @@ export function AddressFields({ register, errors, setValue }: AddressFieldsProps
   const savedAddresses = useSavedAddressStore((state) =>
     userId ? state.byUser[userId] : undefined,
   );
+  // The service's list replaces this device's: addresses saved elsewhere appear,
+  // deleted ones disappear. A failed read keeps the device's list.
+  useQuery({
+    queryKey: ['customer', 'saved-addresses', userId],
+    queryFn: async () => {
+      const list = await fetchSavedAddresses(userId as string);
+      useSavedAddressStore.getState().syncFromServer(userId as string, list);
+      return list;
+    },
+    enabled: Boolean(userId),
+    staleTime: 60_000,
+  });
   const [detecting, setDetecting] = useState(false);
   const [detectMessage, setDetectMessage] = useState<{
     severity: 'success' | 'error';

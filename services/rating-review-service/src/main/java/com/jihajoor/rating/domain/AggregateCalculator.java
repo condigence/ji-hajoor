@@ -20,7 +20,8 @@ import java.util.Collection;
  * rounded to 2 decimal places (HALF_UP). Only reviews that count toward the aggregate — active and
  * not flagged (Property 17) — should be passed in; the caller is responsible for that filtering,
  * but as a defensive measure this class also skips any review that does not
- * {@link Review#countsTowardAggregate()}.
+ * {@link Review#countsTowardAggregate()}, and any provider-to-customer review: a provider's
+ * aggregate is over what customers said about them (Requirement 15.10).
  *
  * <p>A provider with no contributing reviews has no aggregate; callers receive {@code null}.
  */
@@ -45,23 +46,47 @@ public final class AggregateCalculator {
      *         and lets the caller treat "no rating yet" distinctly from a low rating)
      */
     public BigDecimal aggregate(Collection<Review> reviews, Instant now) {
+        return summarize(reviews, now).average();
+    }
+
+    /**
+     * The weighted aggregate together with the number of reviews it is over: what the Provider
+     * Service stores and shows as the provider's rating.
+     *
+     * @return the summary; {@link Summary#average()} is {@code null} exactly when
+     *         {@link Summary#count()} is 0
+     */
+    public Summary summarize(Collection<Review> reviews, Instant now) {
         Instant recentCutoff = now.minus(recentWindow);
         BigDecimal weightedSum = BigDecimal.ZERO;
         BigDecimal weightTotal = BigDecimal.ZERO;
+        int count = 0;
 
         for (Review review : reviews) {
-            if (!review.countsTowardAggregate()) {
+            if (!review.countsTowardAggregate() || review.getReviewerRole() != ReviewerRole.CUSTOMER) {
                 continue;
             }
             BigDecimal weight = isRecent(review, recentCutoff) ? recentWeight : olderWeight;
             weightedSum = weightedSum.add(weight.multiply(BigDecimal.valueOf(review.getOverallRating())));
             weightTotal = weightTotal.add(weight);
+            count++;
         }
 
-        if (weightTotal.signum() == 0) {
-            return null;
+        if (count == 0 || weightTotal.signum() == 0) {
+            return Summary.NONE;
         }
-        return weightedSum.divide(weightTotal, SCALE, RoundingMode.HALF_UP);
+        return new Summary(weightedSum.divide(weightTotal, SCALE, RoundingMode.HALF_UP), count);
+    }
+
+    /**
+     * A provider's rating: the weighted aggregate (2 dp) and how many customer reviews it is over.
+     *
+     * @param average {@code null} when no review counts
+     */
+    public record Summary(BigDecimal average, int count) {
+
+        /** No counted review: no aggregate. */
+        public static final Summary NONE = new Summary(null, 0);
     }
 
     /**

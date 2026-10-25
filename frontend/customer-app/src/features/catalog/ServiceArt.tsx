@@ -5,7 +5,7 @@ import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
 import { brand, radius, visuallyHidden } from '@lib/theme';
 import { ServiceIcon } from './categoryIcon';
 import { categoryArt } from './categoryArt';
-import type { ServiceCategory, ServiceSubcategory } from './api';
+import { categoryIconKey, type ServiceCategory, type ServiceSubcategory } from './api';
 
 /**
  * Decorative backdrops for {@link ServiceArt}, in a 100×100 box. The catalog
@@ -91,7 +91,7 @@ export function ServiceArt({
   className,
   sx,
 }: ServiceArtProps) {
-  const art = categoryArt(category?.icon, category?.name);
+  const art = categoryArt(categoryIconKey(category), category?.name);
   return (
     <Box
       {...(className ? { className } : {})}
@@ -128,7 +128,7 @@ export function ServiceArt({
       >
         <ServiceIcon
           serviceName={subcategory.name}
-          iconKey={category?.icon}
+          iconKey={categoryIconKey(category)}
           categoryName={category?.name}
         />
       </Box>

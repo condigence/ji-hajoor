@@ -3,6 +3,7 @@ import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
 import type { ApiError } from '@api/client';
 import { fetchCategorySummaries, type CategorySummary } from '@features/categories/api';
 import {
+  setAgencyShare,
   addTenantAdmin,
   addTenantProvider,
   approveTenantApplication,
@@ -97,6 +98,21 @@ export function useAddTenantAdmin(tenantId: string) {
 
 export function useRemoveTenantAdmin(tenantId: string) {
   return useMembershipMutation<string, void>((userId) => removeTenantAdmin(tenantId, userId));
+}
+
+/** Sets an agency's earnings share; every list shows the new value. */
+export function useSetAgencyShare(): UseMutationResult<
+  Tenant,
+  ApiError,
+  { id: string; percent: number }
+> {
+  const queryClient = useQueryClient();
+  return useMutation<Tenant, ApiError, { id: string; percent: number }>({
+    mutationFn: ({ id, percent }) => setAgencyShare(id, percent),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: tenantKeys.lists });
+    },
+  });
 }
 
 export function useAddTenantProvider(tenantId: string) {

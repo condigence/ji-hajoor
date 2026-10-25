@@ -251,7 +251,8 @@ function ExistingAccountForm({ invitation, isPending, error, onSubmit }: Existin
           color: 'text.secondary',
         }}
       >
-        {invitation.email} already has a Ji-Hajoor account. Enter its password to add the role to it.
+        {invitation.email} already has a Ji-Hajoor account. Enter its password to add the role to
+        it.
       </Typography>
       {message ? <Alert severity="error">{message}</Alert> : null}
       <LabelledField label="Password">

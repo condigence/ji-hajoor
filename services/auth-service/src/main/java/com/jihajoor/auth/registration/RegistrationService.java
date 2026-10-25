@@ -84,7 +84,7 @@ public class RegistrationService {
                             + " OTP requests per hour exceeded for this number.", retryAfter);
         }
 
-        String fixedCode = otpProperties.activeFixedCode();
+        String fixedCode = otpProperties.activeFixedCode(mobileNumber);
         String code = fixedCode != null ? fixedCode : codeGenerator.generate(otpProperties.getLength());
 
         if (fixedCode != null) {
@@ -208,7 +208,7 @@ public class RegistrationService {
      * those keep signing in with username and password.
      */
     private void refuseStaffInTestOtpMode(UserAccount account) {
-        if (otpProperties.activeFixedCode() == null) {
+        if (otpProperties.activeFixedCode(account.getMobileNumber()) == null) {
             return;
         }
         boolean staff = account.getRoles().stream().anyMatch(r -> !r.isSelfAssignable());

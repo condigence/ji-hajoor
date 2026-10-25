@@ -1,97 +1,54 @@
 ##############################################################
-# Kubernetes Namespaces Module — Ji-Hajoor
-# Creates the six namespaces that group the 19 microservices
-# as defined in the Ji-Hajoor architecture:
+# Kubernetes Namespace Module — Ji-Hajoor
 #
-#   auth-customer-provider          → Auth, Customer, Provider
-#   booking-dispatch-location       → Booking, Dispatch, Location
-#   payment-invoice-rating          → Payment, Invoice, Rating
-#   notification-chat-complaint     → Notification, Chat, Complaint
-#   admin-reporting-promotion       → Admin, Reporting, Promotion
-#   catalog-pricing-verification    → Catalog, Pricing, Verification
+# Creates the ONE namespace the platform runs in for this environment. The 20 services run as
+# five deployables (api-gateway, identity-app, jobs-app, money-app, engagement-app), each a
+# Helm release of helm/jihajoor-service, and .github/workflows/deploy-services.yml installs all
+# of them into the GitHub environment's K8S_NAMESPACE. var.namespace must equal that value;
+# the IRSA roles (modules/iam) trust service accounts in the same namespace.
+#
+# This replaces six per-domain namespaces (auth-customer-provider, booking-dispatch-location,
+# ...) that matched neither the deployables nor the pipeline.
 ##############################################################
 
-locals {
-  namespaces = {
-    "auth-customer-provider" = {
-      description = "Auth Service, Customer Service, Provider Service"
-      tier        = "core-identity"
-    }
-    "booking-dispatch-location" = {
-      description = "Booking Service, Dispatch Engine, Location Service"
-      tier        = "core-booking"
-    }
-    "payment-invoice-rating" = {
-      description = "Payment Service, Invoice Service, Rating & Review Service"
-      tier        = "core-financial"
-    }
-    "notification-chat-complaint" = {
-      description = "Notification Service, Chat Service, Complaint Service"
-      tier        = "engagement"
-    }
-    "admin-reporting-promotion" = {
-      description = "Admin Service, Reporting Service, Promotion Service"
-      tier        = "operations"
-    }
-    "catalog-pricing-verification" = {
-      description = "Service Catalog, Pricing Engine, Verification Service, Outbox Processor"
-      tier        = "catalog-ops"
-    }
-  }
-}
-
 resource "kubernetes_namespace" "this" {
-  for_each = local.namespaces
-
   metadata {
-    name = each.key
+    name = var.namespace
 
     labels = merge(var.labels, {
       "app.kubernetes.io/managed-by" = "terraform"
-      "jihajoor.io/tier"              = each.value.tier
+      "app.kubernetes.io/part-of"    = "jihajoor"
     })
 
     annotations = {
-      "jihajoor.io/description" = each.value.description
+      "jihajoor.io/description" = "Ji-Hajoor deployables: api-gateway, identity-app, jobs-app, money-app, engagement-app"
     }
   }
 }
 
 # ─────────────────────────────────────────────
-# Resource Quotas per Namespace
-# Prevents a single namespace from consuming all cluster resources.
+# Resource Quota
+# Sized for every deployable at its autoscaling maximum; see var.quota.
 # ─────────────────────────────────────────────
 resource "kubernetes_resource_quota" "this" {
-  for_each = local.namespaces
-
   metadata {
     name      = "default-quota"
-    namespace = kubernetes_namespace.this[each.key].metadata[0].name
+    namespace = kubernetes_namespace.this.metadata[0].name
   }
 
   spec {
-    hard = {
-      "requests.cpu"    = "8"
-      "requests.memory" = "16Gi"
-      "limits.cpu"      = "16"
-      "limits.memory"   = "32Gi"
-      "pods"            = "50"
-      "services"        = "20"
-    }
+    hard = var.quota
   }
 }
 
 # ─────────────────────────────────────────────
-# LimitRange per Namespace
-# Sets default resource requests/limits for containers that
-# don't specify their own.
+# LimitRange
+# Default requests/limits for containers that don't specify their own (the chart always does).
 # ─────────────────────────────────────────────
 resource "kubernetes_limit_range" "this" {
-  for_each = local.namespaces
-
   metadata {
     name      = "default-limits"
-    namespace = kubernetes_namespace.this[each.key].metadata[0].name
+    namespace = kubernetes_namespace.this.metadata[0].name
   }
 
   spec {
@@ -123,19 +80,17 @@ resource "kubernetes_limit_range" "this" {
 
 # ─────────────────────────────────────────────
 # Network Policies
-# Default deny-all ingress; services open ports explicitly via
-# their own NetworkPolicy resources deployed by Helm charts.
+# Default deny-all ingress, then: the deployables may call each other (they share the
+# namespace), and the ingress controller may reach the API gateway only.
 # ─────────────────────────────────────────────
 resource "kubernetes_network_policy" "deny_all_ingress" {
-  for_each = local.namespaces
-
   metadata {
     name      = "deny-all-ingress"
-    namespace = kubernetes_namespace.this[each.key].metadata[0].name
+    namespace = kubernetes_namespace.this.metadata[0].name
   }
 
   spec {
-    pod_selector {}  # Selects all pods in namespace
+    pod_selector {} # Selects all pods in namespace
 
     policy_types = ["Ingress"]
     # No ingress rules = deny all ingress by default
@@ -143,11 +98,9 @@ resource "kubernetes_network_policy" "deny_all_ingress" {
 }
 
 resource "kubernetes_network_policy" "allow_same_namespace" {
-  for_each = local.namespaces
-
   metadata {
     name      = "allow-same-namespace"
-    namespace = kubernetes_namespace.this[each.key].metadata[0].name
+    namespace = kubernetes_namespace.this.metadata[0].name
   }
 
   spec {
@@ -157,26 +110,25 @@ resource "kubernetes_network_policy" "allow_same_namespace" {
 
     ingress {
       from {
-        namespace_selector {
-          match_labels = {
-            "kubernetes.io/metadata.name" = each.key
-          }
-        }
+        pod_selector {}
       }
     }
   }
 }
 
-resource "kubernetes_network_policy" "allow_from_api_gateway" {
-  for_each = local.namespaces
-
+resource "kubernetes_network_policy" "allow_ingress_to_api_gateway" {
   metadata {
-    name      = "allow-from-api-gateway"
-    namespace = kubernetes_namespace.this[each.key].metadata[0].name
+    name      = "allow-ingress-to-api-gateway"
+    namespace = kubernetes_namespace.this.metadata[0].name
   }
 
   spec {
-    pod_selector {}
+    # The chart's selector label for the api-gateway release.
+    pod_selector {
+      match_labels = {
+        "app.kubernetes.io/name" = "api-gateway"
+      }
+    }
 
     policy_types = ["Ingress"]
 
@@ -191,6 +143,35 @@ resource "kubernetes_network_policy" "allow_from_api_gateway" {
       ports {
         port     = "8080"
         protocol = "TCP"
+      }
+    }
+  }
+}
+
+# Prometheus (namespace "monitoring") scrapes every hosted service's /prometheus endpoint
+# (infra/k8s/observability/prometheus-values.yaml).
+resource "kubernetes_network_policy" "allow_monitoring" {
+  metadata {
+    name      = "allow-monitoring"
+    namespace = kubernetes_namespace.this.metadata[0].name
+  }
+
+  spec {
+    pod_selector {
+      match_labels = {
+        "app.kubernetes.io/part-of" = "jihajoor"
+      }
+    }
+
+    policy_types = ["Ingress"]
+
+    ingress {
+      from {
+        namespace_selector {
+          match_labels = {
+            "kubernetes.io/metadata.name" = var.monitoring_namespace
+          }
+        }
       }
     }
   }

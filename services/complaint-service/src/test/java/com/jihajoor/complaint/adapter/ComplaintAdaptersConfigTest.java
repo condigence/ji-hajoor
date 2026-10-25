@@ -138,6 +138,7 @@ class ComplaintAdaptersConfigTest {
         assertThat(p.getEmergencyResolutionSla()).isEqualTo(Duration.ofHours(24));
         assertThat(p.getStandardResolutionSla()).isEqualTo(Duration.ofHours(72));
         assertThat(p.getStatsRefreshWindow()).isEqualTo(Duration.ofMinutes(60));
+        assertThat(p.getRefundAttemptLease()).isEqualTo(Duration.ofMinutes(5));
         assertThat(p.getAttachments().getMaxCount()).isEqualTo(5);
         assertThat(p.getAttachments().getMaxBytes()).isEqualTo(10L * 1024 * 1024);
         assertThat(p.getTopics().getComplaintCreated()).isEqualTo("ComplaintCreated");

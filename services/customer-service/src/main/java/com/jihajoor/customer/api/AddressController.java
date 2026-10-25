@@ -1,10 +1,12 @@
 package com.jihajoor.customer.api;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.jihajoor.customer.service.AddressResult;
 import com.jihajoor.customer.service.CustomerProfileService;
+import com.jihajoor.customer.service.SavedAddress;
 
 import jakarta.validation.Valid;
 
@@ -29,6 +32,16 @@ public class AddressController {
     public AddressController(CustomerProfileService service, CallerIdentity callerIdentity) {
         this.service = service;
         this.callerIdentity = callerIdentity;
+    }
+
+    /**
+     * {@code GET /customers/{id}/addresses} — the customer's saved addresses, default first, then
+     * newest first (Requirement 2.5).
+     */
+    @GetMapping
+    public List<SavedAddress> listAddresses(@PathVariable("id") UUID customerId) {
+        callerIdentity.requireSelfOrStaff(customerId);
+        return service.listAddresses(customerId);
     }
 
     /**

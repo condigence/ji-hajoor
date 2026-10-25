@@ -81,7 +81,9 @@ export function AssignedJobCard({ job, onOpen }: AssignedJobCardProps) {
               }}
             >
               <ScheduleRoundedIcon fontSize="small" aria-hidden />
-              <Typography variant="body2">{formatDateTime(job.scheduledAt)}</Typography>
+              <Typography variant="body2">
+                {job.scheduledAt ? formatDateTime(job.scheduledAt) : 'As soon as possible'}
+              </Typography>
             </Stack>
           </Stack>
 

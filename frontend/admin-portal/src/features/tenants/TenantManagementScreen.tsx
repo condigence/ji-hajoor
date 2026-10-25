@@ -24,6 +24,7 @@ import { useCatalogCategories, useTenants } from './hooks';
 import { formatCoordinates, isApplication, mapLink, type Tenant } from './model';
 import { TenantFormDialog } from './TenantFormDialog';
 import { TenantMembersDialog } from './TenantMembersDialog';
+import { AgencyShareDialog } from './AgencyShareDialog';
 
 type Editing = { mode: 'create' } | { mode: 'edit'; tenant: Tenant };
 
@@ -54,6 +55,7 @@ export function TenantManagementScreen() {
   const [filter, setFilter] = useState('');
   const [editing, setEditing] = useState<Editing | null>(null);
   const [members, setMembers] = useState<Tenant | null>(null);
+  const [sharing, setSharing] = useState<Tenant | null>(null);
   const [deciding, setDeciding] = useState<Decision | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const pendingCount = pendingQuery.data?.length;
@@ -165,9 +167,15 @@ export function TenantManagementScreen() {
     coverageColumn,
     {
       key: 'providers',
-      header: 'Providers',
+      header: 'Workers',
       align: 'right',
       render: (row) => formatNumber(row.providerCount),
+    },
+    {
+      key: 'share',
+      header: 'Agency share',
+      align: 'right',
+      render: (row) => `${row.agencySharePercent ?? 0}%`,
     },
     {
       key: 'admins',
@@ -206,6 +214,11 @@ export function TenantManagementScreen() {
           {isApplication(row.status) ? null : (
             <Button size="small" variant="outlined" onClick={() => setMembers(row)}>
               Members
+            </Button>
+          )}
+          {isApplication(row.status) ? null : (
+            <Button size="small" variant="outlined" onClick={() => setSharing(row)}>
+              Share
             </Button>
           )}
           {editButton(row)}
@@ -267,8 +280,8 @@ export function TenantManagementScreen() {
 
   return (
     <ModuleScreen
-      title="Tenants"
-      description="Service agencies that take over requests no provider accepted automatically."
+      title="Agencies"
+      description="Service agencies run teams of workers and take over requests no independent worker accepted automatically."
       actions={
         <Button
           variant="contained"
@@ -276,7 +289,7 @@ export function TenantManagementScreen() {
           disabled={!categoriesQuery.data}
           onClick={() => setEditing({ mode: 'create' })}
         >
-          New tenant
+          New agency
         </Button>
       }
     >
@@ -313,10 +326,10 @@ export function TenantManagementScreen() {
         isEmpty={rows.length === 0}
         emptyMessage={
           filter
-            ? 'No tenant matches that name.'
+            ? 'No agency matches that name.'
             : view === 'pending'
               ? 'No agency applications are waiting for a decision.'
-              : 'No tenants yet. Create the first agency.'
+              : 'No agencies yet. Create the first one.'
         }
       >
         <DataTable
@@ -339,6 +352,7 @@ export function TenantManagementScreen() {
       ) : null}
 
       {members ? <TenantMembersDialog tenant={members} onClose={() => setMembers(null)} /> : null}
+      {sharing ? <AgencyShareDialog tenant={sharing} onClose={() => setSharing(null)} /> : null}
 
       {deciding ? (
         <ApplicationDecisionDialog

@@ -1,37 +1,46 @@
 package com.jihajoor.chat.presence;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * Default single-node {@link PresenceRegistry} backed by an in-memory set of connected
- * {@code (bookingId, userId)} pairs.
+ * Single-node {@link PresenceRegistry}: the open sockets of each {@code (bookingId, userId)}, in
+ * memory.
  *
- * <p>Adequate for local/dev and a single chat-service instance. A multi-node deployment supplies a
- * shared implementation (e.g. Redis-backed) which, being another {@link PresenceRegistry} bean,
- * transparently replaces this one via {@link ConditionalOnMissingBean}.
+ * <p>Selected by {@code jihajoor.chat.cluster=local} (tests, a dev run without Redis). It only
+ * sees this node's sockets, so with several chat-service instances it would call a user offline
+ * who is connected to another node; {@code cluster=redis} uses {@link RedisPresenceRegistry}.
  */
 @Component
+@ConditionalOnProperty(prefix = "jihajoor.chat", name = "cluster", havingValue = "local")
 public class InMemoryPresenceRegistry implements PresenceRegistry {
 
-    private final Set<String> onlinePairs = ConcurrentHashMap.newKeySet();
+    /** "bookingId|userId" → that user's open session ids on the booking. */
+    private final Map<String, Set<String>> sessionsByPair = new ConcurrentHashMap<>();
 
     @Override
-    public void markOnline(UUID bookingId, UUID userId) {
-        onlinePairs.add(key(bookingId, userId));
+    public void connected(UUID bookingId, UUID userId, String sessionId) {
+        sessionsByPair.computeIfAbsent(key(bookingId, userId), k -> ConcurrentHashMap.newKeySet())
+                .add(sessionId);
     }
 
     @Override
-    public void markOffline(UUID bookingId, UUID userId) {
-        onlinePairs.remove(key(bookingId, userId));
+    public void disconnected(UUID bookingId, UUID userId, String sessionId) {
+        sessionsByPair.computeIfPresent(key(bookingId, userId), (k, sessions) -> {
+            sessions.remove(sessionId);
+            return sessions.isEmpty() ? null : sessions;
+        });
     }
 
     @Override
     public boolean isOnline(UUID bookingId, UUID userId) {
-        return onlinePairs.contains(key(bookingId, userId));
+        Set<String> sessions = sessionsByPair.get(key(bookingId, userId));
+        return sessions != null && !sessions.isEmpty();
     }
 
     private static String key(UUID bookingId, UUID userId) {

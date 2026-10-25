@@ -81,6 +81,9 @@ class AdminTenantControllerTest {
     @MockitoBean
     private TenantApplicationService applications;
 
+    @MockitoBean
+    private com.jihajoor.provider.service.AgencyEarningsService earningsService;
+
     static String token(UUID subject, String... roles) {
         return "Bearer " + Jwts.builder()
                 .subject(subject.toString())
@@ -302,5 +305,26 @@ class AdminTenantControllerTest {
         mockMvc.perform(get("/admin/tenants")).andExpect(status().isUnauthorized());
 
         verifyNoInteractions(tenantService, teamService);
+    }
+
+    @Test
+    void agencyShare_isSetByAPlatformAdminOnly() throws Exception {
+        com.jihajoor.provider.domain.Tenant t = com.jihajoor.provider.domain.Tenant.create(
+                new com.jihajoor.provider.domain.Tenant.TenantDetails("Ara Home Services", null, null,
+                        25.556, 84.6603, new BigDecimal("20.0"), java.util.Set.of(UUID.randomUUID())), admin);
+        t.changeAgencyShare(new BigDecimal("12.50"), admin);
+        when(tenantService.get(t.getId())).thenReturn(new TenantView(t, 2, 1));
+
+        mockMvc.perform(put("/admin/tenants/" + t.getId() + "/agency-share")
+                        .header(HttpHeaders.AUTHORIZATION, token(admin, "ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"percent\":12.5}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.agencySharePercent").value(12.5));
+        org.mockito.Mockito.verify(earningsService).setShare(t.getId(), new BigDecimal("12.5"), admin);
+
+        mockMvc.perform(put("/admin/tenants/" + t.getId() + "/agency-share")
+                        .header(HttpHeaders.AUTHORIZATION, token(admin, "TENANT_ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"percent\":50}"))
+                .andExpect(status().isForbidden());
     }
 }

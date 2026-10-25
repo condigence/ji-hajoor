@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +17,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+
+import com.jihajoor.shared.security.FileSignatures;
 
 import com.jihajoor.verification.api.dto.VerificationResponse;
 import com.jihajoor.verification.domain.DocumentType;
@@ -68,7 +71,15 @@ public class VerificationController {
             DocumentType type = parseType(entry.getKey());
             MultipartFile file = entry.getValue();
             try {
-                uploads.add(new DocumentUpload(type, file.getBytes(), file.getContentType()));
+                byte[] content = file.getBytes();
+                // Judge the file by its bytes, not the type the client claims: only images and
+                // PDFs are kept, so a script or web page can never be stored as a document.
+                String detected = FileSignatures.detect(content)
+                        .filter(t -> t.startsWith("image/") || t.equals("application/pdf"))
+                        .orElseThrow(() -> new VerificationException(HttpStatus.BAD_REQUEST,
+                                "UNSUPPORTED_DOCUMENT_TYPE",
+                                "Upload a photo or a PDF for " + entry.getKey()));
+                uploads.add(new DocumentUpload(type, content, detected, file.getOriginalFilename()));
             } catch (IOException e) {
                 throw new VerificationException(HttpStatus.BAD_REQUEST, "DOCUMENT_READ_FAILED",
                         "Could not read uploaded document: " + entry.getKey());
@@ -88,6 +99,19 @@ public class VerificationController {
     public ResponseEntity<VerificationResponse> get(@PathVariable("providerId") UUID providerId) {
         callerIdentity.requireSelfOrStaff(providerId);
         return ResponseEntity.ok(VerificationResponse.from(verificationService.getByProviderId(providerId)));
+    }
+
+    /**
+     * {@code GET /verifications/{providerId}/documents/{documentId}} — the bytes of one of the
+     * provider's own documents, served exactly as the admin endpoint serves them
+     * ({@link DocumentResponses}). Ownership is asserted first: only the provider themselves (or
+     * staff the role rule admits) may read it.
+     */
+    @GetMapping("/documents/{documentId}")
+    public ResponseEntity<Resource> document(@PathVariable("providerId") UUID providerId,
+                                             @PathVariable("documentId") UUID documentId) {
+        callerIdentity.requireSelfOrStaff(providerId);
+        return DocumentResponses.stream(verificationService.openDocument(providerId, documentId));
     }
 
     /**

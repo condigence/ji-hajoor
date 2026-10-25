@@ -75,7 +75,7 @@ export function SplashScreen() {
             Ji-Hajoor
           </Typography>
           <Typography variant="overline" sx={{ opacity: 0.75, letterSpacing: '0.2em' }}>
-            Provider
+            Partner
           </Typography>
           <Typography variant="subtitle1" sx={{ opacity: 0.85, mt: 0.5 }}>
             Earn More. Serve Better.

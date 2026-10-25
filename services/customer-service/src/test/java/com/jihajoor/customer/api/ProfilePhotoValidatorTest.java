@@ -14,17 +14,34 @@ import com.jihajoor.customer.service.CustomerException;
  */
 class ProfilePhotoValidatorTest {
 
+    private static byte[] withHead(byte[] body, int... head) {
+        for (int i = 0; i < head.length; i++) {
+            body[i] = (byte) head[i];
+        }
+        return body;
+    }
+
+    @Test
+    void rejectsAScriptDeclaredAsJpeg() {
+        MockMultipartFile photo = new MockMultipartFile(
+                "photo", "p.jpg", "image/jpeg", "<script>alert(1)</script>".getBytes());
+        assertThatThrownBy(() -> ProfilePhotoValidator.validate(photo))
+                .isInstanceOf(CustomerException.class)
+                .satisfies(ex -> assertThat(((CustomerException) ex).getErrorCode())
+                        .isEqualTo("INVALID_PHOTO_TYPE"));
+    }
+
     @Test
     void acceptsJpegWithinSize() {
         MockMultipartFile photo = new MockMultipartFile(
-                "photo", "p.jpg", "image/jpeg", new byte[1024]);
+                "photo", "p.jpg", "image/jpeg", withHead(new byte[1024], 0xFF, 0xD8, 0xFF, 0xE0));
         assertThatCode(() -> ProfilePhotoValidator.validate(photo)).doesNotThrowAnyException();
     }
 
     @Test
     void acceptsPngWithinSize() {
         MockMultipartFile photo = new MockMultipartFile(
-                "photo", "p.png", "image/png", new byte[1024]);
+                "photo", "p.png", "image/png", withHead(new byte[1024], 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A));
         assertThatCode(() -> ProfilePhotoValidator.validate(photo)).doesNotThrowAnyException();
     }
 

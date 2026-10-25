@@ -1,6 +1,11 @@
 import { apiClient } from '@api/client';
 import type { BookingStatus } from '@features/bookings/api';
-import type { Tenant, TeamProvider } from '@features/tenants/model';
+import type {
+  AgencyEarnings,
+  AgencyInvitation,
+  Tenant,
+  TeamProvider,
+} from '@features/tenants/model';
 
 /**
  * Tenant Portal bindings for a TENANT_ADMIN (Requirement MT-11).
@@ -12,8 +17,11 @@ import type { Tenant, TeamProvider } from '@features/tenants/model';
  * provider-service (gateway `/tenant/me`, `/tenant/providers/**`):
  * - GET    /tenant/me                         — the caller's Tenant
  * - GET    /tenant/providers                  — the team, with availability and assignability
- * - POST   /tenant/providers {mobileNumber}   — add a provider
- * - DELETE /tenant/providers/{providerId}     — remove a provider
+ * - POST   /tenant/providers {mobileNumber}   — invite a worker (they join by accepting)
+ * - DELETE /tenant/providers/{providerId}     — remove a worker
+ * - GET    /tenant/invitations                — invitations not answered yet
+ * - DELETE /tenant/invitations/{id}           — withdraw an invitation
+ * - GET    /tenant/earnings                   — the agency's share and earnings
  *
  * booking-service (gateway `/tenant/bookings/**`):
  * - GET  /tenant/bookings/queue                       — Assignment_Queue, oldest first
@@ -62,8 +70,23 @@ export async function fetchTeam(): Promise<TeamProvider[]> {
   return data;
 }
 
-export async function addTeamProvider(mobileNumber: string): Promise<TeamProvider> {
-  const { data } = await apiClient.post<TeamProvider>('/tenant/providers', { mobileNumber });
+/** Invites a worker by mobile number; they join the team only once they accept. */
+export async function inviteWorker(mobileNumber: string): Promise<AgencyInvitation> {
+  const { data } = await apiClient.post<AgencyInvitation>('/tenant/providers', { mobileNumber });
+  return data;
+}
+
+export async function fetchInvitations(): Promise<AgencyInvitation[]> {
+  const { data } = await apiClient.get<AgencyInvitation[]>('/tenant/invitations');
+  return data;
+}
+
+export async function cancelInvitation(invitationId: string): Promise<void> {
+  await apiClient.delete(`/tenant/invitations/${invitationId}`);
+}
+
+export async function fetchAgencyEarnings(): Promise<AgencyEarnings> {
+  const { data } = await apiClient.get<AgencyEarnings>('/tenant/earnings');
   return data;
 }
 

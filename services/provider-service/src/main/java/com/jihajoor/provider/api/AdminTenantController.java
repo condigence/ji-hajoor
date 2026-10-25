@@ -23,6 +23,7 @@ import com.jihajoor.provider.api.dto.TenantRejectionRequest;
 import com.jihajoor.provider.api.dto.TenantRequest;
 import com.jihajoor.provider.api.dto.TenantResponse;
 import com.jihajoor.provider.service.TenantApplicationService;
+import com.jihajoor.provider.service.AgencyEarningsService;
 import com.jihajoor.provider.service.TenantService;
 import com.jihajoor.provider.service.TenantTeamService;
 
@@ -45,14 +46,38 @@ public class AdminTenantController {
     private final TenantService tenantService;
     private final TenantTeamService teamService;
     private final TenantApplicationService applications;
+    private final AgencyEarningsService earningsService;
     private final CallerIdentity callerIdentity;
 
     public AdminTenantController(TenantService tenantService, TenantTeamService teamService,
-                                 TenantApplicationService applications, CallerIdentity callerIdentity) {
+                                 TenantApplicationService applications, AgencyEarningsService earningsService,
+                                 CallerIdentity callerIdentity) {
         this.tenantService = tenantService;
         this.teamService = teamService;
         this.applications = applications;
+        this.earningsService = earningsService;
         this.callerIdentity = callerIdentity;
+    }
+
+    /**
+     * {@code PUT /admin/tenants/{id}/agency-share} — the agency's share (0-50%) of its workers' net
+     * earning on future jobs.
+     */
+    @PutMapping("/{id}/agency-share")
+    public ResponseEntity<TenantResponse> setAgencyShare(@PathVariable("id") UUID id,
+                                                         @RequestBody AgencyShareRequest request) {
+        earningsService.setShare(id, request.percent(), callerIdentity.requireCallerId());
+        return ResponseEntity.ok(TenantResponse.from(tenantService.get(id)));
+    }
+
+    /** {@code GET /admin/tenants/{id}/earnings} — what the agency has earned from its workers' jobs. */
+    @GetMapping("/{id}/earnings")
+    public ResponseEntity<AgencyEarningsService.AgencyEarningsView> earnings(@PathVariable("id") UUID id) {
+        return ResponseEntity.ok(earningsService.summary(id));
+    }
+
+    /** The agency's share, in percent. */
+    public record AgencyShareRequest(java.math.BigDecimal percent) {
     }
 
     /**

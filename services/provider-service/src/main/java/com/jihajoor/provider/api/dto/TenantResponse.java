@@ -27,13 +27,15 @@ public record TenantResponse(
         Instant createdAt,
         Instant updatedAt,
         UUID applicantUserId,
-        String rejectionReason) {
+        String rejectionReason,
+        BigDecimal agencySharePercent) {
 
     public static TenantResponse from(TenantView view) {
         Tenant t = view.tenant();
         return new TenantResponse(t.getId(), t.getName(), t.getStatus().name(), t.getContactPhone(),
                 t.getContactEmail(), t.getBaseLatitude(), t.getBaseLongitude(), t.getServiceRadiusKm(),
                 t.getCategoryIds().stream().sorted().toList(), view.providerCount(), view.adminCount(),
-                t.getCreatedAt(), t.getUpdatedAt(), t.getApplicantUserId(), t.getRejectionReason());
+                t.getCreatedAt(), t.getUpdatedAt(), t.getApplicantUserId(), t.getRejectionReason(),
+                t.getAgencySharePercent());
     }
 }

@@ -193,6 +193,35 @@ class CustomerProfileServiceTest {
                 });
     }
 
+    // ----- Listing saved addresses (Requirement 2.5) -----
+
+    @Test
+    void listAddresses_putsTheDefaultFirstThenNewest_andDecryptsTheStreetAddress() {
+        geocoding.resolveTo("221B Baker Street, London");
+        AddressResult home = service.addAddress(CUSTOMER, "Home", 51.5237, -0.1585);  // default
+        geocoding.failNext();
+        AddressResult work = service.addAddress(CUSTOMER, "Work", 51.5007, -0.1246);
+        service.addAddress(UUID.randomUUID(), "Someone else", 1.0, 1.0);
+
+        List<SavedAddress> listed = service.listAddresses(CUSTOMER);
+
+        assertThat(listed).extracting(SavedAddress::addressId)
+                .containsExactly(home.addressId(), work.addressId());
+        assertThat(listed.get(0).isDefault()).isTrue();
+        assertThat(listed.get(0).address()).isEqualTo("221B Baker Street, London");
+        assertThat(listed.get(1).address()).isNull();
+        assertThat(listed.get(1).label()).isEqualTo("Work");
+    }
+
+    @Test
+    void listAddresses_leavesOutDeletedOnes() {
+        service.addAddress(CUSTOMER, "First", 1.0, 1.0);
+        AddressResult second = service.addAddress(CUSTOMER, "Second", 2.0, 2.0);
+        service.deleteAddress(CUSTOMER, second.addressId());
+
+        assertThat(service.listAddresses(CUSTOMER)).extracting(SavedAddress::label).containsExactly("First");
+    }
+
     // ----- Default promotion on delete (Requirement 2.4) -----
 
     @Test

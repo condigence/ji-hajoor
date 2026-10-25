@@ -299,7 +299,7 @@ function TeamNowCard() {
         >
           {teamQuery.data
             ? `${availableCount} of ${team.length} available and assignable`
-            : 'Availability and verification of your providers'}
+            : 'Availability and verification of your workers'}
         </Typography>
         <Divider sx={{ mb: 1 }} />
         <QueryStateView
@@ -308,7 +308,7 @@ function TeamNowCard() {
           error={teamQuery.error}
           onRetry={() => void teamQuery.refetch()}
           isEmpty={team.length === 0}
-          emptyMessage="No providers in your team yet."
+          emptyMessage="No workers in your team yet."
         >
           <Box
             sx={{

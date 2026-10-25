@@ -24,7 +24,7 @@ interface InviteStaffDialogProps {
 
 /** What each invitable role opens, so the inviter picks knowingly. */
 const ROLE_HINTS: Partial<Record<InvitationFormValues['role'], string>> = {
-  ADMIN: 'Every operational module, including Users and Tenants.',
+  ADMIN: 'Every operational module, including Users and Agencies.',
   FINANCE_ADMIN: 'Payments, refunds and reports.',
   DISPATCHER: 'Bookings and dispatch rules.',
   SUPPORT_AGENT: 'Bookings, complaints and review moderation.',

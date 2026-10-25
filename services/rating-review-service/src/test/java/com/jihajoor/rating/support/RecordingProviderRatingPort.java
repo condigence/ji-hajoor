@@ -1,38 +1,62 @@
 package com.jihajoor.rating.support;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 import com.jihajoor.rating.provider.ProviderRatingPort;
+import com.jihajoor.rating.provider.ProviderRatingSnapshot;
+import com.jihajoor.rating.provider.ProviderRatingUpdateException;
 
 /**
- * Recording {@link ProviderRatingPort} test double: captures the latest propagated aggregate per
- * provider and tracks UNDER_REVIEW status so the "flag once" behaviour can be asserted.
+ * Recording {@link ProviderRatingPort} test double: captures every rating pushed per provider, and
+ * can be told to fail, transiently or permanently, the way the Provider Service can.
  */
 public class RecordingProviderRatingPort implements ProviderRatingPort {
 
-    private final Map<UUID, BigDecimal> aggregates = new HashMap<>();
-    private final Set<UUID> underReview = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, List<ProviderRatingSnapshot>> pushes = new HashMap<>();
+    private ProviderRatingUpdateException failure;
 
     @Override
-    public void updateAggregateRating(UUID providerId, BigDecimal aggregateRating) {
-        aggregates.put(providerId, aggregateRating);
+    public void updateAggregateRating(UUID providerId, ProviderRatingSnapshot rating) {
+        if (failure != null) {
+            throw failure;
+        }
+        pushes.computeIfAbsent(providerId, id -> new ArrayList<>()).add(rating);
     }
 
-    @Override
-    public boolean flagUnderReview(UUID providerId) {
-        return underReview.add(providerId);
+    /** Every later push fails with a transient (Provider Service unavailable) failure. */
+    public void failTransiently() {
+        failure = new ProviderRatingUpdateException("Provider Service unavailable", null, false);
     }
 
+    /** Every later push is refused for good (e.g. 404 unknown provider). */
+    public void refusePermanently() {
+        failure = new ProviderRatingUpdateException("HTTP 404", null, true);
+    }
+
+    /** Pushes succeed again. */
+    public void recover() {
+        failure = null;
+    }
+
+    /** The latest aggregate pushed for the provider, or {@code null} if none (or none counted). */
     public BigDecimal lastAggregate(UUID providerId) {
-        return aggregates.get(providerId);
+        ProviderRatingSnapshot last = last(providerId);
+        return last == null ? null : last.average();
     }
 
-    public boolean isUnderReview(UUID providerId) {
-        return underReview.contains(providerId);
+    /** The latest snapshot pushed for the provider, or {@code null} if nothing was pushed. */
+    public ProviderRatingSnapshot last(UUID providerId) {
+        List<ProviderRatingSnapshot> forProvider = pushes.get(providerId);
+        return forProvider == null || forProvider.isEmpty() ? null : forProvider.get(forProvider.size() - 1);
+    }
+
+    /** Every snapshot pushed for the provider, in order. */
+    public List<ProviderRatingSnapshot> pushes(UUID providerId) {
+        return pushes.getOrDefault(providerId, List.of());
     }
 }

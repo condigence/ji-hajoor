@@ -15,5 +15,8 @@ public enum EarningType {
     PLATFORM_FEE_DEDUCTION,
 
     /** Complaint-related penalty deduction (itemised separately). */
-    PENALTY_DEDUCTION
+    PENALTY_DEDUCTION,
+
+    /** The agency's share of a job done for it, deducted from the worker's net (itemised). */
+    AGENCY_SHARE_DEDUCTION
 }

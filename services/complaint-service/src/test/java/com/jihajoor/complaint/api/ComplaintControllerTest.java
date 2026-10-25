@@ -168,6 +168,66 @@ class ComplaintControllerTest {
     }
 
     @Test
+    void getRefund_returnsTheRecordedRefundWithItsResendState() {
+        UUID id = UUID.randomUUID();
+        ComplaintRefund pending = ComplaintRefund.reserve(id, UUID.randomUUID(),
+                new BigDecimal("50.00"), null, UUID.randomUUID(), null, Instant.now());
+        pending.recordUnknownOutcome("Payment Service outcome unknown: read timed out");
+        when(service.getRefund(id)).thenReturn(pending);
+        when(service.isRefundResendable(pending)).thenReturn(true);
+
+        var body = controller.getRefund(id);
+
+        assertThat(body.status()).isEqualTo("PENDING");
+        assertThat(body.outcomeUnknown()).isTrue();
+        assertThat(body.resendable()).isTrue();
+        assertThat(body.failureReason()).contains("read timed out");
+        assertThat(body.lastAttemptAt()).isEqualTo(pending.getRequestedAt());
+    }
+
+    @Test
+    void resendRefund_passesTheAuthenticatedStaffMemberAndReturnsTheNewOutcome() {
+        UUID agent = UUID.randomUUID();
+        authenticate(agent.toString());
+        UUID id = UUID.randomUUID();
+        ComplaintRefund refund = ComplaintRefund.reserve(id, UUID.randomUUID(),
+                new BigDecimal("50.00"), null, agent, null, Instant.now());
+        refund.markSucceeded("rf_9", Instant.now());
+        when(service.resendRefund(id, agent)).thenReturn(refund);
+        // Even if the service were asked, a settled refund is never reported re-sendable.
+        when(service.isRefundResendable(refund)).thenReturn(true);
+
+        var body = controller.resendRefund(id);
+
+        assertThat(body.status()).isEqualTo("SUCCEEDED");
+        assertThat(body.externalReference()).isEqualTo("rf_9");
+        assertThat(body.resendable()).isFalse();
+        assertThat(body.outcomeUnknown()).isFalse();
+        verify(service).resendRefund(id, agent);
+    }
+
+    @Test
+    void resendRefund_overHttp_mapsAnInFlightAttemptTo409() throws Exception {
+        authenticate(UUID.randomUUID().toString());
+        when(service.resendRefund(any(), any())).thenThrow(
+                ComplaintException.refundInProgress("still awaiting its outcome"));
+
+        mvc.perform(post("/complaints/" + UUID.randomUUID() + "/refund/resend"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("REFUND_IN_PROGRESS"));
+    }
+
+    @Test
+    void getRefund_overHttp_mapsAMissingRefundTo404() throws Exception {
+        authenticate(UUID.randomUUID().toString());
+        when(service.getRefund(any())).thenThrow(ComplaintException.refundNotFound("no refund"));
+
+        mvc.perform(get("/complaints/" + UUID.randomUUID() + "/refund"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("REFUND_NOT_FOUND"));
+    }
+
+    @Test
     void dispute_delegates() {
         UUID id = UUID.randomUUID();
         when(service.markDisputed(id)).thenReturn(complaint());

@@ -265,7 +265,7 @@ function describeClosedOffer(status: JobOfferStatus): string {
     case 'DECLINED':
       return 'You declined this job';
     case 'WITHDRAWN':
-      return 'This job was taken by another provider or cancelled';
+      return 'This job was taken by another worker or cancelled';
     case 'EXPIRED':
     default:
       return 'This offer has expired';
@@ -278,7 +278,7 @@ function describeDecisionError(code: string, fallback: string): string {
     case OFFER_ERROR.expired:
       return 'Too late: this offer expired before your answer arrived.';
     case OFFER_ERROR.taken:
-      return 'Another provider accepted this job first.';
+      return 'Another worker accepted this job first.';
     case OFFER_ERROR.alreadyDecided:
       return 'This offer has already been answered or withdrawn.';
     case OFFER_ERROR.notFound:

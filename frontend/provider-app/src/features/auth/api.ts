@@ -1,5 +1,6 @@
 import { authClient, authSessionClient } from '@api/client';
 import type { AuthTokens, UserProfile, UserRole } from '@stores/authStore';
+import { readAccessToken } from '@api/tokenBridge';
 
 /**
  * Auth Service API bindings (Requirement 1). Shared with the Customer App;
@@ -149,7 +150,15 @@ export async function refreshSession(payload: RefreshTokenPayload): Promise<Auth
  * Idempotent: the service answers 204 even for an already-revoked token.
  */
 export async function revokeRefreshToken(payload: RefreshTokenPayload): Promise<void> {
-  await authClient.post('/auth/logout', payload);
+  // The gateway requires a token on /auth/logout (a build whose auth calls go through the
+  // gateway rather than straight to auth-service would otherwise get a 401 and leave the
+  // refresh token unrevoked), so send the access token while there is one.
+  const accessToken = readAccessToken();
+  await authClient.post(
+    '/auth/logout',
+    payload,
+    accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : undefined,
+  );
 }
 
 // ---------------------------------------------------------------------------

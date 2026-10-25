@@ -113,7 +113,7 @@ export function BrandLogo({
                 color: inverted ? 'rgba(255,255,255,0.7)' : 'text.secondary',
               }}
             >
-              Provider
+              Partner
             </Typography>
           ) : null}
         </Box>

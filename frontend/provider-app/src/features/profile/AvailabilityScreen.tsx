@@ -138,7 +138,7 @@ function EmergencyAvailabilityCard({ profile }: { profile: ProviderProfile }) {
                 color: 'text.secondary',
               }}
             >
-              Urgent requests, such as a burst pipe, go only to providers who opt in. They need a
+              Urgent requests, such as a burst pipe, go only to workers who opt in. They need a
               quick response.
             </Typography>
             {save.isError ? (

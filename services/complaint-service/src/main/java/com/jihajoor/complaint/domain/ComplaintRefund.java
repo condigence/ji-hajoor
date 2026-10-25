@@ -1,6 +1,7 @@
 package com.jihajoor.complaint.domain;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -23,6 +24,15 @@ import jakarta.persistence.Version;
  * {@link ComplaintRefundStatus#SUCCEEDED} (with the Payment Service reference) or
  * {@link ComplaintRefundStatus#FAILED} (with the reason). A failed refund is handed to
  * Finance_Admin for manual processing (16.6) and is not retried through the API.
+ *
+ * <p><strong>Unknown outcome.</strong> When a call ends without a definitive answer the record stays
+ * PENDING: money may have moved. {@link #recordUnknownOutcome} notes why in {@code failure_reason}
+ * (as the Payment Service does on its own PENDING refund), which marks the attempt as over, and
+ * {@link #isResendable} then lets a same-key retry, or the explicit re-send endpoint, re-send it at
+ * once with {@link #beginResend}. An
+ * attempt that never recorded an end (the instance died mid-call) becomes re-sendable once
+ * {@code last_attempt_at} is older than the attempt lease. Every attempt carries the same
+ * {@link #paymentIdempotencyKey()}, so a re-send cannot refund twice.
  *
  * <p>{@link #paymentIdempotencyKey()} is derived from the record id, so every call the complaint
  * makes to the Payment Service for this refund carries the same key and the Payment Service can
@@ -85,6 +95,10 @@ public class ComplaintRefund {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    /** When the latest Payment Service call started; null on rows older than V3 (read as requestedAt). */
+    @Column(name = "last_attempt_at")
+    private Instant lastAttemptAt;
+
     @Version
     @Column(name = "version")
     private Long version;
@@ -104,6 +118,7 @@ public class ComplaintRefund {
         this.clientIdempotencyKey = clientIdempotencyKey;
         this.status = ComplaintRefundStatus.PENDING;
         this.requestedAt = requestedAt;
+        this.lastAttemptAt = requestedAt;
     }
 
     /** Creates a PENDING refund record; persist and commit it before calling the Payment Service. */
@@ -119,6 +134,8 @@ public class ComplaintRefund {
         requirePending(ComplaintRefundStatus.SUCCEEDED);
         this.status = ComplaintRefundStatus.SUCCEEDED;
         this.externalReference = externalReference;
+        // Clears an unknown-outcome note left by an earlier attempt of this same refund.
+        this.failureReason = null;
         this.completedAt = completedAt;
     }
 
@@ -126,10 +143,48 @@ public class ComplaintRefund {
     public void markFailed(String failureReason, Instant completedAt) {
         requirePending(ComplaintRefundStatus.FAILED);
         this.status = ComplaintRefundStatus.FAILED;
-        this.failureReason = failureReason != null && failureReason.length() > REASON_MAX_LENGTH
-                ? failureReason.substring(0, REASON_MAX_LENGTH)
-                : failureReason;
+        this.failureReason = truncate(failureReason);
         this.completedAt = completedAt;
+    }
+
+    /**
+     * Records that the latest Payment Service call ended without a definitive answer, leaving the
+     * refund PENDING: it may or may not have executed, so it must be re-sent under the same key,
+     * never written off as FAILED. The note also marks the attempt as over, so a same-key retry may
+     * re-send it straight away (see {@link #isResendable}).
+     */
+    public void recordUnknownOutcome(String reason) {
+        requirePending(ComplaintRefundStatus.PENDING);
+        this.failureReason = truncate(reason == null || reason.isBlank() ? "outcome unknown" : reason);
+    }
+
+    /**
+     * Whether this refund may be sent to the Payment Service again now: it is PENDING and its latest
+     * attempt either ended with an unknown outcome or started at least {@code attemptLease} ago and
+     * is presumed lost. A PENDING refund inside its lease with no recorded end is still in flight.
+     */
+    public boolean isResendable(Instant now, Duration attemptLease) {
+        if (status != ComplaintRefundStatus.PENDING) {
+            return false;
+        }
+        if (failureReason != null) {
+            return true;
+        }
+        Instant started = lastAttemptAt != null ? lastAttemptAt : requestedAt;
+        return !started.plus(attemptLease).isAfter(now);
+    }
+
+    /** Starts a new attempt of this PENDING refund; it is in flight again from {@code now}. */
+    public void beginResend(Instant now) {
+        requirePending(ComplaintRefundStatus.PENDING);
+        this.lastAttemptAt = now;
+        this.failureReason = null;
+    }
+
+    private static String truncate(String reason) {
+        return reason != null && reason.length() > REASON_MAX_LENGTH
+                ? reason.substring(0, REASON_MAX_LENGTH)
+                : reason;
     }
 
     /**
@@ -193,5 +248,9 @@ public class ComplaintRefund {
 
     public Instant getCompletedAt() {
         return completedAt;
+    }
+
+    public Instant getLastAttemptAt() {
+        return lastAttemptAt;
     }
 }

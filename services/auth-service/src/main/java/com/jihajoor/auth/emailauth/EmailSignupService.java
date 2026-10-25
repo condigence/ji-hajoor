@@ -142,7 +142,8 @@ public class EmailSignupService {
 
     /**
      * Sends a fresh sign-up code if the address has a sign-up waiting; otherwise sends nothing. The
-     * answer is the same either way.
+     * answer is the same either way, a failed send included: it is logged, and a different status
+     * would tell the caller that the address has a sign-up waiting.
      *
      * @return seconds until a code would expire
      * @throws EmailAuthException 429 {@code TOO_MANY_REQUESTS}
@@ -156,7 +157,13 @@ public class EmailSignupService {
                 .filter(account -> !isStale(account))
                 .ifPresent(account -> {
                     String code = codes.issue(CodePurpose.SIGNUP, email, null);
-                    send(email, EmailMessages.signupCode(account.getDisplayName(), code, codes.codeTtl()));
+                    try {
+                        emailSender.send(email, EmailMessages.signupCode(account.getDisplayName(), code,
+                                codes.codeTtl()));
+                    } catch (EmailDeliveryException ex) {
+                        log.warn("Sign-up code resend for account {} could not be sent: {}",
+                                account.getId(), ex.getMessage());
+                    }
                 });
         return codes.codeTtl().getSeconds();
     }

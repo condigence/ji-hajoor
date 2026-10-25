@@ -26,5 +26,8 @@ export const NAV_SECTIONS: readonly NavSection[] = [
   // The Tenant Portal (Requirement MT-11.1). Last, so an account that somehow
   // holds a platform role as well still lands on its platform module; a
   // TENANT_ADMIN sees nothing else, so lands on Requests.
-  { title: 'My agency', paths: ['/tenant/requests', '/tenant/team', '/tenant/jobs'] },
+  {
+    title: 'My agency',
+    paths: ['/tenant/requests', '/tenant/team', '/tenant/jobs', '/tenant/earnings'],
+  },
 ];

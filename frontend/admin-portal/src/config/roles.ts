@@ -84,7 +84,7 @@ export function hasAnyRole(roles: readonly UserRole[], allowed: readonly UserRol
 /** Readable names for roles, as invitations and role lists show them. */
 export const ROLE_LABELS: Record<UserRole, string> = {
   CUSTOMER: 'Customer',
-  SERVICE_PROVIDER: 'Service Provider',
+  SERVICE_PROVIDER: 'Worker / Agent',
   DISPATCHER: 'Dispatcher',
   ADMIN: 'Admin',
   SUPER_ADMIN: 'Super Admin',

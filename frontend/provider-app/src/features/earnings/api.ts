@@ -66,6 +66,7 @@ interface SpringPage<T> {
 
 /** `JOB_CREDIT` → "Job credit": the ledger kind is the only label the row carries. */
 function describeEarningType(type: string): string {
+  if (type === 'AGENCY_SHARE_DEDUCTION') return 'Agency share';
   const words = type.toLowerCase().split('_').filter(Boolean).join(' ');
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Earning';
 }

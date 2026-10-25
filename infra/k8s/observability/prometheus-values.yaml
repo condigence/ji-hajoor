@@ -87,92 +87,39 @@ prometheus:
             replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
 
 # ---------------------------------------------------------------------------
-# ServiceMonitor definitions — one per microservice namespace
+# ServiceMonitor definitions
 # ---------------------------------------------------------------------------
 additionalServiceMonitors:
-  # Namespace: auth-customer-provider
-  - name: auth-customer-provider
+  # Every Ji-Hajoor deployable, in whichever namespace the deploy pipeline uses (K8S_NAMESPACE
+  # per GitHub environment): matched by the label the Helm chart puts on every Service, not by
+  # namespace name. A deployable hosts several services, each on its own named port with its
+  # own Micrometer endpoint at /prometheus (management base-path "/"), so every port name the
+  # chart renders is listed; a Service without a given port simply contributes no target for it.
+  # Port names: "http" is each deployable's first service; the rest come from extraPorts in
+  # helm/services/*.yaml.
+  - name: jihajoor
     selector:
       matchLabels:
-        prometheus.io/scrape: "true"
+        app.kubernetes.io/part-of: jihajoor
     namespaceSelector:
-      matchNames:
-        - auth-customer-provider
+      any: true
     endpoints:
-      - port: http
-        path: /metrics
-        interval: 30s
-        scrapeTimeout: 10s
-
-  # Namespace: booking-dispatch-location
-  - name: booking-dispatch-location
-    selector:
-      matchLabels:
-        prometheus.io/scrape: "true"
-    namespaceSelector:
-      matchNames:
-        - booking-dispatch-location
-    endpoints:
-      - port: http
-        path: /metrics
-        interval: 30s
-        scrapeTimeout: 10s
-
-  # Namespace: payment-invoice-rating
-  - name: payment-invoice-rating
-    selector:
-      matchLabels:
-        prometheus.io/scrape: "true"
-    namespaceSelector:
-      matchNames:
-        - payment-invoice-rating
-    endpoints:
-      - port: http
-        path: /metrics
-        interval: 30s
-        scrapeTimeout: 10s
-
-  # Namespace: notification-chat-complaint
-  - name: notification-chat-complaint
-    selector:
-      matchLabels:
-        prometheus.io/scrape: "true"
-    namespaceSelector:
-      matchNames:
-        - notification-chat-complaint
-    endpoints:
-      - port: http
-        path: /metrics
-        interval: 30s
-        scrapeTimeout: 10s
-
-  # Namespace: admin-reporting-promotion
-  - name: admin-reporting-promotion
-    selector:
-      matchLabels:
-        prometheus.io/scrape: "true"
-    namespaceSelector:
-      matchNames:
-        - admin-reporting-promotion
-    endpoints:
-      - port: http
-        path: /metrics
-        interval: 30s
-        scrapeTimeout: 10s
-
-  # Namespace: catalog-pricing-verification
-  - name: catalog-pricing-verification
-    selector:
-      matchLabels:
-        prometheus.io/scrape: "true"
-    namespaceSelector:
-      matchNames:
-        - catalog-pricing-verification
-    endpoints:
-      - port: http
-        path: /metrics
-        interval: 30s
-        scrapeTimeout: 10s
+      - { port: http, path: /prometheus, interval: 30s, scrapeTimeout: 10s }
+      - { port: customer, path: /prometheus, interval: 30s, scrapeTimeout: 10s }
+      - { port: provider, path: /prometheus, interval: 30s, scrapeTimeout: 10s }
+      - { port: verification, path: /prometheus, interval: 30s, scrapeTimeout: 10s }
+      - { port: pricing, path: /prometheus, interval: 30s, scrapeTimeout: 10s }
+      - { port: promotion, path: /prometheus, interval: 30s, scrapeTimeout: 10s }
+      - { port: booking, path: /prometheus, interval: 30s, scrapeTimeout: 10s }
+      - { port: dispatch, path: /prometheus, interval: 30s, scrapeTimeout: 10s }
+      - { port: location, path: /prometheus, interval: 30s, scrapeTimeout: 10s }
+      - { port: chat, path: /prometheus, interval: 30s, scrapeTimeout: 10s }
+      - { port: invoice, path: /prometheus, interval: 30s, scrapeTimeout: 10s }
+      - { port: notification, path: /prometheus, interval: 30s, scrapeTimeout: 10s }
+      - { port: complaint, path: /prometheus, interval: 30s, scrapeTimeout: 10s }
+      - { port: rating-review, path: /prometheus, interval: 30s, scrapeTimeout: 10s }
+      - { port: admin, path: /prometheus, interval: 30s, scrapeTimeout: 10s }
+      - { port: reporting, path: /prometheus, interval: 30s, scrapeTimeout: 10s }
 
   # Kafka (MSK) JMX exporter
   - name: kafka-jmx
