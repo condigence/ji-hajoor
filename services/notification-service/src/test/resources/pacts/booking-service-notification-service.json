@@ -6,8 +6,10 @@
     {
       "contents": {
         "bookingId": "e2490de5-5bd3-43d5-b7c4-526e33f71304",
-        "reference": "HF-2024-000123",
-        "customerId": "5b1e7c2a-9d34-4f0e-8a61-3c2d9e4b7f10"
+        "bookingReference": "HF-2024-000123",
+        "customerId": "5b1e7c2a-9d34-4f0e-8a61-3c2d9e4b7f10",
+        "mobileNumber": "+919812345678",
+        "emailAddress": "customer@example.com"
       },
       "description": "a booking-lifecycle notification event",
       "generators": {
@@ -31,7 +33,7 @@
               }
             ]
           },
-          "$.reference": {
+          "$.bookingReference": {
             "combine": "AND",
             "matchers": [
               {
@@ -45,6 +47,22 @@
               {
                 "match": "regex",
                 "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              }
+            ]
+          },
+          "$.mobileNumber": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "type"
+              }
+            ]
+          },
+          "$.emailAddress": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "type"
               }
             ]
           }
@@ -62,7 +80,7 @@
   ],
   "metadata": {
     "pact-jvm": {
-      "version": "4.6.21"
+      "version": "4.7.5"
     },
     "pactSpecification": {
       "version": "3.0.0"

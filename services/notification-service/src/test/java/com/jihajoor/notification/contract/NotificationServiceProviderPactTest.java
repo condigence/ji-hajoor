@@ -64,21 +64,23 @@ class NotificationServiceProviderPactTest {
      */
     @PactVerifyProvider("a booking-lifecycle notification event")
     String verifyLifecycleEvent() throws Exception {
-        LifecycleEventPayload payload = new LifecycleEventPayload(
-                UUID.randomUUID(),
-                "HF-2024-000123",
-                UUID.randomUUID(),
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null);
+        // The event as the Booking Service publishes it (bookingReference, plus contact details
+        // the Notification Service may use), read the way the consumer reads it.
+        java.util.Map<String, Object> event = new java.util.LinkedHashMap<>();
+        event.put("bookingId", UUID.randomUUID().toString());
+        event.put("bookingReference", "HF-2024-000123");
+        event.put("customerId", UUID.randomUUID().toString());
+        event.put("mobileNumber", "+919812345678");
+        event.put("emailAddress", "customer@example.com");
+        String json = objectMapper.writeValueAsString(event);
 
+        LifecycleEventPayload payload = objectMapper.readValue(json, LifecycleEventPayload.class);
+        if (!"HF-2024-000123".equals(payload.reference()) || payload.customerId() == null) {
+            throw new IllegalStateException("The Notification Service no longer reads the lifecycle event");
+        }
         // Sanity: the Notification Service can address this event (Requirement 17.4) — the
         // policy throws if the customer it must notify is missing.
         new RecipientPolicy().recipientsFor(NotificationEventType.BOOKING_CREATED, payload.participants());
-        return objectMapper.writeValueAsString(payload);
+        return json;
     }
 }
