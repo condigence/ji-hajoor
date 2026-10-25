@@ -1,9 +1,56 @@
 # Ji-Hajoor
 
-Ji-Hajoor is an on-demand home-services marketplace. Customers book verified providers for
-scheduled or emergency jobs (plumbing, electrical, AC, cleaning). Providers are onboarded
+Ji-Hajoor is an on-demand home-services marketplace. Customers book verified workers for
+scheduled or emergency jobs (plumbing, electrical, AC, cleaning). Workers are onboarded
 through document verification and a background check, then matched to jobs by a dispatch
-engine. Service agencies (tenants) can run their own teams of providers on the platform.
+engine. Service agencies run their own teams of workers on the platform.
+
+Live: [jihajoor.com](https://jihajoor.com) (customers), [partner.jihajoor.com](https://partner.jihajoor.com)
+(workers and agencies' workers), [admin.jihajoor.com](https://admin.jihajoor.com) (Ji-Hajoor staff
+and agency administrators).
+
+> **Naming.** The apps and these docs say *agency* and *worker*. The code, APIs and database
+> keep their original names: an agency is a `Tenant` (`/admin/tenants`, `/tenant/**`,
+> `provider.tenant`) and a worker is a `Provider` / `SERVICE_PROVIDER` (`/providers/**`).
+
+## Who uses it
+
+| Role | App | What they do |
+|---|---|---|
+| Customer | customer app | Sign in with mobile OTP, email or Google; book, track, chat, pay (Razorpay), review, raise complaints, download invoices |
+| Worker / agent | partner app | Register directly, upload verification documents, set services, area and availability, take jobs, record work (photos, parts, quotes), see earnings and request settlements |
+| Agency administrator | admin portal ("My agency") | Apply to become an agency, invite workers, assign requests no independent worker took, follow its jobs, see its earnings |
+| Ji-Hajoor staff | admin portal | Approve agencies and workers, set each agency's share, run bookings, payments, complaints, reviews, coupons, dispatch rules, settings and the audit log (roles: `SUPER_ADMIN`, `ADMIN`, `FINANCE_ADMIN`, `DISPATCHER`, `SUPPORT_AGENT`) |
+
+### Two supply channels
+
+Workers reach customers in two ways, so the platform never depends on agencies alone:
+
+1. **Independent workers** register themselves in the partner app, are verified by Ji-Hajoor and
+   receive job offers directly from the dispatch engine.
+2. **Agencies** apply in the admin portal; once Ji-Hajoor approves them they build a team by
+   **inviting** workers by mobile number. A worker joins only by accepting the invitation in the
+   partner app, which shows the agency's earnings share first, and can later leave to work
+   independently again. (Ji-Hajoor staff can still attach a worker directly.) When no independent
+   worker accepts a request, it waits in the covering agencies' assignment queue and an agency
+   assigns one of its verified workers.
+
+### Money: commission and agency share
+
+For each paid job:
+
+```
+gross (what the customer pays for the service)
+  − platform fee (platformFeeRate per service, 10% in the starter pricing)  → Ji-Hajoor
+  = worker's net
+      − agency share (0–50%, set per agency by Ji-Hajoor; 0 by default)  → the agency
+      = credited to the worker's wallet
+```
+
+Example: a ₹1,000 job with a 10% fee and a 10% agency share credits ₹100 to Ji-Hajoor, ₹90 to
+the agency and ₹810 to the worker. An independent worker keeps the whole net (₹900). The
+worker's earnings list shows the agency share as its own line; the agency sees every job's split on
+its Earnings page. Each booking is credited once, however many times the payment service retries.
 
 ## Repository layout
 
@@ -97,14 +144,62 @@ The live Ji-Hajoor environment runs on Railway from this repository's `main` bra
 - The apps get `DATABASE_URL`, `REDIS_URL` and `KAFKA_BOOTSTRAP_SERVERS` from Railway references; [`deploy/entrypoint.sh`](deploy/entrypoint.sh) maps them onto the Spring settings.
 - Secrets (`JWT_SECRET`, `INTERNAL_API_KEY`, `KMS_*`, webhook and simulator secrets) are shared variables.
 - Services find each other at `http://${{<app>.RAILWAY_PRIVATE_DOMAIN}}:<service port>`, using the port table above.
-- SMS settings live on `identity-app`: `SMS_PROVIDER=msg91`, `MSG91_AUTH_KEY` and `MSG91_OTP_TEMPLATE_ID`. `OTP_FIXED_CODE` puts sign-in into test mode: every OTP is that code and no SMS is sent. Remove it to go live.
+- SMS settings live on `identity-app`: `SMS_PROVIDER=msg91`, `MSG91_AUTH_KEY` and `MSG91_OTP_TEMPLATE_ID`. `OTP_FIXED_CODE` is a test code that works **only** for the numbers in `OTP_FIXED_CODE_NUMBERS` (default: the four seeded test customers and workers, `+919000090001`, `+919000090002`, `+919000090011`, `+919000090012`; an entry ending in `*` is a prefix). Every other number gets a real SMS, and staff accounts never sign in with it. Remove `OTP_FIXED_CODE` to switch test sign-in off entirely.
 - Email: on `identity-app` set `EMAIL_PROVIDER=smtp`, and on `engagement-app` `NOTIFICATION_EMAIL_PROVIDER=smtp`, both with `SMTP_HOST`, `SMTP_PORT` (587), `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_STARTTLS=true` and `EMAIL_FROM` (a sender the SMTP provider has verified). Never `SPRING_MAIL_*`: it would reach every service in the JVM.
 - Verification documents (`identity-app`): `DOCUMENTS_BUCKET`, `DOCUMENTS_S3_REGION`, `DOCUMENTS_S3_ACCESS_KEY_ID` and `DOCUMENTS_S3_SECRET_ACCESS_KEY` (plus `DOCUMENTS_S3_ENDPOINT`), as for photos; without a bucket they go to the container's disk and are lost on redeploy.
 - Job photos (`jobs-app`): `MEDIA_BUCKET`, `MEDIA_S3_REGION`, `MEDIA_S3_ACCESS_KEY_ID` and `MEDIA_S3_SECRET_ACCESS_KEY` (plus `MEDIA_S3_ENDPOINT` for an S3-compatible store) put them in S3. Without a bucket they go to the container's disk, which Railway discards on redeploy. Remove any `MEDIA_STORAGE_PROVIDER=local` so the default `auto` applies.
 - `engagement-app` needs `PAYMENT_SERVICE_URL` (money-app's private domain, port 8088) for complaint refunds and `PROVIDER_SERVICE_URL` (identity-app, port 8083) for provider ratings.
 - Chat uses the shared Redis (`CHAT_CLUSTER=redis`, the default), so `jobs-app` can run more than one replica.
+- Gateway rate limits: per user `RATE_LIMIT_CUSTOMER_PER_MINUTE` (100) and `RATE_LIMIT_PROVIDER_PER_MINUTE` (60); per client IP for signed-out traffic `RATE_LIMIT_ANONYMOUS_PER_IP_PER_MINUTE` (300) and for sign-in, sign-up and password calls `RATE_LIMIT_CREDENTIAL_PER_IP_PER_MINUTE` (30).
 - Runtime settings (app URLs and other `jihajoor.*` keys) live in the `config.app_config` table and can be changed without a redeploy. Environment variables override them.
 - The "Booking flow" workflow ([`deploy/ci`](deploy/ci)) runs this same layout in Docker and drives a full booking through it on every push.
+
+## Technology choices
+
+The stack stays as it is: it already covers everything the product needs, and rewriting working
+software would add risk without adding features.
+
+| Layer | Used here | Instead of | Why |
+|---|---|---|---|
+| Web apps | React 19 + TypeScript + MUI, Vite | Angular | Three working apps with tests; React has the larger hiring pool in India |
+| Mobile | The same React apps packaged with Capacitor (Android, iOS) | Flutter / React Native | One codebase for web and mobile; move to React Native only if native performance is ever needed |
+| Backend | Spring Boot 4 / Java 25, run as a **modular monolith**: 20 services in 5 deployables | Microservices from day one | Each service has its own schema and can be split out later without code changes |
+| Data | PostgreSQL (schema per service), Redis, Kafka with a transactional outbox | — | As recommended |
+| Auth | JWT (HMAC), mobile OTP (MSG91), email, Google and Apple sign-in, staff by invitation | — | As recommended |
+| Payments | Razorpay (orders, checkout, webhooks, refunds) | — | As recommended |
+| Hosting | Railway now (Docker); AWS (EKS, RDS, MSK) prepared in `infra/terraform` and `helm/` | — | Railway is cheapest while small; the AWS path is ready when traffic grows |
+
+## Security
+
+What protects the platform today, by layer. No system can promise it cannot be hacked; this is
+defence in depth, plus the checks that stop regressions.
+
+- **Transport and browser:** HTTPS only (http is redirected, and HSTS makes browsers remember it).
+  Every page carries a strict Content-Security-Policy (only this site's scripts plus Google sign-in
+  and Razorpay checkout), `X-Frame-Options: DENY`, `nosniff`, a Referrer-Policy and a
+  Permissions-Policy. Metrics, health and internal paths are not reachable from the internet.
+- **Identity:** short-lived JWT access tokens checked at the gateway (introspection) and again in
+  every service; refresh-token rotation; role rules on every endpoint (`RbacEnforcementFilter`)
+  plus ownership checks, so a user can only read or change their own bookings, payments, documents
+  and agency. Agencies only ever see their own team, queue and earnings.
+- **Brute force:** OTP codes expire, lock after 5 wrong tries and are limited to 5 requests per
+  number per hour; passwords lock after repeated failures; the gateway also limits each IP's
+  sign-in attempts and signed-out traffic, and each user's request rate.
+- **Input:** a WAF filter at the gateway rejects common injection and traversal patterns; request
+  bodies are validated; uploads are judged by their bytes, not their declared type (photos must be
+  real JPEG, PNG or video; documents must be an image or a PDF) and are served back with `nosniff`
+  and safe content types.
+- **Money:** Razorpay signatures are verified on checkout and webhooks; each booking is credited
+  once (unique indexes); only finance roles can refund or settle.
+- **Secrets:** kept in Railway variables (or AWS Secrets Manager), never in the repository;
+  `.env.example` holds placeholders only.
+- **CI:** the Security workflow blocks a commit that adds a secret (gitleaks) and reports known
+  vulnerabilities in Maven and npm dependencies and Docker images (Trivy, npm audit) on every
+  change and weekly.
+
+Still to do (operational): rotate `JWT_SECRET` and the test-staff password before real customers
+arrive, remove `OTP_FIXED_CODE` once MSG91 delivery is confirmed, keep the Railway gateway without
+a public domain, and act on the weekly vulnerability report.
 
 ## Documentation
 
@@ -122,7 +217,8 @@ All three apps accept email and password; the customer and provider apps also ta
 and Google. The seeded test accounts sign in as `<username>@jihajoor.local` (for example
 `customer@jihajoor.local`, `provider@jihajoor.local`, `admin@jihajoor.local`) with the password
 from `DEV_SEED_PASSWORD` in `.env`. New customers and providers can sign up with an emailed
-code, staff join by invitation, and agencies register themselves for platform-admin approval.
+code, staff join by invitation, and agencies register themselves for platform-admin approval
+and then invite workers.
 Locally, emailed codes and invitation links are written to `docker/dev-mail/dev-mail.log` and
 OTP codes to `docker/dev-sms/dev-sms.log`. See
 [`docs/LOCAL_ACCESS.md`](docs/LOCAL_ACCESS.md).
@@ -139,5 +235,5 @@ customers download their invoice PDF from the booking.
 
 Still stand-ins: push notifications (no device tokens), background checks (an admin records the
 result in the Admin Portal's Verification Queue), invoice PDF storage (in memory, re-rendered
-from the invoice row on demand) and the Admin dashboard's metrics (zeros). The architecture
-document marks each one.
+from the invoice row on demand) and the Admin dashboard's metrics (zeros). Agency payouts are a ledger only: the agency's share is recorded, and paying it out is
+still done outside the platform. The architecture document marks each one.
