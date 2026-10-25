@@ -5,9 +5,9 @@ import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded';
 import NearMeRoundedIcon from '@mui/icons-material/NearMeRounded';
 import { BrandLogo } from '@components/BrandLogo';
 import { brand, brandGradient, radius, shadows } from '@lib/theme';
+import SiteCredit from '../../components/SiteCredit';
 
 /** For the footer's copyright line; read once, not on every render. */
-const COPYRIGHT_YEAR = new Date().getFullYear();
 
 /** Proof points shown on the brand panel. */
 const VALUE_PROPS = [
@@ -212,12 +212,14 @@ function BrandPanel() {
         </Stack>
       </Box>
 
-      <Typography
-        variant="caption"
-        sx={{ position: 'relative', opacity: 0.6, display: { xs: 'none', md: 'block' } }}
-      >
-        © {COPYRIGHT_YEAR} Ji-Hajoor · Verified Help. Anytime. Anywhere.
-      </Typography>
+      <SiteCredit
+        sx={{
+          position: 'relative',
+          color: 'inherit',
+          opacity: 0.6,
+          display: { xs: 'none', md: 'block' },
+        }}
+      />
     </Box>
   );
 }

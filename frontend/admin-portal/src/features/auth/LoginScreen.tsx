@@ -33,9 +33,9 @@ import { MobileStep } from './MobileStep';
 import { OtpStep } from './OtpStep';
 import { PasswordStep } from './PasswordStep';
 import type { CredentialsFormValues, MobileFormValues } from './schemas';
+import SiteCredit from '../../components/SiteCredit';
 
 /** For the footer's copyright line; read once, not on every render. */
-const COPYRIGHT_YEAR = new Date().getFullYear();
 
 interface RedirectState {
   from?: { pathname?: string };
@@ -337,12 +337,7 @@ export function LoginScreen() {
           </Stack>
         </Stack>
 
-        <Typography
-          variant="caption"
-          sx={{ position: 'relative', color: 'rgba(255,255,255,0.55)' }}
-        >
-          © {COPYRIGHT_YEAR} Ji-Hajoor. Internal staff console.
-        </Typography>
+        <SiteCredit sx={{ position: 'relative', color: 'rgba(255,255,255,0.55)' }} />
       </Box>
 
       {/* Form panel. */}

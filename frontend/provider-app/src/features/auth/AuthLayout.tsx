@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Box, Card, CardContent, Container, Link, Stack, Typography } from '@mui/material';
 import { BrandLogo } from '@components/BrandLogo';
+import SiteCredit from '../../components/SiteCredit';
 
 interface AuthLayoutProps {
   title: string;
@@ -81,6 +82,7 @@ export function AuthLayout({ title, subtitle, children, below }: AuthLayoutProps
           </Link>
           .
         </Typography>
+        <SiteCredit align="center" sx={{ display: 'block', mt: 1.5 }} />
       </Container>
     </Box>
   );
