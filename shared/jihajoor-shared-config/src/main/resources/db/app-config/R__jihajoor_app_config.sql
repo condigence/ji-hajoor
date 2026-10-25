@@ -16,27 +16,32 @@
 -- It is a repeatable migration in every service's spring.flyway.locations, and every statement
 -- is idempotent: the rows below are defaults for a new database and never overwrite a value
 -- already there. Services keep their Flyway history in their own schemas, so the advisory lock
--- (not Flyway's) serialises concurrent cold starts.
+-- (not Flyway's) serialises concurrent cold starts. It runs inside one DO block, a single atomic
+-- statement, so the lock is held until the DDL commits however Flyway runs the script.
 
-SELECT pg_advisory_xact_lock(hashtext('jihajoor-shared-config-schema'));
+DO $appconfig$
+BEGIN
+    PERFORM pg_advisory_xact_lock(hashtext('jihajoor-shared-config-schema'));
 
-CREATE SCHEMA IF NOT EXISTS config;
+    CREATE SCHEMA IF NOT EXISTS config;
 
-CREATE TABLE IF NOT EXISTS config.app_config (
-    config_key         varchar(200)                NOT NULL,
-    config_value       text                        NOT NULL,
-    exposed_to_clients boolean                     NOT NULL DEFAULT false,
-    description        varchar(500),
-    updated_at         timestamp(6) with time zone NOT NULL DEFAULT now(),
-    PRIMARY KEY (config_key)
-);
+    CREATE TABLE IF NOT EXISTS config.app_config (
+        config_key         varchar(200)                NOT NULL,
+        config_value       text                        NOT NULL,
+        exposed_to_clients boolean                     NOT NULL DEFAULT false,
+        description        varchar(500),
+        updated_at         timestamp(6) with time zone NOT NULL DEFAULT now(),
+        PRIMARY KEY (config_key)
+    );
 
--- The web apps' public addresses (the local stack's defaults).
-INSERT INTO config.app_config (config_key, config_value, exposed_to_clients, description) VALUES
-    ('jihajoor.apps.customer-app-url', 'http://localhost:5173', true,
-     'Public base URL of the Customer App.'),
-    ('jihajoor.apps.provider-app-url', 'http://localhost:5174', true,
-     'Public base URL of the Provider App (the Customer App''s "Join as a professional" link).'),
-    ('jihajoor.apps.admin-portal-url', 'http://localhost:5175', true,
-     'Public base URL of the Admin Portal (the link in staff invitation emails).')
-ON CONFLICT (config_key) DO NOTHING;
+    -- The web apps' public addresses (the local stack's defaults).
+    INSERT INTO config.app_config (config_key, config_value, exposed_to_clients, description) VALUES
+        ('jihajoor.apps.customer-app-url', 'http://localhost:5173', true,
+         'Public base URL of the Customer App.'),
+        ('jihajoor.apps.provider-app-url', 'http://localhost:5174', true,
+         'Public base URL of the Provider App (the Customer App''s "Join as a professional" link).'),
+        ('jihajoor.apps.admin-portal-url', 'http://localhost:5175', true,
+         'Public base URL of the Admin Portal (the link in staff invitation emails).')
+    ON CONFLICT (config_key) DO NOTHING;
+END
+$appconfig$;

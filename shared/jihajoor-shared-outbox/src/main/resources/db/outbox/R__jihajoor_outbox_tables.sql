@@ -9,41 +9,48 @@
 -- (and again whenever this file changes), and the result is the same whichever service starts
 -- first. Services keep their Flyway history in their own schemas, so Flyway's own lock does not
 -- serialise them; the advisory lock below does, so concurrent cold starts cannot race on
--- CREATE TABLE IF NOT EXISTS.
+-- CREATE SCHEMA / CREATE TABLE IF NOT EXISTS. Everything runs inside one DO block, a single
+-- atomic statement, so the transaction-scoped lock is held until the DDL commits even when
+-- Flyway runs the script outside an explicit transaction (two services of one deployable
+-- once failed at once with "duplicate key ... pg_namespace_nspname_index").
 --
 -- Mirrors OutboxEventEntity and ProcessedEventEntity exactly (ddl-auto=validate checks them).
 -- docker/init-db.sql creates the same outbox_event table for the local stack; keep them in step.
 
-SELECT pg_advisory_xact_lock(hashtext('jihajoor-shared-outbox-schema'));
+DO $outbox$
+BEGIN
+    PERFORM pg_advisory_xact_lock(hashtext('jihajoor-shared-outbox-schema'));
 
-CREATE SCHEMA IF NOT EXISTS outbox;
+    CREATE SCHEMA IF NOT EXISTS outbox;
 
-CREATE TABLE IF NOT EXISTS outbox.outbox_event (
-    id              uuid                        NOT NULL,
-    aggregate_type  varchar(100)                NOT NULL,
-    aggregate_id    uuid                        NOT NULL,
-    event_type      varchar(150)                NOT NULL,
-    payload         text                        NOT NULL,
-    status          varchar(20)                 NOT NULL
-                    CHECK (status IN ('PENDING', 'PUBLISHED', 'FAILED')),
-    retry_count     integer                     NOT NULL,
-    created_at      timestamp(6) with time zone NOT NULL,
-    published_at    timestamp(6) with time zone,
-    -- The relay's claim lease or next retry time; NULL means due now.
-    next_attempt_at timestamp(6) with time zone,
-    last_error      varchar(2000),
-    version         bigint                      NOT NULL,
-    PRIMARY KEY (id)
-);
--- Databases created before next_attempt_at existed.
-ALTER TABLE outbox.outbox_event ADD COLUMN IF NOT EXISTS next_attempt_at timestamp(6) with time zone;
-CREATE INDEX IF NOT EXISTS idx_outbox_status_created ON outbox.outbox_event (status, created_at);
+    CREATE TABLE IF NOT EXISTS outbox.outbox_event (
+        id              uuid                        NOT NULL,
+        aggregate_type  varchar(100)                NOT NULL,
+        aggregate_id    uuid                        NOT NULL,
+        event_type      varchar(150)                NOT NULL,
+        payload         text                        NOT NULL,
+        status          varchar(20)                 NOT NULL
+                        CHECK (status IN ('PENDING', 'PUBLISHED', 'FAILED')),
+        retry_count     integer                     NOT NULL,
+        created_at      timestamp(6) with time zone NOT NULL,
+        published_at    timestamp(6) with time zone,
+        -- The relay's claim lease or next retry time; NULL means due now.
+        next_attempt_at timestamp(6) with time zone,
+        last_error      varchar(2000),
+        version         bigint                      NOT NULL,
+        PRIMARY KEY (id)
+    );
+    -- Databases created before next_attempt_at existed.
+    ALTER TABLE outbox.outbox_event ADD COLUMN IF NOT EXISTS next_attempt_at timestamp(6) with time zone;
+    CREATE INDEX IF NOT EXISTS idx_outbox_status_created ON outbox.outbox_event (status, created_at);
 
--- One row per (consumer group, event) a consumer has handled; the primary key is what makes a
--- redelivered event a no-op.
-CREATE TABLE IF NOT EXISTS outbox.processed_event (
-    consumer_group varchar(150)                NOT NULL,
-    event_id       uuid                        NOT NULL,
-    processed_at   timestamp(6) with time zone NOT NULL,
-    PRIMARY KEY (consumer_group, event_id)
-);
+    -- One row per (consumer group, event) a consumer has handled; the primary key is what makes a
+    -- redelivered event a no-op.
+    CREATE TABLE IF NOT EXISTS outbox.processed_event (
+        consumer_group varchar(150)                NOT NULL,
+        event_id       uuid                        NOT NULL,
+        processed_at   timestamp(6) with time zone NOT NULL,
+        PRIMARY KEY (consumer_group, event_id)
+    );
+END
+$outbox$;
