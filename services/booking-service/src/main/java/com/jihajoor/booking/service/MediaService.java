@@ -132,6 +132,10 @@ public class MediaService {
         if (file.sizeBytes() <= 0) {
             throw BookingException.media("Media file is empty");
         }
+        // The declared type is the client's word; the bytes must really be that format.
+        if (!com.jihajoor.shared.security.FileSignatures.matches(file.bytes(), file.contentType())) {
+            throw BookingException.media("The file's content is not a valid " + file.contentType());
+        }
         if (file.sizeBytes() > cfg.getMaxFileSize()) {
             throw BookingException.media(
                     "Media file exceeds the maximum size of " + cfg.getMaxFileSize() + " bytes");

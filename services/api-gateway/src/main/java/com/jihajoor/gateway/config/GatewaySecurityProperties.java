@@ -159,6 +159,31 @@ public class GatewaySecurityProperties {
         public void setDefaultPerMinute(int defaultPerMinute) {
             this.defaultPerMinute = defaultPerMinute;
         }
+
+        /** Signed-out requests per client IP per minute, on any path. 0 switches it off. */
+        private int anonymousPerIpPerMinute = 300;
+
+        /**
+         * Sign-in, sign-up and password requests per client IP per minute: slows password and
+         * code guessing across many accounts, which the per-account lockouts cannot see. 0 off.
+         */
+        private int credentialPerIpPerMinute = 30;
+
+        public int getAnonymousPerIpPerMinute() {
+            return anonymousPerIpPerMinute;
+        }
+
+        public void setAnonymousPerIpPerMinute(int anonymousPerIpPerMinute) {
+            this.anonymousPerIpPerMinute = anonymousPerIpPerMinute;
+        }
+
+        public int getCredentialPerIpPerMinute() {
+            return credentialPerIpPerMinute;
+        }
+
+        public void setCredentialPerIpPerMinute(int credentialPerIpPerMinute) {
+            this.credentialPerIpPerMinute = credentialPerIpPerMinute;
+        }
     }
 
     /** Per-phone OTP rate-limit settings (Requirement 23.4). */

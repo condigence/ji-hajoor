@@ -1,0 +1,116 @@
+name: Security — Secrets, Dependencies, Containers
+
+# Blocks a push or pull request that adds a secret (API key, private key, token).
+# Also reports known vulnerabilities in the Maven and npm dependencies and in
+# the base images, every week and on every change, in the run summary.
+# The secret check fails the run; the vulnerability reports do not (yet), so a
+# newly published CVE in a transitive dependency never blocks an urgent fix.
+# Fix CRITICAL findings promptly and HIGH ones in the next release.
+
+on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+  pull_request:
+    branches:
+      - main
+      - 'release/**'
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: No secrets in new commits
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          curl -sSfL -o /tmp/gitleaks.tgz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+      - name: Scan the commits this change adds
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          # Only the new commits: history from before this check is covered by
+          # rotating any secret it ever held, not by failing every run.
+          case "$EVENT" in
+            pull_request) range="$PR_BASE..$SHA" ;;
+            push)
+              if [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ]; then
+                range="$PUSH_BEFORE..$SHA"
+              else
+                range="$SHA~1..$SHA"
+              fi ;;
+            *) range="$SHA~20..$SHA" ;;
+          esac
+          echo "Scanning $range"
+          /tmp/gitleaks git --redact --no-banner --exit-code 1 \
+            --config .gitleaks.toml --log-opts="$range" .
+
+  dependencies:
+    name: Dependency and image vulnerabilities (report)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan Maven, npm and Dockerfiles
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          skip-dirs: 'node_modules,target,dist'
+          format: table
+          output: trivy.txt
+          exit-code: '0'
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo '## Vulnerabilities (CRITICAL and HIGH, with a fix available)'
+            echo '```'
+            head -c 60000 trivy.txt 2>/dev/null || echo 'no report'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  npm-audit:
+    name: npm audit (report)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [customer-app, provider-app, admin-portal]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Audit production dependencies
+        working-directory: frontend/${{ matrix.app }}
+        run: |
+          {
+            echo "## npm audit — ${{ matrix.app }}"
+            echo '```'
+            npm audit --omit=dev --audit-level=high 2>&1 | tail -40 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -58,7 +58,28 @@ class MediaServiceTest {
     }
 
     private static MediaFile file(String contentType, long size) {
-        return new MediaFile("f", contentType, size, new byte[]{1});
+        return new MediaFile("f", contentType, size, contentOf(contentType));
+    }
+
+    /** The first bytes of a real file of that type, so the signature check passes. */
+    private static byte[] contentOf(String contentType) {
+        return switch (contentType) {
+            case "image/jpeg" -> new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0};
+            case "image/png" -> new byte[]{(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+            case "video/mp4", "video/quicktime" -> new byte[]{0, 0, 0, 0x18, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm'};
+            default -> new byte[]{1};
+        };
+    }
+
+    @Test
+    void refusesAFileWhoseContentIsNotTheDeclaredType() {
+        when(mediaRepository.countByBookingId(BOOKING)).thenReturn(0L);
+        MediaFile html = new MediaFile("x.jpg", "image/jpeg", 20,
+                "<script>alert(1)</script>".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> service.attach(BOOKING, "BEFORE_PHOTO", List.of(html)))
+                .isInstanceOf(BookingException.class);
+        verify(storage, org.mockito.Mockito.never()).store(any(), any(), any());
     }
 
     @Test

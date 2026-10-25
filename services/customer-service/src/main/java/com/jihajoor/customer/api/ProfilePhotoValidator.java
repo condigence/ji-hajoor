@@ -36,5 +36,17 @@ public final class ProfilePhotoValidator {
             throw new CustomerException(HttpStatus.BAD_REQUEST, "PHOTO_TOO_LARGE",
                     "Profile photo must not exceed 5 MB");
         }
+        // The bytes must really be the declared image type, not a script renamed .jpg.
+        byte[] head;
+        try (var in = photo.getInputStream()) {
+            head = in.readNBytes(16);
+        } catch (java.io.IOException e) {
+            throw new CustomerException(HttpStatus.BAD_REQUEST, "INVALID_PHOTO_TYPE",
+                    "Profile photo could not be read");
+        }
+        if (!com.jihajoor.shared.security.FileSignatures.matches(head, contentType)) {
+            throw new CustomerException(HttpStatus.BAD_REQUEST, "INVALID_PHOTO_TYPE",
+                    "Profile photo must be JPEG or PNG");
+        }
     }
 }

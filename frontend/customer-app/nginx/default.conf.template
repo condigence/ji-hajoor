@@ -42,10 +42,8 @@ server {
 
     # Baseline security headers. nginx only inherits add_header from an outer
     # level when the inner level declares none of its own, so every location
-    # below that sets a header of its own repeats these three.
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header X-Frame-Options "DENY" always;
+    # below that sets a header of its own includes them again.
+    include /etc/nginx/snippets/security-headers.conf;
 
     # Compress text assets. The JS bundle is ~800 KB raw and ~250 KB gzipped, so
     # this is the single biggest win on first load.
@@ -67,9 +65,7 @@ server {
     # build produces new names.
     location /assets/ {
         add_header Cache-Control "public, max-age=31536000, immutable";
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-        add_header X-Frame-Options "DENY" always;
+        include /etc/nginx/snippets/security-headers.conf;
         try_files $uri =404;
     }
 
@@ -78,9 +74,13 @@ server {
     # previous build, and a redeploy appears to change nothing.
     location = /index.html {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-        add_header X-Frame-Options "DENY" always;
+        include /etc/nginx/snippets/security-headers.conf;
+    }
+
+    # The gateway's own metrics and health endpoints, and any service-to-service
+    # path, are for the platform's monitoring only: never served to the internet.
+    location ~* ^/api/(prometheus|metrics|actuator|internal|health)(/|$) {
+        return 404;
     }
 
     # Auth calls go straight to the Auth Service, preserving the /auth prefix.

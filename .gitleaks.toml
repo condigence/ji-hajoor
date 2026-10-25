@@ -1,0 +1,17 @@
+# gitleaks configuration for the "Security" workflow: the default rules, minus
+# documentation examples and test fixtures, which hold placeholder values only.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documentation examples and test fixtures"
+paths = [
+  '''docs/API_CONTRACTS\.md''',
+  '''(^|/)src/test/''',
+  '''\.test\.(ts|tsx)$''',
+  '''(^|/)package-lock\.json$''',
+]
+regexes = [
+  '''rzp_test_x+''',
+  '''unit-test-signing-secret''',
+]

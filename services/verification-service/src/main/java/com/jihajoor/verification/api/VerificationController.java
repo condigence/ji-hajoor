@@ -18,6 +18,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.jihajoor.shared.security.FileSignatures;
+
 import com.jihajoor.verification.api.dto.VerificationResponse;
 import com.jihajoor.verification.domain.DocumentType;
 import com.jihajoor.verification.domain.Verification;
@@ -69,8 +71,15 @@ public class VerificationController {
             DocumentType type = parseType(entry.getKey());
             MultipartFile file = entry.getValue();
             try {
-                uploads.add(new DocumentUpload(type, file.getBytes(), file.getContentType(),
-                        file.getOriginalFilename()));
+                byte[] content = file.getBytes();
+                // Judge the file by its bytes, not the type the client claims: only images and
+                // PDFs are kept, so a script or web page can never be stored as a document.
+                String detected = FileSignatures.detect(content)
+                        .filter(t -> t.startsWith("image/") || t.equals("application/pdf"))
+                        .orElseThrow(() -> new VerificationException(HttpStatus.BAD_REQUEST,
+                                "UNSUPPORTED_DOCUMENT_TYPE",
+                                "Upload a photo or a PDF for " + entry.getKey()));
+                uploads.add(new DocumentUpload(type, content, detected, file.getOriginalFilename()));
             } catch (IOException e) {
                 throw new VerificationException(HttpStatus.BAD_REQUEST, "DOCUMENT_READ_FAILED",
                         "Could not read uploaded document: " + entry.getKey());
