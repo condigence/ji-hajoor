@@ -1,6 +1,5 @@
 package com.jihajoor.gateway.filter;
 
-import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -28,8 +27,8 @@ import reactor.core.publisher.Mono;
  * sign-in, sign-up and password calls. The account lockouts stop guessing one account's
  * password or code; this slows an attacker spreading guesses over many accounts.
  *
- * <p>The client IP is {@code X-Real-IP}, which the edge (Railway, a load balancer) sets, else the
- * socket's address. It is hashed into the counter key, so no address is stored in Redis.
+ * <p>The client IP is {@code X-Real-IP}, set by the web apps' nginx from the edge's headers. It is
+ * hashed into the counter key, so no address is stored in Redis.
  * Health and metrics paths are never counted.
  */
 @Component
@@ -92,16 +91,18 @@ public class AnonymousIpRateLimitGatewayFilter implements GlobalFilter, Ordered 
         return counter.incrementAndGet(key, WINDOW).map(count -> count <= limit);
     }
 
+    /**
+     * The visitor's address from {@code X-Real-IP}, which the web apps' nginx always sets. Without
+     * it the request came from inside the platform or straight to the gateway: the socket address
+     * would then be a proxy shared by every visitor, so no address is used and the IP limits do
+     * not apply (the per-account lockouts still do).
+     */
     static String clientIp(ServerWebExchange exchange) {
         String real = exchange.getRequest().getHeaders().getFirst("X-Real-IP");
-        if (real != null && !real.isBlank() && real.length() <= 64) {
-            return real.strip();
-        }
-        InetSocketAddress remote = exchange.getRequest().getRemoteAddress();
-        if (remote == null) {
+        if (real == null || real.isBlank() || real.length() > 64) {
             return null;
         }
-        return remote.getAddress() != null ? remote.getAddress().getHostAddress() : remote.getHostString();
+        return real.strip();
     }
 
     private static boolean matches(String path, List<String> prefixes) {

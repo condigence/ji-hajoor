@@ -75,4 +75,14 @@ class AnonymousIpRateLimitGatewayFilterTest {
         assertThat(send("/bookings", "203.0.113.9", true)).isNotEqualTo(HttpStatus.TOO_MANY_REQUESTS);
         assertThat(send("/health", "203.0.113.9", false)).isNotEqualTo(HttpStatus.TOO_MANY_REQUESTS);
     }
+
+    @Test
+    void withoutAVisitorAddressNothingIsLimited_soVisitorsNeverShareOneBucket() {
+        for (int i = 0; i < 20; i++) {
+            MockServerWebExchange exchange = MockServerWebExchange.from(
+                    MockServerHttpRequest.post("/auth/login/password").build());
+            filter.filter(exchange, chain).block();
+            assertThat(exchange.getResponse().getStatusCode()).isNotEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+        }
+    }
 }

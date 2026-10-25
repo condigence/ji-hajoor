@@ -20,6 +20,17 @@ map $http_x_forwarded_proto $forwarded_proto {
     ''      $scheme;
 }
 
+# The visitor's address for the gateway's per-IP limits: the edge's X-Real-IP,
+# else the first X-Forwarded-For entry, else the connection's own address.
+map $http_x_forwarded_for $first_forwarded_for {
+    default                 $remote_addr;
+    "~^\s*([0-9a-fA-F:.]+)" $1;
+}
+map $http_x_real_ip $client_real_ip {
+    default $http_x_real_ip;
+    ''      $first_forwarded_for;
+}
+
 server {
     listen ${PORT};
     ${NGINX_LISTEN_V6}
@@ -100,6 +111,7 @@ server {
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        proxy_set_header X-Real-IP $client_real_ip;
         # An https:// upstream needs SNI to get the right certificate.
         proxy_ssl_server_name on;
         # WebSocket (chat) and SSE (live location) both need HTTP/1.1 with the
@@ -127,6 +139,7 @@ server {
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        proxy_set_header X-Real-IP $client_real_ip;
         # An https:// upstream needs SNI to get the right certificate.
         proxy_ssl_server_name on;
         # WebSocket (chat) and SSE (live location) both need HTTP/1.1 with the
