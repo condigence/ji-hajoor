@@ -6,6 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.persistence.autoconfigure.EntityScan;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Entry point for the Ji-Hajoor Rating &amp; Review Service.
@@ -21,9 +22,13 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
  * <p>The shared security, observability, and outbox libraries auto-configure from the classpath.
  * The shared outbox JPA entities/repositories live in {@code com.jihajoor.shared.outbox}, so both
  * they and this service's own persistence packages are explicitly scanned.
+ *
+ * <p>{@code @EnableScheduling} drives the sweep that re-sends provider ratings the Provider Service
+ * has not confirmed ({@code ProviderRatingSweeper}).
  */
 @SpringBootApplication
 @EnableConfigurationProperties(RatingProperties.class)
+@EnableScheduling
 // One base package per source root, not one class per entity/repository:
 // ProcessedEventRepository sits in the com.jihajoor.shared.outbox.kafka SUBpackage, so
 // naming both classes scans that subpackage twice and the duplicate bean definition

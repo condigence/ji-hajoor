@@ -127,6 +127,36 @@ class ChatRbacConfigTest {
         verify(chain, never()).doFilter(any(), any());
     }
 
+    // ----- Channel lookup and the apps' WebSocket upgrade ----------------------------------------
+
+    private static final String CHANNEL = "/chat/bookings/" + BOOKING + "/channel";
+    private static final String SOCKET = "/chat/channels/" + BOOKING + "/ws";
+
+    @Test
+    void participantsMayResolveTheChannelAndOpenTheSocket() throws Exception {
+        for (String role : new String[] {"CUSTOMER", "SERVICE_PROVIDER"}) {
+            authenticateAs(role);
+            assertThat(invoke("GET", CHANNEL, mock(FilterChain.class)).getStatus()).as(role).isEqualTo(200);
+            assertThat(invoke("GET", SOCKET, mock(FilterChain.class)).getStatus()).as(role).isEqualTo(200);
+        }
+    }
+
+    @Test
+    void staffAreForbiddenFromTheChannelAndTheSocket() throws Exception {
+        authenticateAs("ADMIN");
+
+        assertThat(invoke("GET", CHANNEL, mock(FilterChain.class)).getStatus()).isEqualTo(403);
+        assertThat(invoke("GET", SOCKET, mock(FilterChain.class)).getStatus()).isEqualTo(403);
+    }
+
+    @Test
+    void unauthenticatedSocketUpgradeIsUnauthorized() throws Exception {
+        FilterChain chain = mock(FilterChain.class);
+
+        assertThat(invoke("GET", SOCKET, chain).getStatus()).isEqualTo(401);
+        verify(chain, never()).doFilter(any(), any());
+    }
+
     // ----- Surfaces that must stay rule-free ----------------------------------------------------
 
     @Test

@@ -15,6 +15,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,6 +44,7 @@ import com.jihajoor.complaint.domain.ComplaintRefundStatus;
 import com.jihajoor.complaint.domain.ComplaintRepository;
 import com.jihajoor.complaint.domain.ComplaintStatus;
 import com.jihajoor.complaint.domain.ServicePriority;
+import com.jihajoor.complaint.payment.RefundOutcomeUnknownException;
 import com.jihajoor.complaint.payment.RefundPort;
 import com.jihajoor.complaint.payment.RefundResult;
 import com.jihajoor.complaint.support.FixedSupportAgentDirectory;
@@ -161,6 +163,76 @@ class ComplaintRefundJpaTest {
                 complaints.findById(complaint.getId()).orElseThrow());
         assertThat(storedComplaint.getStatus()).isEqualTo(ComplaintStatus.REFUND_FAILED);
         assertThat(financeAlerts.alerts()).containsExactly(complaint.getId());
+    }
+
+    @Test
+    void unknownOutcomeStaysPendingAndASameKeyRetryResendsItUnderTheSamePaymentKey() {
+        Complaint complaint = persistedComplaint();
+        List<String> keysSent = new CopyOnWriteArrayList<>();
+        AtomicBoolean paymentServiceDown = new AtomicBoolean(true);
+        RefundPort port = (bookingId, complaintId, amount, key) -> {
+            keysSent.add(key);
+            if (paymentServiceDown.get()) {
+                throw new RefundOutcomeUnknownException("read timed out");
+            }
+            return RefundResult.approved("pay_rf_9");
+        };
+        ComplaintService service = service(port);
+        ApproveRefundCommand approval = new ApproveRefundCommand(complaint.getId(),
+                new BigDecimal("1250.00"), "tap leaked", APPROVER, "agent-req-1");
+
+        assertThatThrownBy(() -> service.approveRefund(approval))
+                .isInstanceOf(ComplaintException.class)
+                .extracting(e -> ((ComplaintException) e).getErrorCode())
+                .isEqualTo("REFUND_OUTCOME_UNKNOWN");
+        ComplaintRefund pending = tx.execute(status ->
+                refunds.findByComplaintId(complaint.getId()).orElseThrow());
+        assertThat(pending.getStatus()).isEqualTo(ComplaintRefundStatus.PENDING);
+        assertThat(pending.getFailureReason()).contains("read timed out");
+        assertThat(pending.getLastAttemptAt()).isNotNull();
+        assertThat(pending.getCompletedAt()).isNull();
+
+        paymentServiceDown.set(false);
+        service.approveRefund(approval);
+
+        ComplaintRefund stored = tx.execute(status ->
+                refunds.findById(pending.getId()).orElseThrow());
+        assertThat(stored.getStatus()).isEqualTo(ComplaintRefundStatus.SUCCEEDED);
+        assertThat(stored.getExternalReference()).isEqualTo("pay_rf_9");
+        assertThat(stored.getFailureReason()).isNull();
+        assertThat(keysSent).hasSize(2).containsOnly(stored.paymentIdempotencyKey());
+        assertThat(tx.execute(status -> complaints.findById(complaint.getId()).orElseThrow())
+                .getStatus()).isEqualTo(ComplaintStatus.OPEN);
+    }
+
+    @Test
+    void keylessRefundWithAnUnknownOutcomeIsResentExplicitlyUnderTheSamePaymentKey() {
+        Complaint complaint = persistedComplaint();
+        List<String> keysSent = new CopyOnWriteArrayList<>();
+        AtomicBoolean paymentServiceDown = new AtomicBoolean(true);
+        RefundPort port = (bookingId, complaintId, amount, key) -> {
+            keysSent.add(key);
+            if (paymentServiceDown.get()) {
+                throw new RefundOutcomeUnknownException("read timed out");
+            }
+            return RefundResult.approved("pay_rf_11");
+        };
+        ComplaintService service = service(port);
+
+        assertThatThrownBy(() -> service.approveRefund(approve(complaint.getId())))
+                .isInstanceOf(ComplaintException.class);
+        ComplaintRefund pending = tx.execute(status -> service.getRefund(complaint.getId()));
+        assertThat(pending.getStatus()).isEqualTo(ComplaintRefundStatus.PENDING);
+        assertThat(pending.getClientIdempotencyKey()).isNull();
+
+        paymentServiceDown.set(false);
+        service.resendRefund(complaint.getId(), APPROVER);
+
+        ComplaintRefund stored = tx.execute(status ->
+                refunds.findById(pending.getId()).orElseThrow());
+        assertThat(stored.getStatus()).isEqualTo(ComplaintRefundStatus.SUCCEEDED);
+        assertThat(stored.getExternalReference()).isEqualTo("pay_rf_11");
+        assertThat(keysSent).hasSize(2).containsOnly(stored.paymentIdempotencyKey());
     }
 
     @Test

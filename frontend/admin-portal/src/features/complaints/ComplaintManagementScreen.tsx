@@ -17,8 +17,12 @@ import { QueryStateView } from '@components/QueryStateView';
 import { DataTable, type Column } from '@components/DataTable';
 import { StatusChip } from '@components/StatusChip';
 import { formatDateTime } from '@lib/format';
+import { hasAnyRole } from '@config/roles';
+import { useAuthStore } from '@stores/authStore';
 import { useComplaints, useUpdateComplaint } from './hooks';
+import { ComplaintRefundDialog } from './ComplaintRefundDialog';
 import {
+  COMPLAINT_REFUND_ROLES,
   COMPLAINT_STATUSES,
   complaintTransitions,
   isSlaBreached,
@@ -35,13 +39,17 @@ function statusLabel(status: ComplaintStatus): string {
 /**
  * Complaint Management module (Requirement 19.2). Lists complaints with search
  * and a status filter, flags SLA breaches, and lets an agent update the status
- * and record a resolution note.
+ * and record a resolution note, and approve, follow and re-send the
+ * complaint's refund (Requirement 16.5, 16.6).
  */
 export function ComplaintManagementScreen() {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<ComplaintStatus | ''>('');
   const [editing, setEditing] = useState<AdminComplaint | null>(null);
+  const [refunding, setRefunding] = useState<AdminComplaint | null>(null);
+  const roles = useAuthStore((state) => state.user?.roles);
+  const canRefund = hasAnyRole(roles ?? [], COMPLAINT_REFUND_ROLES);
 
   const complaintsQuery = useComplaints(search, status);
 
@@ -66,9 +74,16 @@ export function ComplaintManagementScreen() {
       header: '',
       align: 'right',
       render: (row) => (
-        <Button size="small" variant="outlined" onClick={() => setEditing(row)}>
-          Manage
-        </Button>
+        <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
+          {canRefund ? (
+            <Button size="small" variant="text" onClick={() => setRefunding(row)}>
+              Refund
+            </Button>
+          ) : null}
+          <Button size="small" variant="outlined" onClick={() => setEditing(row)}>
+            Manage
+          </Button>
+        </Stack>
       ),
     },
   ];
@@ -129,6 +144,9 @@ export function ComplaintManagementScreen() {
       </QueryStateView>
 
       {editing ? <ManageDialog complaint={editing} onClose={() => setEditing(null)} /> : null}
+      {refunding ? (
+        <ComplaintRefundDialog complaint={refunding} onClose={() => setRefunding(null)} />
+      ) : null}
     </ModuleScreen>
   );
 }

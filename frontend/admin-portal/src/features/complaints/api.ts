@@ -1,4 +1,6 @@
-import { apiClient } from '@api/client';
+import { apiClient, isApiError } from '@api/client';
+import { SUPPORT_ROLES } from '@config/roles';
+import type { UserRole } from '@stores/authStore';
 
 /**
  * Complaint Management bindings (Requirement 19.2, Requirement 13).
@@ -9,6 +11,9 @@ import { apiClient } from '@api/client';
  * Endpoints (see design.md — Admin Service / Complaint Service):
  * - GET   /admin/complaints              — list/search complaints (status filter)
  * - PATCH /admin/complaints/{id}         — update status / add resolution note
+ * - POST  /complaints/{id}/refund        — approve the complaint's (single) refund
+ * - GET   /complaints/{id}/refund        — the refund as recorded (404 when none)
+ * - POST  /complaints/{id}/refund/resend — re-send a PENDING refund whose outcome is unknown
  */
 
 /**
@@ -112,4 +117,120 @@ export function isSlaBreached(complaint: AdminComplaint): boolean {
   if (isTerminalComplaint(complaint.status)) return false;
   const due = new Date(complaint.slaDueAt).getTime();
   return Number.isFinite(due) && due < Date.now();
+}
+
+// ---- Complaint refund (Requirement 16.5, 16.6) ------------------------------
+
+/**
+ * Who may approve, read and re-send a complaint refund. Mirrors the Complaint
+ * Service's ComplaintRbacConfig SUPPORT_TIER rule for POST/GET
+ * /complaints/{id}/refund and POST /complaints/{id}/refund/resend.
+ */
+export const COMPLAINT_REFUND_ROLES: readonly UserRole[] = SUPPORT_ROLES;
+
+/**
+ * The refund's lifecycle in the Complaint Service. PENDING is written before
+ * the Payment Service is called and stays while its answer is unknown.
+ */
+export type ComplaintRefundStatus = 'PENDING' | 'SUCCEEDED' | 'FAILED';
+
+/** RefundResponse from the Complaint Service. */
+export interface ComplaintRefund {
+  id: string;
+  complaintId: string;
+  bookingId: string;
+  amount: number;
+  reason?: string | null;
+  approvedBy: string;
+  status: ComplaintRefundStatus;
+  /** Payment Service refund reference once SUCCEEDED. */
+  externalReference?: string | null;
+  /** Why it FAILED, or why the latest attempt's outcome is unknown (PENDING). */
+  failureReason?: string | null;
+  requestedAt: string;
+  completedAt?: string | null;
+  lastAttemptAt?: string | null;
+  /** PENDING and the latest attempt ended without an answer; finance was alerted. */
+  outcomeUnknown: boolean;
+  /** PENDING and POST .../refund/resend would re-send it now. */
+  resendable: boolean;
+}
+
+/** RefundRequest: amount > 0 with at most 2 decimals; reason ≤ 500 chars; key ≤ 64 chars. */
+export interface ComplaintRefundPayload {
+  amount: number;
+  reason?: string;
+  /**
+   * Generated once per dialog opening and reused when the same submission is
+   * retried, so a retry replays (or safely re-sends) the refund instead of
+   * being refused as a second one.
+   */
+  idempotencyKey: string;
+}
+
+/** Error code of a refund submitted to the Payment Service with no definitive answer. */
+export const REFUND_OUTCOME_UNKNOWN = 'REFUND_OUTCOME_UNKNOWN';
+
+/** Matches the RefundRequest constraints: @Positive @Digits(integer = 10, fraction = 2). */
+const REFUND_AMOUNT_PATTERN = /^\d{1,10}(\.\d{1,2})?$/;
+
+export const REFUND_REASON_MAX_LENGTH = 500;
+
+/**
+ * Parses a refund amount typed into the dialog. Returns the amount, or null
+ * when it is not a positive number with at most 10 integer digits and 2
+ * decimals (what the Complaint Service accepts).
+ */
+export function parseRefundAmount(input: string): number | null {
+  const value = input.trim();
+  if (!REFUND_AMOUNT_PATTERN.test(value)) return null;
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+/** POST /complaints/{id}/refund — approve the complaint's refund (202 with the recorded refund). */
+export async function approveComplaintRefund(
+  complaintId: string,
+  payload: ComplaintRefundPayload,
+): Promise<ComplaintRefund> {
+  const { data } = await apiClient.post<ComplaintRefund>(
+    `/complaints/${complaintId}/refund`,
+    payload,
+  );
+  return data;
+}
+
+/** GET /complaints/{id}/refund — the recorded refund, or null when none was approved. */
+export async function fetchComplaintRefund(complaintId: string): Promise<ComplaintRefund | null> {
+  try {
+    const { data } = await apiClient.get<ComplaintRefund>(`/complaints/${complaintId}/refund`);
+    return data;
+  } catch (error) {
+    if (isApiError(error) && error.status === 404 && error.code === 'REFUND_NOT_FOUND') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * POST /complaints/{id}/refund/resend — re-send a PENDING refund under its
+ * original Payment Service idempotency key, so it can never refund twice.
+ */
+export async function resendComplaintRefund(complaintId: string): Promise<ComplaintRefund> {
+  const { data } = await apiClient.post<ComplaintRefund>(
+    `/complaints/${complaintId}/refund/resend`,
+  );
+  return data;
+}
+
+/**
+ * Statuses from which the Complaint Service accepts a new refund approval
+ * (ComplaintService.REFUNDABLE_STATES). An existing refund can still be viewed
+ * and re-sent from any status.
+ */
+export function isRefundableComplaint(status: ComplaintStatus): boolean {
+  return (
+    status === 'OPEN' || status === 'IN_PROGRESS' || status === 'ESCALATED' || status === 'DISPUTED'
+  );
 }

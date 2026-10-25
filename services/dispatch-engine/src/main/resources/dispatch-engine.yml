@@ -59,6 +59,9 @@ jihajoor:
     # Required: no default; the adapters fail fast at startup when it is absent.
     internal-api-key: ${INTERNAL_API_KEY}
     # Provider matching / offer / radius-expansion tuning (Requirements 8.2, 8.5, 8.8).
+    # These six are the defaults of the Admin Portal's dispatch rules: they apply until an Admin
+    # first saves the rules, after which the saved dispatch.dispatch_settings row wins on every
+    # replica (the matching weights default to MatchingWeights.DEFAULT the same way).
     initial-radius-km: ${DISPATCH_INITIAL_RADIUS_KM:10.0}
     radius-increment-km: ${DISPATCH_RADIUS_INCREMENT_KM:5.0}
     max-expansion-cycles: ${DISPATCH_MAX_EXPANSION_CYCLES:3}
@@ -69,6 +72,10 @@ jihajoor:
     # After this many minutes without an acceptance the booking goes to the partner agencies
     # covering it (AWAITING_ASSIGNMENT), or fails when none does.
     agency-fallback-minutes: ${DISPATCH_AGENCY_FALLBACK_MINUTES:5}
+    # How long a replica reuses the dispatch rules it last read from the database. An Admin save
+    # reaches searches started on the other replicas within this time (at once on the replica that
+    # served it). 0s reads the row at the start of every search.
+    settings-cache-ttl: ${DISPATCH_SETTINGS_CACHE_TTL:10s}
     # How often a waiting offer re-reads the provider's decision from Redis.
     offer-poll-interval-millis: ${DISPATCH_OFFER_POLL_INTERVAL_MILLIS:500}
     topics:

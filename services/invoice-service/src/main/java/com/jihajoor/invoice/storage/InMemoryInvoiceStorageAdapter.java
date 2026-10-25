@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.jihajoor.invoice.config.InvoiceProperties;
@@ -59,6 +60,12 @@ public class InMemoryInvoiceStorageAdapter implements InvoiceStoragePort {
                 + "?X-Amz-Expires=" + ttl.toSeconds()
                 + "&X-Amz-Signature=local-" + Integer.toHexString(objectKey.hashCode());
         return new SignedUrl(url, expiresAt);
+    }
+
+    @Override
+    public Optional<byte[]> load(String objectKey) {
+        byte[] bytes = objects.get(objectKey);
+        return bytes == null ? Optional.empty() : Optional.of(bytes.clone());
     }
 
     /** Test/inspection helper: whether an object was stored under {@code objectKey}. */

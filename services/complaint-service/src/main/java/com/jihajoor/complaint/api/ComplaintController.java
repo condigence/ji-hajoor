@@ -79,7 +79,27 @@ public class ComplaintController {
                                                         @Valid @RequestBody RefundRequest req) {
         ComplaintRefund refund = complaintService.approveRefund(new ApproveRefundCommand(
                 complaintId, req.amount(), req.reason(), currentUser(), req.idempotencyKey()));
-        return ResponseEntity.accepted().body(RefundResponse.from(refund));
+        return ResponseEntity.accepted().body(toResponse(refund));
+    }
+
+    /**
+     * Support_Agent: the complaint's refund as recorded, for the Admin Portal to show and poll
+     * (16.5, 16.6). 404 {@code REFUND_NOT_FOUND} when none was approved.
+     */
+    @GetMapping("/{complaintId}/refund")
+    public RefundResponse getRefund(@PathVariable("complaintId") UUID complaintId) {
+        return toResponse(complaintService.getRefund(complaintId));
+    }
+
+    /**
+     * Support_Agent: re-send a PENDING refund whose Payment Service outcome is unknown, under the
+     * same Payment Service idempotency key (derived from the refund id), so it cannot refund twice.
+     * Works whether or not the approval carried an {@code idempotencyKey}; a settled refund is
+     * returned unchanged; 409 {@code REFUND_IN_PROGRESS} while an attempt is still in flight.
+     */
+    @PostMapping("/{complaintId}/refund/resend")
+    public RefundResponse resendRefund(@PathVariable("complaintId") UUID complaintId) {
+        return toResponse(complaintService.resendRefund(complaintId, currentUser()));
     }
 
     /** Support_Agent: set the complaint to DISPUTED, holding the provider settlement (16.7). */
@@ -92,6 +112,10 @@ public class ComplaintController {
     @GetMapping("/stats")
     public ComplaintStatsResponse stats() {
         return ComplaintStatsResponse.from(complaintService.aggregateStats());
+    }
+
+    private RefundResponse toResponse(ComplaintRefund refund) {
+        return RefundResponse.from(refund, complaintService.isRefundResendable(refund));
     }
 
     /**

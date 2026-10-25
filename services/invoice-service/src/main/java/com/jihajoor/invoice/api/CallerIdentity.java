@@ -62,6 +62,22 @@ public class CallerIdentity {
         }
     }
 
+    /**
+     * Asserts the caller is one of the parties to an invoice (its customer or its provider), or
+     * holds a staff role. Unlike {@link #requireSelfOrStaff}, a failure is reported as 404
+     * {@code INVOICE_NOT_FOUND}: the invoice id is the only thing in the path, so a 403 would
+     * confirm to a stranger that the id exists.
+     */
+    public void requireInvoicePartyOrStaff(UUID customerId, UUID providerId) {
+        if (isStaff()) {
+            return;
+        }
+        UUID caller = requireCallerId();
+        if (!caller.equals(customerId) && !caller.equals(providerId)) {
+            throw InvoiceException.notFound("invoice not found");
+        }
+    }
+
     private Authentication requireAuthentication() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()) {

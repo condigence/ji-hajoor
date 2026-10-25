@@ -8,6 +8,7 @@ import { formatPrice, formatDuration } from '@lib/format';
 import { brand, radius } from '@lib/theme';
 import { CategoryIcon } from './categoryIcon';
 import { categoryArt } from './categoryArt';
+import { categoryIconKey } from './api';
 import { Rail } from './Rail';
 import { SectionHeading } from './SectionHeading';
 import { pluralise, QUICK_FIX_MAX_MINUTES, type ServiceMatch } from './storefront';
@@ -50,8 +51,8 @@ export function SpotlightCarousel({
     title: `${subcategory.name} from ${formatPrice(subcategory.basePrice)}`,
     caption: `${category.name} · about ${formatDuration(subcategory.estimatedDurationMin)}`,
     actionLabel: 'Book now',
-    accent: categoryArt(category.icon, category.name).accent,
-    art: <CategoryIcon iconKey={category.icon} categoryName={category.name} />,
+    accent: categoryArt(categoryIconKey(category), category.name).accent,
+    art: <CategoryIcon iconKey={categoryIconKey(category)} categoryName={category.name} />,
     to: `/book/${subcategory.id}`,
   }));
 

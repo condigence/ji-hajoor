@@ -37,8 +37,8 @@ export interface ActiveJob {
   status: BookingStatus;
   /** Whether this is an emergency booking (surfaced prominently). */
   isEmergency: boolean;
-  /** Scheduled/slot start time (ISO 8601). */
-  scheduledAt: string;
+  /** Scheduled/slot start time (ISO 8601); null for an as-soon-as-possible booking. */
+  scheduledAt: string | null;
   /** Short customer area/locality label (no precise address on the list). */
   customerArea: string;
   /** Estimated payout for the job, when known. */

@@ -38,7 +38,7 @@ import com.jihajoor.booking.domain.SagaStep;
 import com.jihajoor.booking.domain.SagaStepRepository;
 import com.jihajoor.booking.event.BookingCancelledEvent;
 import com.jihajoor.booking.event.BookingCreatedEvent;
-import com.jihajoor.booking.media.MediaStoragePort;
+import com.jihajoor.booking.media.MediaStorage;
 import com.jihajoor.booking.pricing.PriceEstimate;
 import com.jihajoor.booking.pricing.PriceEstimateRequest;
 import com.jihajoor.booking.pricing.PricingClientPort;
@@ -61,7 +61,7 @@ class BookingServiceTest {
     private CatalogClientPort catalogClient;
     private PricingClientPort pricingClient;
     private OutboxEventPublisher outboxPublisher;
-    private MediaStoragePort mediaStorage;
+    private MediaStorage mediaStorage;
 
     private BookingService service;
 
@@ -75,7 +75,7 @@ class BookingServiceTest {
         catalogClient = mock(CatalogClientPort.class);
         pricingClient = mock(PricingClientPort.class);
         outboxPublisher = mock(OutboxEventPublisher.class);
-        mediaStorage = mock(MediaStoragePort.class);
+        mediaStorage = mock(MediaStorage.class);
 
         when(bookingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(bookingRepository.existsByReference(any())).thenReturn(false);

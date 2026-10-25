@@ -23,6 +23,16 @@ spring:
     default-schema: chat
     baseline-on-migrate: true
     baseline-version: 1
+  # Cross-node chat (jihajoor.chat.cluster=redis): message fan-out over pub/sub and shared
+  # presence. Same variables as the platform's other Redis users; SPRING_DATA_REDIS_URL (set by
+  # deploy/entrypoint.sh from a PaaS REDIS_URL, password included) overrides host and port.
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # Chat keeps no Spring Data repositories in Redis; JPA owns the repository interfaces.
+      repositories:
+        enabled: false
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
@@ -53,7 +63,20 @@ jihajoor:
     # (Requirement 18.4).
     retention: ${CHAT_RETENTION:90d}
     # Idle window after which a recipient counts as offline and gets a push (Requirement 18.3).
+    # With cluster=redis it is also how long a presence entry lasts without a heartbeat, i.e.
+    # how soon the users of a crashed node count as offline again.
     offline-push-window: ${CHAT_OFFLINE_PUSH_WINDOW:10s}
+    # How chat nodes share messages and presence: 'redis' (deployed default; any number of
+    # instances) or 'local' (one instance, in memory; tests or a dev run without Redis).
+    cluster: ${CHAT_CLUSTER:redis}
+    redis:
+      # Pub/sub channel every node publishes stored messages on and subscribes to.
+      messages-channel: ${CHAT_REDIS_MESSAGES_CHANNEL:chat:messages}
+      # Presence keys: <prefix><bookingId>:<userId>, a sorted set of sockets by expiry.
+      presence-key-prefix: ${CHAT_REDIS_PRESENCE_KEY_PREFIX:chat:presence:}
+      # Re-stamp interval for this node's sockets; must be shorter than offline-push-window
+      # (3s against 10s lets a live socket survive two missed beats).
+      presence-heartbeat: ${CHAT_PRESENCE_HEARTBEAT:3s}
     # Push vendor adapter selector: 'log' (dev/test) or a concrete Notification adapter.
     push-provider: ${CHAT_PUSH_PROVIDER:log}
     topics:
@@ -71,6 +94,11 @@ management:
     health:
       probes:
         enabled: true
+  # Redis is a dependency in cluster=redis; set CHAT_REDIS_HEALTH=false with cluster=local and
+  # no Redis server, so health does not report DOWN for a connection chat never uses.
+  health:
+    redis:
+      enabled: ${CHAT_REDIS_HEALTH:true}
   metrics:
     tags:
       application: chat-service

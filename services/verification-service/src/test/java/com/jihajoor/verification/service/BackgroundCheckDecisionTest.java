@@ -25,7 +25,9 @@ import com.jihajoor.verification.domain.DocumentType;
 import com.jihajoor.verification.domain.Verification;
 import com.jihajoor.verification.domain.VerificationStatus;
 import com.jihajoor.verification.notification.ProviderNotificationPort;
-import com.jihajoor.verification.storage.DocumentStoragePort;
+import com.jihajoor.verification.domain.DocumentStorageKind;
+import com.jihajoor.verification.storage.DocumentStorage;
+import com.jihajoor.verification.storage.StoredDocument;
 import com.jihajoor.verification.support.InMemoryVerificationRepository;
 
 /**
@@ -39,7 +41,7 @@ class BackgroundCheckDecisionTest {
     private final UUID admin = UUID.randomUUID();
 
     @Mock
-    private DocumentStoragePort documentStorage;
+    private DocumentStorage documentStorage;
     @Mock
     private BackgroundCheckPort backgroundCheck;
     @Mock
@@ -54,7 +56,7 @@ class BackgroundCheckDecisionTest {
         service = new VerificationService(new InMemoryVerificationRepository(), documentStorage, backgroundCheck,
                 notification, dispatchPool, new VerificationProperties());
         lenient().when(documentStorage.store(any(), any(), any(), any()))
-                .thenAnswer(inv -> "s3://bucket/" + inv.getArgument(1));
+                .thenAnswer(inv -> new StoredDocument(DocumentStorageKind.LOCAL, "providers/" + inv.getArgument(1)));
     }
 
     /** A provider whose documents were accepted, so the background check has started. */

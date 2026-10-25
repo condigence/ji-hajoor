@@ -87,6 +87,7 @@ public class CustomerRbacConfig {
     public void registerEndpointRoles() {
         var rules = rbacProperties.getEndpointRoles();
         rules.put("PUT /customers/*/profile", CUSTOMER_SELF_SERVICE_TIER);
+        rules.put("GET /customers/*/addresses", CUSTOMER_SELF_SERVICE_TIER);
         rules.put("POST /customers/*/addresses", CUSTOMER_SELF_SERVICE_TIER);
         rules.put("DELETE /customers/*/addresses/**", CUSTOMER_SELF_SERVICE_TIER);
         rules.put("POST /customers/*/location/detect", CUSTOMER_SELF_SERVICE_TIER);

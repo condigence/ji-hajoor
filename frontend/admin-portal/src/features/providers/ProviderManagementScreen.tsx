@@ -112,10 +112,14 @@ export function ProviderManagementScreen() {
       render: (row) => {
         const { bankAccount } = row;
         const canVerifyBank = bankAccount != null && !bankAccount.verified;
-        // Unknown status (verification service unreachable): offer no toggle
-        // rather than guess which way it should go.
+        // Verification allows only APPROVED -> SUSPENDED and back, so offer the
+        // toggle only then: a pending or rejected provider would get a 409. An
+        // unknown status (verification service unreachable) offers none either.
         const suspend = row.status === 'ACTIVE';
-        if (!row.status && !canVerifyBank) return null;
+        const canToggle =
+          (suspend && row.verificationStatus === 'APPROVED') ||
+          (row.status === 'SUSPENDED' && row.verificationStatus === 'SUSPENDED');
+        if (!canToggle && !canVerifyBank) return null;
         return (
           <Stack
             spacing={1}
@@ -123,7 +127,7 @@ export function ProviderManagementScreen() {
               alignItems: 'flex-end',
             }}
           >
-            {row.status ? (
+            {canToggle ? (
               <Button
                 size="small"
                 color={suspend ? 'error' : 'success'}

@@ -81,8 +81,20 @@ function pollWhileWaitingOnCustomer(status: JobDetail['status'] | undefined): nu
   return status && isWaitingOnCustomer(status) ? APPROVAL_POLL_MS : false;
 }
 
-/** How often a job the provider's agency assigned is re-read while it waits for their answer. */
-export const ASSIGNMENT_POLL_MS = 5_000;
+/**
+ * How often a job the provider's agency assigned is re-read while it waits for their answer.
+ * Each assigned job's card polls on its own, so this stays well under the gateway's 60
+ * requests a minute per provider even with several assignments open.
+ */
+export const ASSIGNMENT_POLL_MS = 15_000;
+
+/**
+ * Right after an offer is accepted the booking is not the provider's yet: the dispatch engine
+ * assigns it within about a second of reading the decision, and until then the Booking Service
+ * answers 404. Retry a 404 for this long before treating it as "not yours".
+ */
+const ASSIGNMENT_GRACE_RETRIES = 6;
+const ASSIGNMENT_GRACE_DELAY_MS = 1_000;
 
 /**
  * Full job detail (Requirement 11.1). While the customer is deciding on a
@@ -90,12 +102,15 @@ export const ASSIGNMENT_POLL_MS = 5_000;
  * side, so the detail is polled until it moves on (Requirement 9.7-9.9, 12).
  * A job the provider's agency assigned is polled too while it waits for the
  * provider's answer, so a cancellation in the meantime shows up on its own
- * (Requirement MT-13.3). A 404 stops the polling: the job is no longer theirs.
+ * (Requirement MT-13.3). A 404 stops the polling: the job is no longer theirs, unless it is
+ * the first read just after accepting, which is retried for a few seconds (see above).
  */
 export function useJobDetail(bookingId: string): UseQueryResult<JobDetail, ApiError> {
   return useQuery<JobDetail, ApiError>({
     queryKey: jobKeys.detail(bookingId),
     queryFn: () => fetchJobDetail(bookingId),
+    retry: (failureCount, error) => error.status === 404 && failureCount < ASSIGNMENT_GRACE_RETRIES,
+    retryDelay: ASSIGNMENT_GRACE_DELAY_MS,
     refetchInterval: (query) => {
       const { status: queryStatus, data } = query.state;
       if (queryStatus === 'error') return false;

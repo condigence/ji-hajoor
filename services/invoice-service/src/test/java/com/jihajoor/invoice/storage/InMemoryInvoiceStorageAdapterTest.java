@@ -54,4 +54,13 @@ class InMemoryInvoiceStorageAdapterTest {
         SignedUrl signed = storage.signedUrl("k", Duration.ofHours(72));
         assertThat(signed.expiresAt()).isAfter(Instant.now());
     }
+
+    @Test
+    void loadReturnsStoredBytesOrEmpty() {
+        InMemoryInvoiceStorageAdapter storage = new InMemoryInvoiceStorageAdapter(props(), FIXED_CLOCK);
+        storage.store("k", new byte[]{1, 2, 3});
+
+        assertThat(storage.load("k")).hasValueSatisfying(b -> assertThat(b).containsExactly(1, 2, 3));
+        assertThat(storage.load("missing")).isEmpty();
+    }
 }

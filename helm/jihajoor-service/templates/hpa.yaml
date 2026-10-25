@@ -1,4 +1,5 @@
-{{- if .Values.autoscaling.enabled }}
+{{- /* KEDA, when active, owns the HPA for this Deployment (keda-scaledobject.yaml). */ -}}
+{{- if and .Values.autoscaling.enabled (not (include "jihajoor-service.kedaActive" .)) }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:

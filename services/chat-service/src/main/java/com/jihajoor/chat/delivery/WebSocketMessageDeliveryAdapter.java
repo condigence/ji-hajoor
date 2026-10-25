@@ -1,31 +1,31 @@
 package com.jihajoor.chat.delivery;
 
+import com.jihajoor.chat.api.dto.MessageResponse;
+import com.jihajoor.chat.domain.ChatChannel;
 import com.jihajoor.chat.domain.ChatMessage;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * WebSocket-backed {@link MessageDeliveryPort}. Publishes each message to the per-booking STOMP
- * destination {@code /topic/chat/{bookingId}}; the WebSocket broker fans it out to the connected
- * participant sessions subscribed to that booking (Requirement 18.2).
+ * Single-node {@link MessageDeliveryPort} ({@code jihajoor.chat.cluster=local}): sends each
+ * message, as a {@link MessageResponse}, straight to this node's plain WebSockets and STOMP
+ * subscribers through {@link LocalMessageFanout} (Requirement 18.2).
  *
- * <p>Only the two booking participants are ever subscribed to a booking's destination, because
- * subscription is gated by the participant-only access rule (Property 23). The message body has
- * already been phone-masked upstream (Requirement 18.8).
+ * <p>A participant connected to another node would never see it; with several chat-service
+ * instances, {@code cluster=redis} selects {@link RedisMessageDeliveryAdapter} instead.
  */
 @Component
+@ConditionalOnProperty(prefix = "jihajoor.chat", name = "cluster", havingValue = "local")
 public class WebSocketMessageDeliveryAdapter implements MessageDeliveryPort {
 
-    static final String DESTINATION_PREFIX = "/topic/chat/";
+    private final LocalMessageFanout fanout;
 
-    private final SimpMessagingTemplate messagingTemplate;
-
-    public WebSocketMessageDeliveryAdapter(SimpMessagingTemplate messagingTemplate) {
-        this.messagingTemplate = messagingTemplate;
+    public WebSocketMessageDeliveryAdapter(LocalMessageFanout fanout) {
+        this.fanout = fanout;
     }
 
     @Override
-    public void deliver(ChatMessage message) {
-        messagingTemplate.convertAndSend(DESTINATION_PREFIX + message.getBookingId(), message);
+    public void deliver(ChatMessage message, ChatChannel channel) {
+        fanout.deliver(MessageResponse.from(message, channel));
     }
 }

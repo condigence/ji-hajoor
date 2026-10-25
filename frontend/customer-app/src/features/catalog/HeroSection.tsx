@@ -8,7 +8,7 @@ import { CategoryIcon } from './categoryIcon';
 import { categoryArt } from './categoryArt';
 import { ServiceArt } from './ServiceArt';
 import { TrustList } from './TrustList';
-import type { ServiceCategory } from './api';
+import { categoryIconKey, type ServiceCategory } from './api';
 import { pluralise, type ServiceMatch } from './storefront';
 
 /**
@@ -89,7 +89,7 @@ export function HeroSection({
             }}
           >
             {categories.map((category) => {
-              const art = categoryArt(category.icon, category.name);
+              const art = categoryArt(categoryIconKey(category), category.name);
               return (
                 <Box component="li" key={category.id}>
                   <CategoryTile
@@ -97,7 +97,12 @@ export function HeroSection({
                     wash={art.wash}
                     color={art.accent}
                     to={`/categories/${category.id}`}
-                    icon={<CategoryIcon iconKey={category.icon} categoryName={category.name} />}
+                    icon={
+                      <CategoryIcon
+                        iconKey={categoryIconKey(category)}
+                        categoryName={category.name}
+                      />
+                    }
                   />
                 </Box>
               );

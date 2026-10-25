@@ -21,6 +21,16 @@ autoscaling:
   targetCPUUtilizationPercentage: 70
   targetMemoryUtilizationPercentage: 80
 
+# Kafka-lag autoscaling for jobs-app, money-app and engagement-app (their triggers are in
+# helm/services/). Turn on once the KEDA operator runs in the cluster and the
+# TriggerAuthentication exists in K8S_NAMESPACE
+# (infra/k8s/observability/keda-kafka-trigger-auth.yaml); set the MSK brokers with it.
+keda:
+  enabled: false
+  minReplicas: 3
+  maxReplicas: 20
+  bootstrapServers: ""
+
 config:
   # No application-<profile>.yml exists yet; set so profile-specific config can be
   # added without touching the chart.

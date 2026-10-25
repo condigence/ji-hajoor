@@ -29,4 +29,11 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     /** Provider invoices within a half-open [from, to) window, backing monthly statements. */
     List<Invoice> findByProviderIdAndGeneratedAtGreaterThanEqualAndGeneratedAtLessThanOrderByGeneratedAtDesc(
             UUID providerId, Instant from, Instant to);
+
+    /**
+     * The newest invoice for a booking. One invoice exists per payment, so a booking normally has
+     * exactly one; should it ever carry several (a re-collected payment), the latest is the one the
+     * customer needs.
+     */
+    Optional<Invoice> findFirstByBookingIdOrderByGeneratedAtDesc(UUID bookingId);
 }

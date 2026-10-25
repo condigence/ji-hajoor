@@ -154,7 +154,10 @@ class VerificationControllersTest {
         @SuppressWarnings("unchecked")
         var captor = org.mockito.ArgumentCaptor.forClass(java.util.List.class);
         verify(service).submitDocuments(eq(provider), captor.capture(), eq(provider));
-        assertThat((java.util.List<DocumentUpload>) captor.getValue()).hasSize(2);
+        assertThat((java.util.List<DocumentUpload>) captor.getValue()).hasSize(2)
+                // The original file name travels with the bytes, for the admin viewer.
+                .extracting(DocumentUpload::originalFilename)
+                .containsExactlyInAnyOrder("id.jpg", "addr.pdf");
     }
 
     @Test

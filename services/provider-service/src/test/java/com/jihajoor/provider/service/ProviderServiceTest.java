@@ -38,6 +38,7 @@ import com.jihajoor.provider.domain.EarningType;
 import com.jihajoor.provider.domain.ProviderEarning;
 import com.jihajoor.provider.domain.ProviderEarningRepository;
 import com.jihajoor.provider.domain.ProviderProfile;
+import com.jihajoor.provider.domain.RatingUpdateOutcome;
 import com.jihajoor.provider.domain.Settlement;
 import com.jihajoor.provider.domain.SettlementRepository;
 import com.jihajoor.provider.support.InMemoryProviderProfileRepository;
@@ -564,11 +565,13 @@ class ProviderServiceTest {
             UUID id = UUID.randomUUID();
             seedProfile(id);
 
-            service.applyAggregateRating(id, new BigDecimal("2.8"));
+            ProviderService.RatingApplication result =
+                    service.applyRatingAggregate(id, new BigDecimal("2.80"), 3, 1);
 
+            assertThat(result.outcome()).isEqualTo(RatingUpdateOutcome.FLAGGED_FOR_REVIEW);
             ProviderProfile after = profileRepository.findById(id).orElseThrow();
             assertThat(after.isUnderReview()).isTrue();
-            verify(adminAlert).providerFlaggedForReview(id, new BigDecimal("2.8"));
+            verify(adminAlert).providerFlaggedForReview(id, new BigDecimal("2.80"));
         }
 
         @Test
@@ -576,7 +579,7 @@ class ProviderServiceTest {
             UUID id = UUID.randomUUID();
             seedProfile(id);
 
-            service.applyAggregateRating(id, new BigDecimal("3.0"));
+            service.applyRatingAggregate(id, new BigDecimal("3.00"), 2, 1);
 
             ProviderProfile after = profileRepository.findById(id).orElseThrow();
             assertThat(after.isUnderReview()).isFalse();
@@ -588,12 +591,109 @@ class ProviderServiceTest {
             UUID id = UUID.randomUUID();
             seedProfile(id);
 
-            service.applyAggregateRating(id, new BigDecimal("2.5"));
+            service.applyRatingAggregate(id, new BigDecimal("2.50"), 1, 1);
             // Second drop below threshold — already flagged, no second alert.
-            service.applyAggregateRating(id, new BigDecimal("2.0"));
+            service.applyRatingAggregate(id, new BigDecimal("2.00"), 2, 2);
 
-            verify(adminAlert).providerFlaggedForReview(id, new BigDecimal("2.5"));
-            // Only one invocation total (the first one).
+            verify(adminAlert, times(1)).providerFlaggedForReview(any(), any());
+            verify(adminAlert).providerFlaggedForReview(id, new BigDecimal("2.50"));
+        }
+
+        @Test
+        void aggregateAndCountAreStoredAndShownOnTheProfile() {
+            UUID id = UUID.randomUUID();
+            seedProfile(id);
+
+            ProviderService.RatingApplication result =
+                    service.applyRatingAggregate(id, new BigDecimal("4.20"), 12, 7);
+
+            assertThat(result.outcome()).isEqualTo(RatingUpdateOutcome.APPLIED);
+            ProviderProfile after = profileRepository.findById(id).orElseThrow();
+            assertThat(after.getAggregateRating()).isEqualByComparingTo("4.20");
+            assertThat(after.getRatingCount()).isEqualTo(12);
+            assertThat(after.getRatingSequence()).isEqualTo(7);
+            assertThat(com.jihajoor.provider.api.dto.ProfileResponse.from(after).ratingCount())
+                    .isEqualTo(12);
+        }
+
+        /** The same push delivered twice (a retry) leaves the same state: a set, not an increment. */
+        @Test
+        void repeatingAPushIsIdempotent() {
+            UUID id = UUID.randomUUID();
+            seedProfile(id);
+
+            service.applyRatingAggregate(id, new BigDecimal("4.50"), 4, 3);
+            ProviderService.RatingApplication again =
+                    service.applyRatingAggregate(id, new BigDecimal("4.50"), 4, 3);
+
+            assertThat(again.outcome().applied()).isTrue();
+            ProviderProfile after = profileRepository.findById(id).orElseThrow();
+            assertThat(after.getAggregateRating()).isEqualByComparingTo("4.50");
+            assertThat(after.getRatingCount()).isEqualTo(4);
+        }
+
+        /** An older aggregate arriving after a newer one must not overwrite it. */
+        @Test
+        void anOlderPushArrivingLateIsIgnored() {
+            UUID id = UUID.randomUUID();
+            seedProfile(id);
+            service.applyRatingAggregate(id, new BigDecimal("4.80"), 5, 9);
+
+            ProviderService.RatingApplication late =
+                    service.applyRatingAggregate(id, new BigDecimal("1.00"), 4, 8);
+
+            assertThat(late.outcome()).isEqualTo(RatingUpdateOutcome.STALE);
+            ProviderProfile after = profileRepository.findById(id).orElseThrow();
+            assertThat(after.getAggregateRating()).isEqualByComparingTo("4.80");
+            assertThat(after.getRatingCount()).isEqualTo(5);
+            assertThat(after.getRatingSequence()).isEqualTo(9);
+            assertThat(after.isUnderReview()).isFalse();
+            verify(adminAlert, never()).providerFlaggedForReview(any(), any());
+        }
+
+        /** The only review removed: back to "not rated", which is not a low rating. */
+        @Test
+        void noCountedReviewsResetsTheRatingWithoutFlagging() {
+            UUID id = UUID.randomUUID();
+            seedProfile(id);
+            service.applyRatingAggregate(id, new BigDecimal("4.00"), 1, 1);
+
+            service.applyRatingAggregate(id, null, 0, 2);
+
+            ProviderProfile after = profileRepository.findById(id).orElseThrow();
+            assertThat(after.getAggregateRating()).isEqualByComparingTo("0");
+            assertThat(after.getRatingCount()).isZero();
+            assertThat(after.isUnderReview()).isFalse();
+            verify(adminAlert, never()).providerFlaggedForReview(any(), any());
+        }
+
+        @Test
+        void unknownProvider_is404() {
+            assertThatThrownBy(() -> service.applyRatingAggregate(UUID.randomUUID(),
+                    new BigDecimal("4.00"), 1, 1))
+                    .isInstanceOf(ProviderException.class)
+                    .satisfies(ex -> {
+                        assertThat(((ProviderException) ex).getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                        assertThat(((ProviderException) ex).getErrorCode()).isEqualTo("PROVIDER_NOT_FOUND");
+                    });
+        }
+
+        @Test
+        void averageOutsideZeroToFive_isRejected() {
+            UUID id = UUID.randomUUID();
+            seedProfile(id);
+
+            for (String average : List.of("5.01", "-0.01")) {
+                assertThatThrownBy(() -> service.applyRatingAggregate(id, new BigDecimal(average), 1, 1))
+                        .isInstanceOf(ProviderException.class)
+                        .satisfies(ex -> assertThat(((ProviderException) ex).getStatus())
+                                .isEqualTo(HttpStatus.BAD_REQUEST));
+            }
+            assertThatThrownBy(() -> service.applyRatingAggregate(id, null, 2, 1))
+                    .isInstanceOf(ProviderException.class);
+            assertThatThrownBy(() -> service.applyRatingAggregate(id, new BigDecimal("4.00"), -1, 1))
+                    .isInstanceOf(ProviderException.class);
+            assertThat(profileRepository.findById(id).orElseThrow().getRatingSequence()).isZero();
         }
     }
 

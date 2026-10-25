@@ -1,6 +1,7 @@
 package com.jihajoor.complaint;
 
 import com.jihajoor.complaint.config.ComplaintProperties;
+import com.jihajoor.complaint.config.PaymentClientProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.persistence.autoconfigure.EntityScan;
@@ -26,7 +27,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  */
 @SpringBootApplication
 @EnableScheduling
-@EnableConfigurationProperties(ComplaintProperties.class)
+@EnableConfigurationProperties({ComplaintProperties.class, PaymentClientProperties.class})
 // One base package per source root, not one class per entity/repository:
 // ProcessedEventRepository sits in the com.jihajoor.shared.outbox.kafka SUBpackage, so
 // naming both classes scans that subpackage twice and the duplicate bean definition

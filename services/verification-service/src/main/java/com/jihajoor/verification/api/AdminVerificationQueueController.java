@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -113,8 +114,25 @@ public class AdminVerificationQueueController {
     public ResponseEntity<List<VerificationDocumentResponse>> documents(
             @PathVariable("providerId") UUID providerId) {
         return ResponseEntity.ok(verificationService.documentsOf(providerId).stream()
-                .map(VerificationDocumentResponse::from)
+                .map(document -> VerificationDocumentResponse.from(providerId, document))
                 .toList());
+    }
+
+    /**
+     * {@code GET /admin/verification/{providerId}/documents/{documentId}} — the bytes of one of the
+     * provider's documents, streamed from wherever they are stored (S3 or this instance's disk), for
+     * the portal's document viewer. The {@code url} of a {@code documents} entry points here.
+     *
+     * <p>Served with {@code Cache-Control: private, no-store} and {@code nosniff}; see
+     * {@link DocumentResponses}. 404 {@code VERIFICATION_NOT_FOUND} (no record),
+     * {@code DOCUMENT_NOT_FOUND} (not this provider's document) or {@code DOCUMENT_NOT_STORED}
+     * (uploaded before documents were kept); 503 {@code DOCUMENT_STORAGE_UNAVAILABLE} when the store
+     * cannot be read right now. Admin-only ({@code VerificationRbacConfig}).
+     */
+    @GetMapping("/{providerId}/documents/{documentId}")
+    public ResponseEntity<Resource> document(@PathVariable("providerId") UUID providerId,
+                                             @PathVariable("documentId") UUID documentId) {
+        return DocumentResponses.stream(verificationService.openDocument(providerId, documentId));
     }
 
     /**

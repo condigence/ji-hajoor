@@ -62,6 +62,13 @@ public class InMemoryInvoiceRepository implements InvoiceRepository {
     }
 
     @Override
+    public Optional<Invoice> findFirstByBookingIdOrderByGeneratedAtDesc(UUID bookingId) {
+        return byId.values().stream()
+                .filter(i -> i.getBookingId().equals(bookingId))
+                .max(Comparator.comparing(Invoice::getGeneratedAt));
+    }
+
+    @Override
     public <S extends Invoice> S save(S entity) {
         // Enforce the unique constraints the real schema guarantees.
         for (Invoice existing : byId.values()) {

@@ -128,8 +128,27 @@ public class Verification {
         return this.auditTrail.size();
     }
 
+    /**
+     * Records a document whose bytes are stored in {@code storage} under {@code storageKey}. The id
+     * is chosen by the caller before the upload, because the storage key embeds it.
+     */
+    public VerificationDocument addDocument(UUID documentId, DocumentType type, DocumentStorageKind storage,
+                                            String storageKey, String fileName, String contentType,
+                                            long sizeBytes) {
+        VerificationDocument document = new VerificationDocument(documentId, this, type, storage, storageKey,
+                fileName, contentType, sizeBytes);
+        this.documents.add(document);
+        touch();
+        return document;
+    }
+
+    /**
+     * Records a document reference with no stored bytes, as rows were written before the service
+     * kept documents (and as tests build them); it reads back as "not stored".
+     */
     public void addDocument(DocumentType type, String storageRef, String contentType, long sizeBytes) {
-        this.documents.add(new VerificationDocument(this, type, storageRef, contentType, sizeBytes));
+        this.documents.add(new VerificationDocument(UUID.randomUUID(), this, type, null, storageRef, null,
+                contentType, sizeBytes));
         touch();
     }
 

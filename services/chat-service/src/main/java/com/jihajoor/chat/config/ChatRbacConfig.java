@@ -85,5 +85,10 @@ public class ChatRbacConfig {
         rules.put("POST /chat/channels/*/messages", CHANNEL_PARTICIPANTS);
         // Read the booking's message history (Requirement 18.4, 18.7).
         rules.put("GET /chat/channels/*/messages", CHANNEL_PARTICIPANTS);
+        // Resolve the booking's channel (Requirement 18.1).
+        rules.put("GET /chat/bookings/*/channel", CHANNEL_PARTICIPANTS);
+        // The apps' WebSocket upgrade. Unlike /ws/chat it arrives through the gateway, which
+        // moves the browser's ?access_token= into the bearer header, so a role rule applies.
+        rules.put("GET /chat/channels/*/ws", CHANNEL_PARTICIPANTS);
     }
 }

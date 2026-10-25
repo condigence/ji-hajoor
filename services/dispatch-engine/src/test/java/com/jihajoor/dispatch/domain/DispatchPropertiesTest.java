@@ -4,8 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
+
+import com.jihajoor.dispatch.config.DispatchProperties;
+import com.jihajoor.dispatch.service.DispatchSettingsService;
+import com.jihajoor.dispatch.service.fake.InMemoryDispatchSettingsStore;
 
 import net.jqwik.api.Arbitraries;
 import net.jqwik.api.Arbitrary;
@@ -20,7 +25,7 @@ import net.jqwik.api.Provide;
  * Properties", Requirements 8.3, 8.4, 19.5). Each property runs a minimum of 100 tries and is
  * tagged with the required {@code Feature: jihajoor-platform, Property N} label.
  *
- * <p>These complement the example-based {@link MatchingWeights}/{@link MatchingWeightsStore} tests
+ * <p>These complement the example-based {@link MatchingWeights}/{@link DispatchSettingsService} tests
  * by asserting the scoring-formula and weight-validation rules hold universally across generated
  * weight sets and provider component scores.
  */
@@ -64,8 +69,10 @@ class DispatchPropertiesTest {
             @ForAll("weightCandidate") BigDecimal skill,
             @ForAll("weightCandidate") BigDecimal performance) {
 
-        MatchingWeightsStore store = new MatchingWeightsStore();
-        MatchingWeights before = store.current();
+        InMemoryDispatchSettingsStore saved = new InMemoryDispatchSettingsStore();
+        DispatchSettingsService settings =
+                new DispatchSettingsService(saved, new DispatchProperties(), Clock.systemUTC());
+        MatchingWeights before = settings.current().weights();
 
         boolean eachInRange = inUnitInterval(distance) && inUnitInterval(availability)
                 && inUnitInterval(rating) && inUnitInterval(skill) && inUnitInterval(performance);
@@ -75,13 +82,13 @@ class DispatchPropertiesTest {
         Throwable failure = catchThrowable(() -> {
             MatchingWeights candidate =
                     MatchingWeights.ofExact(distance, availability, rating, skill, performance);
-            store.update(candidate);
+            settings.update(current -> current.withWeights(candidate), "admin");
         });
 
         if (expectedAccepted) {
             // Accepted: no validation error, and the active weights now reflect the submission.
             assertThat(failure).as("valid weight set %s should be accepted", sum).isNull();
-            MatchingWeights after = store.current();
+            MatchingWeights after = settings.current().weights();
             assertThat(after.distanceWeight()).isEqualTo(distance.doubleValue());
             assertThat(after.availabilityWeight()).isEqualTo(availability.doubleValue());
             assertThat(after.ratingWeight()).isEqualTo(rating.doubleValue());
@@ -92,7 +99,8 @@ class DispatchPropertiesTest {
             assertThat(failure)
                     .as("invalid weight set (eachInRange=%s, sum=%s) should be rejected", eachInRange, sum)
                     .isInstanceOf(WeightValidationException.class);
-            assertThat(store.current()).isEqualTo(before);
+            assertThat(settings.current().weights()).isEqualTo(before);
+            assertThat(saved.saved()).isEmpty();
         }
     }
 

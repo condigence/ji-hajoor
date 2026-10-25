@@ -61,7 +61,28 @@ jihajoor:
     recent-weight: ${RATING_RECENT_WEIGHT:1.5}
     older-weight: ${RATING_OLDER_WEIGHT:1.0}
     # Aggregate below this threshold auto-flags the provider UNDER_REVIEW (Requirement 15.7, 15.8).
-    under-review-threshold: ${RATING_UNDER_REVIEW_THRESHOLD:3.0}
+    # Used only by the 'logging' provider-rating client below; with 'http' the Provider Service
+    # applies its own jihajoor.provider.review-rating-threshold. Set REVIEW_RATING_THRESHOLD (read
+    # by both services) rather than either service's own variable, so the two cannot drift.
+    under-review-threshold: ${REVIEW_RATING_THRESHOLD:${RATING_UNDER_REVIEW_THRESHOLD:3.0}}
+    # Where each provider's aggregate rating is set after a review change
+    # (PUT /internal/providers/{id}/rating). Must reach the Provider Service; in a combined
+    # deployable that is identity-app:8083.
+    provider-service-url: ${PROVIDER_SERVICE_URL:http://provider-service:8083}
+    # Shared service credential presented as X-Internal-Api-Key; must match the Provider Service's
+    # jihajoor.provider.internal-api-key. When unset every rating update is refused and stays owed.
+    internal-api-key: ${INTERNAL_API_KEY:}
+    provider-rating:
+      # 'http' (the default) sets ratings in the Provider Service; 'logging' only logs them and
+      # keeps the UNDER_REVIEW flag in memory, for running without a Provider Service.
+      client: ${PROVIDER_RATING_CLIENT:http}
+    provider-sync:
+      # A rating the Provider Service did not confirm right after the review commit stays owed and
+      # is re-sent by ProviderRatingSweeper every sweep-interval (ISO-8601), once its change is at
+      # least sweep-min-age old, at most sweep-batch-size per run (oldest first).
+      sweep-interval: ${RATING_PROVIDER_SYNC_SWEEP_INTERVAL:PT1M}
+      sweep-min-age: ${RATING_PROVIDER_SYNC_SWEEP_MIN_AGE:1m}
+      sweep-batch-size: ${RATING_PROVIDER_SYNC_SWEEP_BATCH_SIZE:100}
     # Text review maximum length (Requirement 15.3).
     max-review-text-length: ${RATING_MAX_TEXT_LENGTH:1000}
     fraud:

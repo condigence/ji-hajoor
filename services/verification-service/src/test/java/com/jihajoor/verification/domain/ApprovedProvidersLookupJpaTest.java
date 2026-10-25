@@ -28,7 +28,8 @@ import com.jihajoor.verification.config.VerificationProperties;
 import com.jihajoor.verification.dispatch.DispatchPoolPort;
 import com.jihajoor.verification.notification.ProviderNotificationPort;
 import com.jihajoor.verification.service.VerificationService;
-import com.jihajoor.verification.storage.DocumentStoragePort;
+import com.jihajoor.verification.storage.DocumentStorage;
+import com.jihajoor.verification.support.InMemoryDocumentStorage;
 
 import jakarta.persistence.EntityManagerFactory;
 
@@ -121,7 +122,7 @@ class ApprovedProvidersLookupJpaTest {
 
         @Bean
         VerificationService verificationService(VerificationRepository repository) {
-            DocumentStoragePort storage = (provider, type, content, contentType) -> "s3://unused";
+            DocumentStorage storage = InMemoryDocumentStorage.create();
             BackgroundCheckPort backgroundCheck = provider -> "check-" + provider;
             ProviderNotificationPort notification = (provider, reason) -> { };
             DispatchPoolPort dispatchPool = provider -> { };

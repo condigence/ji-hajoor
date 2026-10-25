@@ -18,7 +18,8 @@ import com.jihajoor.verification.domain.VerificationStatus;
 import com.jihajoor.verification.notification.ProviderNotificationPort;
 import com.jihajoor.verification.service.DocumentUpload;
 import com.jihajoor.verification.service.VerificationService;
-import com.jihajoor.verification.storage.DocumentStoragePort;
+import com.jihajoor.verification.storage.DocumentStorage;
+import com.jihajoor.verification.support.InMemoryDocumentStorage;
 import com.jihajoor.verification.support.InMemoryVerificationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -64,8 +65,7 @@ class ProviderVerificationFlowIT {
         repository = new InMemoryVerificationRepository();
         backgroundCheck = new RecordingBackgroundCheck();
         dispatchPool = new RecordingDispatchPool();
-        DocumentStoragePort storage = (provider, type, content, contentType) ->
-                "s3://jihajoor-documents/" + provider + "/" + type;
+        DocumentStorage storage = InMemoryDocumentStorage.create();
         ProviderNotificationPort notification = (provider, reason) -> { };
         service = new VerificationService(repository, storage, backgroundCheck, notification,
                 dispatchPool, new VerificationProperties());

@@ -104,7 +104,7 @@ Each admin module is now served by the service that owns its data. What still re
 Routing problems worth knowing:
 
 - notification-service is routed for `/notifications/**` but has no handler there; its only controller is `/admin/notification-templates`.
-- chat-service's STOMP endpoint `/ws/chat` has no route.
+- chat-service's STOMP endpoint `/ws/chat` has no route. The apps use the plain WebSocket at `/chat/channels/{bookingId}/ws`, which `/chat/**` covers.
 - The JWT filter's public prefixes (below) do not include `/auth/logout`, `GET /catalog/**` or `/payments/callbacks/**`. Those services permit them anonymously, but through the gateway they need an active bearer token or get 401.
 
 Global filters, in order, each rejection using the shared envelope:
@@ -116,7 +116,7 @@ Global filters, in order, each rejection using the shared envelope:
 | -80 | `WafInspectionGatewayFilter` | Regex scan of path, query values, `User-Agent`, `Referer`, `X-Forwarded-For`, `Cookie` → 400 |
 | -70 | `JwtIntrospectionGatewayFilter` | Calls `GET /auth/introspect`; 401 unless the path starts with `/auth/register`, `/auth/login`, `/auth/token/refresh`, `/auth/introspect`, `/actuator`, `/health`. An active result is reused for up to `jihajoor.gateway.auth.introspection-cache.ttl` (default `30s`, env `INTROSPECTION_CACHE_TTL`, `0` disables) and never past the token's `exp`. Entries are keyed by the token's SHA-256 and capped at `max-entries` (default 10000, env `INTROSPECTION_CACHE_MAX_ENTRIES`). Inactive results and failed or timed-out calls are never cached, and they still give 401 |
 | -60 | `OtpRateLimitGatewayFilter` | On `/auth/register/otp`, over 5 per phone per hour → 429, `Retry-After: 3600` |
-| -50 | `RateLimitGatewayFilter` | 60-second window per subject: CUSTOMER 100, provider 60, default 60 → 429, `Retry-After: 60` |
+| -50 | `RateLimitGatewayFilter` | 60-second fixed window per subject: CUSTOMER 100, provider 60, default 60 (`RATE_LIMIT_CUSTOMER_PER_MINUTE`, `RATE_LIMIT_PROVIDER_PER_MINUTE`, `RATE_LIMIT_DEFAULT_PER_MINUTE`) → 429, `Retry-After: 60`. Under load a provider doing jobs back to back reaches 60 (review section 21) |
 
 ---
 
@@ -355,6 +355,7 @@ Port 8082, rooted at `/customers`, plus one service-to-service endpoint under `/
 | PUT | `/customers/{id}/profile` | CUSTOMER, ADMIN, SUPER_ADMIN, SUPPORT_AGENT; owner or staff | Update name, email, photo, multipart |
 | POST | `/customers/{id}/location/detect` | CUSTOMER, ADMIN, SUPER_ADMIN, SUPPORT_AGENT; owner or staff | Resolve a service location from device GPS |
 | POST | `/customers/{id}/deletion` | CUSTOMER, ADMIN, SUPER_ADMIN; owner or staff | Request account and data deletion |
+| GET | `/customers/{id}/addresses` | CUSTOMER, ADMIN, SUPER_ADMIN, SUPPORT_AGENT; owner or staff | The saved addresses, default first, then newest |
 | POST | `/customers/{id}/addresses` | CUSTOMER, ADMIN, SUPER_ADMIN, SUPPORT_AGENT; owner or staff | Add a saved address from coordinates |
 | DELETE | `/customers/{id}/addresses/{addressId}` | CUSTOMER, ADMIN, SUPER_ADMIN, SUPPORT_AGENT; owner or staff | Delete a saved address |
 | GET | `/internal/addresses/{addressId}` | service credential | An address's owner, label and coordinates, for dispatch-engine and booking-service |
@@ -434,7 +435,9 @@ Response 201:
 
 `warning` is null when geocoding succeeded. The first active address becomes the default. The resolved street address is encrypted at rest and never returned.
 
-**DELETE /customers/{id}/addresses/{addressId}** returns 204. A missing address gives 404 `CUSTOMER_NOT_FOUND`. Booking-service is then asked whether an active booking references the address, through `GET /internal/bookings/active?customerId=&addressId=` with `X-Internal-Api-Key`. A non-null `bookingReference` gives `ADDRESS_IN_USE`. An unreachable or refusing booking-service gives `BOOKING_SERVICE_UNAVAILABLE` rather than risking a wrong delete. A booking waiting in a Tenant queue (`AWAITING_ASSIGNMENT`) does not count as active. Deleting the default promotes the most recently created remaining address.
+**GET /customers/{id}/addresses** returns `[{addressId, label, lat, lng, address, isDefault, createdAt}]`, the default first and then newest first; `address` is the decrypted reverse-geocoded street address, or null when only coordinates were stored. The customer app loads it with the booking form and replaces the addresses it remembered on the device, so an address saved on another device can be reused and a deleted one is never sent with a booking.
+
+**DELETE /customers/{id}/addresses/{addressId}** returns 204. A missing address gives 404 `CUSTOMER_NOT_FOUND`. Booking-service is then asked whether an active booking references the address, through `GET /internal/bookings/active?customerId=&addressId=` with `X-Internal-Api-Key`. A non-null `bookingReference` gives `ADDRESS_IN_USE`. An unreachable or refusing booking-service gives `BOOKING_SERVICE_UNAVAILABLE` rather than risking a wrong delete. A booking waiting in a Tenant queue (`AWAITING_ASSIGNMENT`) counts as active too. Deleting the default promotes the most recently created remaining address.
 
 **GET /internal/addresses/{addressId}** is service-to-service only. `BookingCreated` carries the booking's `addressId`, not coordinates, so dispatch-engine resolves it here before matching a provider. booking-service reads it too, for the job address on the booking detail and the Tenant queue. The caller must send the platform's shared service credential in `X-Internal-Api-Key` (the `INTERNAL_API_KEY` value booking-service's and auth-service's `/internal/**` endpoints also use; customer-service reads it as `jihajoor.customer.internal-api-key`). The key is compared in constant time and has no default: with none configured every internal call is refused. A user's JWT does not grant access, even the address owner's or a staff role. The gateway routes only `/customers/**` here and has no `/internal/**` route, so this path cannot be reached from outside the cluster.
 
@@ -491,6 +494,7 @@ Port 8083. `/providers/{id}` for the provider's own profile and wallet, `/admin/
 | GET | `/internal/providers/eligible` | service credential | Candidates for dispatch-engine |
 | GET | `/internal/providers/summaries?ids=` | service credential | Names and primary skills by id |
 | POST | `/internal/providers/{providerId}/earnings` | service credential | Credit a paid booking's earning, from payment-service |
+| PUT | `/internal/providers/{providerId}/rating` | service credential | Set the review aggregate, from rating-review-service |
 
 `/internal/**` requires `X-Internal-Api-Key` matching `jihajoor.provider.internal-api-key` (`INTERNAL_API_KEY`), compared in constant time, with no default. A missing or wrong key gets 401 `{"errorCode":"INTERNAL_AUTH_FAILED","message":...}` from the filter, without the rest of the envelope. The gateway has no `/internal/**` route.
 
@@ -631,6 +635,8 @@ Response 201:
 - `subcategoryId` is accepted but does not filter.
 - A bad or missing coordinate or radius gives 400 `VALIDATION_ERROR`.
 
+**PUT /internal/providers/{providerId}/rating** takes `{"average": 4.20, "count": 12, "sequence": 7}`: the weighted average of the provider's customer reviews (0–5, two decimals; null or 0 when `count` is 0), the number of reviews, and rating-review-service's change counter for this provider. It is an idempotent set, never an increment. A push whose `sequence` is lower than the stored one is ignored and answered with `"applied": false` and the newer values, so a late retry cannot roll a rating back. Response 200 `{providerId, aggregateRating, ratingCount, ratingSequence, underReview, applied}`; 400 `VALIDATION_ERROR`, 404 `PROVIDER_NOT_FOUND`. Falling below `jihajoor.provider.review-rating-threshold` flags the provider UNDER_REVIEW and alerts an admin. The profile response also carries `ratingCount`.
+
 **GET /internal/providers/summaries?ids=...** returns `{providers: [{id, displayName, primarySkill}]}`. Unknown ids are left out, and more than 200 ids give 400 `VALIDATION_ERROR`.
 
 **POST /internal/providers/{providerId}/earnings**
@@ -712,6 +718,8 @@ Port 8094 locally. Provider paths under `/verifications/{providerId}`, admin pat
 | POST | `/admin/verifications/{providerId}/suspend` | ADMIN, SUPER_ADMIN | Suspend and remove from the dispatch pool |
 | GET | `/admin/verification/queue` | ADMIN, SUPER_ADMIN | Providers in `DOCUMENT_SUBMITTED`, oldest submission first, at most 200 |
 | GET | `/admin/verification/{providerId}/documents` | ADMIN, SUPER_ADMIN | A provider's submitted documents |
+| GET | `/admin/verification/{providerId}/documents/{documentId}` | ADMIN, SUPER_ADMIN | One document's bytes, for the review dialog |
+| GET | `/verifications/{providerId}/documents/{documentId}` | SERVICE_PROVIDER, ADMIN, SUPER_ADMIN; caller must be `providerId` or staff | The provider's own document |
 | POST | `/admin/verification/{providerId}/decision` | ADMIN, SUPER_ADMIN | Approve or reject the documents, 204 |
 | GET | `/admin/verification/background-checks` | ADMIN, SUPER_ADMIN | Providers in `BACKGROUND_CHECK_PENDING` or `BACKGROUND_CHECK_COMPLETED`, oldest check first, at most 200 |
 | POST | `/admin/verification/{providerId}/background-check` | ADMIN, SUPER_ADMIN | Record the check's result and approve or reject in one step, 204 |
@@ -734,7 +742,7 @@ Response 201, and the same body with 200 from the status read and all five admin
   "documents": [
     {
       "documentType": "GOVERNMENT_ID",
-      "storageRef": "s3://jihajoor-documents/dd73094d/GOVERNMENT_ID/1e7b4d09",
+      "storageRef": "dd73094d/GOVERNMENT_ID/1e7b4d09.jpg",
       "uploadedAt": "2026-09-11T09:30:00Z"
     }
   ],
@@ -751,7 +759,7 @@ Response 201, and the same body with 200 from the status read and all five admin
 }
 ```
 
-`status` is one of `PENDING`, `DOCUMENT_SUBMITTED`, `DOCUMENT_VERIFIED`, `BACKGROUND_CHECK_PENDING`, `BACKGROUND_CHECK_COMPLETED`, `APPROVED`, `REJECTED`, `SUSPENDED`. Verifying documents appends two audit entries, because it also initiates the background check. Storage is a stub that discards the bytes while returning an `s3://` reference.
+`status` is one of `PENDING`, `DOCUMENT_SUBMITTED`, `DOCUMENT_VERIFIED`, `BACKGROUND_CHECK_PENDING`, `BACKGROUND_CHECK_COMPLETED`, `APPROVED`, `REJECTED`, `SUSPENDED`. Verifying documents appends two audit entries, because it also initiates the background check. The bytes are stored by `DocumentStorage` (`DOCUMENT_STORAGE_PROVIDER`, default `auto`): S3 when `DOCUMENTS_BUCKET` is set and a `HeadBucket` check at startup succeeds, the local directory `DOCUMENTS_LOCAL_DIR` otherwise (with a WARN); `s3` fails startup without a reachable bucket and `local` never tries S3. Each document row records where it went (`storage`, verification V2) and the sanitised original file name. A storage failure on upload answers 503 `DOCUMENT_STORAGE_UNAVAILABLE`.
 
 Permitted transitions: `PENDING → DOCUMENT_SUBMITTED`; `DOCUMENT_SUBMITTED → DOCUMENT_VERIFIED | REJECTED`; `DOCUMENT_VERIFIED → BACKGROUND_CHECK_PENDING`; `BACKGROUND_CHECK_PENDING → BACKGROUND_CHECK_COMPLETED`; `BACKGROUND_CHECK_COMPLETED → APPROVED | REJECTED`; `APPROVED → SUSPENDED`; `SUSPENDED → APPROVED`. `REJECTED` is terminal and self-transitions are never permitted.
 
@@ -764,7 +772,9 @@ Eligibility returns 204 when `APPROVED`, otherwise 403 `PROVIDER_NOT_APPROVED` w
 - `displayName` and `primarySkill` come from provider-service's `GET /internal/providers/summaries`, and are null when it cannot answer.
 - `mobileNumber` is always null.
 
-**GET /admin/verification/{providerId}/documents** returns `[{id, type, contentType, url, fileName}]`. `type` is a label such as "Government ID", and `url` and `fileName` are always null. It gives 404 `VERIFICATION_NOT_FOUND` for an unknown provider.
+**GET /admin/verification/{providerId}/documents** returns `[{id, type, contentType, url, fileName}]`. `type` is a label such as "Government ID". `url` is the API path of the document's bytes (`/admin/verification/{providerId}/documents/{id}`), or null for a document uploaded before storage was enabled (verification V2), whose bytes were discarded. It gives 404 `VERIFICATION_NOT_FOUND` for an unknown provider.
+
+**GET /admin/verification/{providerId}/documents/{documentId}** (and the provider's own `GET /verifications/{providerId}/documents/{documentId}`) streams the stored bytes through verification-service, never a presigned link, with `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff` and a `Content-Disposition` carrying the file name. JPEG, PNG, WebP, GIF and PDF are served inline with their stored type; anything else as `application/octet-stream`, attachment. The Admin Portal fetches it as a blob with the bearer header. 404 `VERIFICATION_NOT_FOUND`, `DOCUMENT_NOT_FOUND`, or `DOCUMENT_NOT_STORED` for a row with no stored bytes.
 
 **GET /admin/verification/background-checks** returns `[{providerId, displayName, primarySkill, status, startedAt, result, documentCount}]`.
 
@@ -791,6 +801,8 @@ Eligibility returns 204 when `APPROVED`, otherwise 403 `PROVIDER_NOT_APPROVED` w
 | 403 | `FORBIDDEN` | Not the provider and not staff |
 | 403 | `PROVIDER_NOT_APPROVED` | Eligibility checked while not approved |
 | 404 | `VERIFICATION_NOT_FOUND` | No record for that provider |
+| 404 | `DOCUMENT_NOT_FOUND` / `DOCUMENT_NOT_STORED` | No such document, or one uploaded before storage was enabled |
+| 503 | `DOCUMENT_STORAGE_UNAVAILABLE` | The document store refused the upload |
 | 409 | `INVALID_STATE_TRANSITION` | Transition not permitted |
 
 ---
@@ -821,6 +833,7 @@ Staff here is `ADMIN`, `SUPER_ADMIN`, `FINANCE_ADMIN`, `SUPPORT_AGENT` and `DISP
 | POST | `/bookings/{reference}/on-the-way` | assigned provider, staff | → `PROVIDER_ON_THE_WAY` |
 | POST | `/bookings/{reference}/arrived` | assigned provider, staff | → `PROVIDER_ARRIVED` |
 | POST | `/bookings/{reference}/photos` | assigned provider, staff | Attach one before or after photo, 204 |
+| GET | `/bookings/{reference}/photos/{photoId}` | the booking's customer, assigned provider, staff | The photo's bytes |
 | POST | `/bookings/{reference}/start` | assigned provider, staff | → `JOB_STARTED`, requires a before photo |
 | POST | `/bookings/{reference}/pause` | assigned provider, staff | → `JOB_PAUSED`, reason required |
 | POST | `/bookings/{reference}/resume` | assigned provider, staff | → `JOB_STARTED` |
@@ -899,9 +912,11 @@ The same body (`BookingResponse`) is returned by every command except photos, an
 - The service checks 50 MB per file, but no multipart limits are configured, so Spring Boot's defaults (1 MB per file, 10 MB per request) apply first.
 - A malformed `scheduledAt` on this path throws an unhandled parse exception and surfaces as a 500.
 
-**POST /bookings/{reference}/photos** is multipart with a `type` text part (`BEFORE_PHOTO` or `AFTER_PHOTO`, trimmed and case-insensitive) and a single `file` part. It returns **204 with no body** and performs no state change.
+**POST /bookings/{reference}/photos** is multipart with a `type` text part (`BEFORE_PHOTO` or `AFTER_PHOTO`, trimmed and case-insensitive) and a single `file` part. It returns **204 with no body** and performs no state change. The file goes to S3 or the local directory (`MEDIA_STORAGE_PROVIDER`, see ARCHITECTURE.md 5.4); when S3 was chosen but cannot take the file the answer is 503 `MEDIA_STORAGE_UNAVAILABLE` and nothing is recorded, so the upload can be retried.
 
-**POST /bookings/{reference}/cancellation** takes an optional `{"reason": "..."}` with a 500-character cap. The response carries the applied `cancellationFee`. The fee is 0.00 from `SEARCHING_PROVIDER`, `AWAITING_ASSIGNMENT`, `PROVIDER_ASSIGNED` and `PROVIDER_ACCEPTED`. The configured fee applies from `PROVIDER_ON_THE_WAY`, and with no per-subcategory fee source today that is the 0.00 default. Cancellation is reachable from those five states only. From a later state the answer is 409 `CANCELLATION_NOT_ALLOWED` or 409 `INVALID_BOOKING_TRANSITION`. A `CREATED` booking cannot be cancelled.
+**GET /bookings/{reference}/photos/{photoId}** streams one stored photo, `photoId` being an id from the detail's `photos`. Same access rule as the detail (anyone else gets 404 `BOOKING_NOT_FOUND`); a photo of another booking, or one whose bytes were never stored (uploads before 2026-10-18 kept none), is 404 `MEDIA_NOT_FOUND`. The response has the stored `Content-Type`, `Content-Length` when known, `Cache-Control: private, max-age=3600` and `Content-Disposition: inline`. It needs the bearer header, so a browser fetches it as a blob rather than through a plain `<img src>`.
+
+**POST /bookings/{reference}/cancellation** takes an optional `{"reason": "..."}` with a 500-character cap. The response carries the applied `cancellationFee`. The fee is 0.00 from `SEARCHING_PROVIDER`, `AWAITING_ASSIGNMENT`, `PROVIDER_ASSIGNED` and `PROVIDER_ACCEPTED`. The configured fee applies from `PROVIDER_ON_THE_WAY`, and with no per-subcategory fee source today that is the 0.00 default. Cancellation is reachable from those five states only. From a later state the answer is 409 `CANCELLATION_NOT_ALLOWED` or 409 `INVALID_BOOKING_TRANSITION`. A `CREATED` booking (never confirmed) can also be cancelled, fee-free.
 
 **POST /bookings/{reference}/pause** requires `{"reason": "..."}`, `@NotBlank` with 1 to 500 characters, re-checked after trimming. It closes the open work interval and opens a pause interval.
 
@@ -1022,7 +1037,7 @@ Null fields are omitted:
 
 - `providerId` is absent until a provider is assigned, and again after a Tenant assignment is declined.
 - `address` is the saved address's label, and `coordinates` its point, both from customer-service's internal address lookup. Both are absent when it cannot be resolved; the default `CUSTOMER_CLIENT=stub` never resolves, compose sets `http`.
-- `photos` (oldest first, `kind` `BEFORE` or `AFTER`, no URL because stored media is not served back) and `parts` are always present, possibly empty.
+- `photos` (oldest first, `kind` `BEFORE` or `AFTER`) and `parts` are always present, possibly empty. A photo has no URL; its bytes come from `GET /bookings/{reference}/photos/{photoId}`.
 - `netDurationSeconds` appears once the job is complete.
 - `tenantName` appears only while the booking is `PROVIDER_ASSIGNED` by a Tenant (see Tenants).
 
@@ -1330,6 +1345,9 @@ Port 8088, controllers at `/payments` and `/admin/payments`. Roles come from `Pa
 | POST | `/payments/settlements` | ADMIN, SUPER_ADMIN, FINANCE_ADMIN | Initiate a settlement transfer |
 | GET | `/admin/payments?search=` | ADMIN, SUPER_ADMIN, FINANCE_ADMIN | Admin portal list |
 | POST | `/admin/payments/{id}/refund` | ADMIN, SUPER_ADMIN, FINANCE_ADMIN | Admin portal refund, `Idempotency-Key` header |
+| POST | `/internal/payments/refunds` | service credential (`X-Internal-Api-Key`) only | Refund a booking's payment, from complaint-service |
+
+**POST /internal/payments/refunds** takes `{"bookingId": "...", "amount": 1250.00, "reason": "Complaint e81c4f27-...", "idempotencyKey": "complaint-refund:5c0f6a2e-..."}` (`amount` at least 0.01 with two decimals, `reason` up to 500, `idempotencyKey` required, up to 64). It finds the booking's captured attempt (`SUCCESS`, `PARTIALLY_REFUNDED` or `REFUNDED`) and goes through the same `PaymentService.refund` as the staff endpoint, so the amount is checked against what is still unrefunded and a same-key retry replays the recorded refund without calling the gateway again. 200 `{refundId, transactionId, bookingId, amount, status: "SUCCEEDED", gatewayRefundReference, transactionStatus, transactionRefundedAmount}`. Refusals, where no money moved: 400 `VALIDATION_ERROR` (including an amount above the remainder), 404 `PAYMENT_NOT_FOUND`, 409 `PAYMENT_NOT_REFUNDABLE`, `INVALID_STATE_TRANSITION`, `GATEWAY_REFERENCE_MISSING`, `REFUND_IN_PROGRESS`, `AMBIGUOUS_BOOKING_PAYMENT`, `IDEMPOTENCY_KEY_REUSED`, 502 `REFUND_GATEWAY_ERROR`. 502 `REFUND_OUTCOME_UNKNOWN` means the gateway did not confirm: the payment refund stays `PENDING` and a same-key retry re-sends it under the same refund id. 401 `INTERNAL_AUTH_FAILED` without the key.
 
 A non-staff caller acting on another customer's transaction gets 403 `FORBIDDEN`. `SERVICE_PROVIDER` passes the role rule on the read, but the ownership check compares against the customer, so a provider always gets that 403.
 
@@ -1423,7 +1441,7 @@ Unknown payload fields are ignored, so a gateway may sign extra data. Checks run
 | Transaction already settled and the payload agrees (`SUCCEEDED` on `SUCCESS`, `PARTIALLY_REFUNDED` or `REFUNDED`, or `FAILED` on `FAILED`) | 200 with the current transaction. Idempotent no-op: no second event, invoice or wallet credit |
 | Transaction already settled and the payload contradicts it | 409 `CALLBACK_CONFLICT` |
 
-A gateway adapter must therefore send our transaction id to the gateway (it is in the charge request) and deliver callbacks in this shape. Real Razorpay and Stripe webhooks need translating into it by their adapters.
+A gateway adapter must therefore send our transaction id to the gateway (it is in the charge request) and deliver callbacks in this shape. Real Razorpay webhooks are translated into it by the Razorpay adapter.
 
 On success the `SUCCESS` state change, the `PaymentCompleted` outbox row and a wallet-credit-owed marker commit together. booking-service consumes the event and settles the booking at `PAYMENT_COMPLETED`. After that commit, with no transaction open, the handler does two things:
 
@@ -1530,8 +1548,12 @@ Port 8089, read-only controller at `/invoices`.
 |--------|------|------|---------|
 | GET | `/invoices/customers/{customerId}?page=&size=` | CUSTOMER, ADMIN, SUPER_ADMIN, FINANCE_ADMIN, SUPPORT_AGENT; owner or staff | Invoice history within the 24-month retention window |
 | GET | `/invoices/providers/{providerId}/statements/{year}/{month}` | SERVICE_PROVIDER, ADMIN, SUPER_ADMIN, FINANCE_ADMIN, SUPPORT_AGENT; owner or staff | Monthly earnings statement |
+| GET | `/invoices/bookings/{bookingId}` | CUSTOMER, SERVICE_PROVIDER, ADMIN, SUPER_ADMIN, FINANCE_ADMIN; the invoice's customer or provider, or staff | The booking's newest invoice, as one summary |
+| GET | `/invoices/{invoiceId}/download` | CUSTOMER, SERVICE_PROVIDER, ADMIN, SUPER_ADMIN, FINANCE_ADMIN; the invoice's customer or provider, or staff | The PDF, `Content-Disposition: attachment; filename="<invoiceNumber>.pdf"`, `Cache-Control: no-store, private` |
 
-`page` defaults to 0 and a negative value becomes 0. `size` defaults to 20 and is capped at 100. Year and month are plain int path variables with no range validation, so an invalid month surfaces as a 500.
+`page` defaults to 0 and a negative value becomes 0. `size` defaults to 20 and is capped at 100. An out-of-range year or month gives 400 `VALIDATION_ERROR`.
+
+The two per-invoice reads answer 404 `INVOICE_NOT_FOUND` both for an unknown id and for a caller who is neither party nor staff, so ids cannot be probed. The customer app looks up a paid booking's invoice with `/invoices/bookings/{bookingId}` (retrying a 404 for about a minute right after payment, while `PaymentCompleted` is still being consumed) and downloads the PDF as a blob with the bearer header.
 
 `GlobalExceptionHandler` uses the shared envelope. The reachable codes are 401 `UNAUTHENTICATED` / `INVALID_PRINCIPAL`, 403 `FORBIDDEN` (path id is not the caller and the caller is not staff) and 400 `VALIDATION_ERROR`.
 
@@ -1549,7 +1571,7 @@ Port 8089, read-only controller at `/invoices`.
 ]
 ```
 
-The download URL is minted per request and is not persisted on the invoice row. An empty history returns 200 with an empty array. The PDF itself is never served by this controller: it is rendered when `PaymentCompleted` arrives, handed to the storage port, and reachable only through that signed URL. The only storage adapter is in-memory, so the bytes vanish on restart while the database rows survive.
+The download URL is minted per request and is not persisted on the invoice row. An empty history returns 200 with an empty array. The PDF is rendered when `PaymentCompleted` arrives and handed to the storage port, whose only adapter is in-memory. `GET /invoices/{invoiceId}/download` serves it from there and re-renders it from the saved invoice row when it is gone (after a restart, or on another replica), storing it again. The re-rendered copy prints the payment method as "As recorded at payment", since the method is not kept on the row; a rendering failure answers 503 `INVOICE_DOCUMENT_UNAVAILABLE`.
 
 ```json
 {
@@ -1672,6 +1694,8 @@ Port 8091, controllers at `/complaints` and `/admin/complaints`. The `customerId
 | POST | `/complaints` | CUSTOMER, ADMIN, SUPER_ADMIN, SUPPORT_AGENT | Raise a complaint against a booking |
 | POST | `/complaints/{complaintId}/status` | ADMIN, SUPER_ADMIN, SUPPORT_AGENT | Change status and notify the customer |
 | POST | `/complaints/{complaintId}/refund` | ADMIN, SUPER_ADMIN, SUPPORT_AGENT | Approve a refund (at most one per complaint), 202 with the recorded refund |
+| GET | `/complaints/{complaintId}/refund` | ADMIN, SUPER_ADMIN, SUPPORT_AGENT | The recorded refund and whether it can be re-sent |
+| POST | `/complaints/{complaintId}/refund/resend` | ADMIN, SUPER_ADMIN, SUPPORT_AGENT | Re-send a `PENDING` refund whose outcome is unknown; no body |
 | POST | `/complaints/{complaintId}/dispute` | ADMIN, SUPER_ADMIN, SUPPORT_AGENT | Set disputed and hold the provider settlement |
 | GET | `/complaints/stats` | ADMIN, SUPER_ADMIN, SUPPORT_AGENT | Aggregated statistics |
 | GET | `/admin/complaints?search=&status=` | ADMIN, SUPER_ADMIN, SUPPORT_AGENT | Admin portal list, newest first, at most 200 |
@@ -1731,7 +1755,7 @@ The status change takes `{"status": "IN_PROGRESS"}`. The dispute endpoint takes 
 
 `amount` is required, positive, with at most two decimal places. `reason` (up to 500 characters) and `idempotencyKey` (up to 64) are optional. The approving agent is the JWT subject, never the body.
 
-A complaint is refunded **at most once**, whatever the outcome of the first attempt; a failed refund goes to Finance_Admin for manual processing. Only a complaint in `OPEN`, `IN_PROGRESS`, `ESCALATED` or `DISPUTED` can be refunded. `RESOLVED`, `CLOSED` and `REFUND_FAILED` are refused. The refund is recorded as `PENDING` and committed before the Payment Service is called. The call runs outside any database transaction and carries a stable idempotency key derived from the record id (`complaint-refund:<refund id>`). The outcome is recorded in a second transaction. This service does not cap the amount; the Payment Service checks it against the transaction.
+The refund moves money through payment-service's `POST /internal/payments/refunds` (complaint-service's `COMPLAINT_PAYMENT_CLIENT=http`, the default; `PAYMENT_SERVICE_URL` must reach payment-service). A complaint is refunded **at most once**; a refused refund goes to Finance_Admin for manual processing. When payment-service cannot confirm the outcome (timeout, 5xx, `REFUND_OUTCOME_UNKNOWN`) the answer is 502, the refund stays `PENDING`, Finance_Admin is alerted, and a retry **with the same `idempotencyKey`** re-sends it under the same payment-side key; while an attempt is still in flight (under `COMPLAINT_REFUND_ATTEMPT_LEASE`, 5 min) that retry gets 409 `REFUND_IN_PROGRESS`, and a different key or none gets 409 `REFUND_ALREADY_REQUESTED`. Only a complaint in `OPEN`, `IN_PROGRESS`, `ESCALATED` or `DISPUTED` can be refunded. `RESOLVED`, `CLOSED` and `REFUND_FAILED` are refused. The refund is recorded as `PENDING` and committed before the Payment Service is called. The call runs outside any database transaction and carries a stable idempotency key derived from the record id (`complaint-refund:<refund id>`). The outcome is recorded in a second transaction. This service does not cap the amount; the Payment Service checks it against the transaction.
 
 Response 202 with the recorded refund. A rejection is not an error: the body has `"status": "FAILED"` and a `failureReason`, the complaint moves to `REFUND_FAILED`, the customer is notified and Finance_Admin is alerted.
 
@@ -1747,11 +1771,20 @@ Response 202 with the recorded refund. A rejection is not an error: the body has
   "externalReference": "stub_rf_0b6f2a6c-3e1d-3c55-9a8e-4f1b7d2c9e01",
   "failureReason": null,
   "requestedAt": "2026-09-12T10:15:00Z",
-  "completedAt": "2026-09-12T10:15:01Z"
+  "completedAt": "2026-09-12T10:15:01Z",
+  "lastAttemptAt": "2026-09-12T10:15:00Z",
+  "outcomeUnknown": false,
+  "resendable": false
 }
 ```
 
-A retry with the same `idempotencyKey` and amount returns the recorded refund again without calling the Payment Service. Any other second request is refused with `REFUND_ALREADY_REQUESTED`. The default refund adapter is a logging stub that approves without moving money; there is no HTTP adapter to payment-service yet.
+`outcomeUnknown` is true for a `PENDING` refund whose last attempt got no answer; `resendable` is true when a re-send would go out now (outcome unknown and no attempt younger than the lease).
+
+A retry with the same `idempotencyKey` and amount returns the recorded refund again without calling the Payment Service. Any other second request is refused with `REFUND_ALREADY_REQUESTED`. An unconfirmed refund (502 with the refund still `PENDING`) is the exception: the same key re-sends it, as described above.
+
+**POST /complaints/{complaintId}/refund/resend** re-sends the stored refund (same amount and booking) under the complaint row lock and the same payment-side key `complaint-refund:<refund id>`, so it can never refund twice, whether or not the approval carried a client `idempotencyKey`. A refund already `SUCCEEDED` or `FAILED` comes back unchanged without calling the Payment Service; an attempt still in flight gives 409 `REFUND_IN_PROGRESS`; an outcome still unknown gives 502 again and alerts Finance again. **GET /complaints/{complaintId}/refund** answers 404 `REFUND_NOT_FOUND` when the complaint has none.
+
+The Admin Portal's complaint **Refund** dialog sends a fresh `idempotencyKey` per dialog (reused on retry), shows the outcome, re-checks a `PENDING` refund every 10 s and offers **Re-send** when `resendable`.
 
 **GET /complaints/stats**
 
@@ -1816,7 +1849,7 @@ Roles come from `LocationRbacConfig` (`POST /locations/**` and `GET /locations/*
 }
 ```
 
-Both are `@NotNull`, with latitude in [-90, 90] and longitude in [-180, 180], re-checked in the domain type. **The provider id is the JWT subject.** A `providerId` in the body is accepted and ignored, and a non-UUID subject gets a 401 with Spring's default body. There is still no ownership check. Any `SERVICE_PROVIDER` can post pings for any booking, not only the provider assigned to it. Any of the reading roles can read or stream any booking's position.
+Both are `@NotNull`, with latitude in [-90, 90] and longitude in [-180, 180], re-checked in the domain type. **The provider id is the JWT subject.** A `providerId` in the body is accepted and ignored, and a non-UUID subject gets a 401 with Spring's default body. Ownership is checked by `LocationAccessPolicy` against booking-service's participants: only the booking's assigned provider may post, and only its customer, its assigned provider or staff may read or stream the position (403 otherwise). The 5-second minimum between accepted pings is per provider and answers 429 `LOCATION_UPDATE_RATE_LIMITED`, without a `Retry-After` header; the provider app sends one every 5 s.
 
 Response 202, and the same shape is pushed over SSE:
 
@@ -1850,14 +1883,32 @@ The ETA uses a haversine distance at a fixed 30 km/h against a destination resol
 
 ### chat-service
 
-Port 8093. REST at `/chat/channels/{bookingId}/messages`, STOMP at `/ws/chat` with the broker on `/topic` and fan-out to `/topic/chat/{bookingId}`.
+Port 8093. A booking has one channel, keyed by the booking id, opened on `ProviderAccepted` and closed on `PaymentCompleted` or `BookingCancelled`. REST under `/chat/**`, a plain WebSocket at `/chat/channels/{bookingId}/ws` (what the customer and provider apps use), and STOMP at `/ws/chat` with fan-out to `/topic/chat/{bookingId}` (not routed by the gateway).
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
+| GET | `/chat/bookings/{bookingId}/channel` | CUSTOMER, SERVICE_PROVIDER; participant check enforced | `{channelId, bookingId, active}`; 404 until the provider accepts |
 | POST | `/chat/channels/{bookingId}/messages` | CUSTOMER, SERVICE_PROVIDER; participant check enforced | Send a message, 201 |
 | GET | `/chat/channels/{bookingId}/messages` | CUSTOMER, SERVICE_PROVIDER; participant check enforced | Full history, oldest first |
+| GET (upgrade) | `/chat/channels/{bookingId}/ws` | CUSTOMER, SERVICE_PROVIDER; participant check at the handshake | Real-time chat; see below |
 
-`ChatService` compares the principal against the channel's stored customer and provider ids and throws `CHANNEL_ACCESS_FORBIDDEN` otherwise, and `WebSocketAuthorizationConfig` applies the same rule to STOMP `SUBSCRIBE`. Staff and Tenant admins are refused by the role rule before the participant check runs. The gap is that the interceptor only inspects `SUBSCRIBE`, so a connected client can `SEND` straight to `/topic/chat/{bookingId}` and bypass the participant check, the masking and the persistence.
+`ChatService` compares the principal against the channel's stored customer and provider ids and throws `CHANNEL_ACCESS_FORBIDDEN` otherwise. Staff and Tenant admins are refused by the role rule before the participant check runs.
+
+**WebSocket.** Browsers cannot set headers on a WebSocket, so the apps pass `?access_token=`; the gateway accepts it on this path only and moves it into the `Authorization` header. The handshake answers 401 without a principal, 404 for an unknown booking and 403 for a non-participant. A client frame is `{"body": "..."}` (blank, non-JSON or over 4000 characters is dropped); it goes through `ChatService.sendMessage`, so masking, persistence and the offline push apply. Every stored message is sent to all open sockets on the booking, the sender's included, as the message object below. A channel that is or becomes closed ends the socket with a normal closure (1000), which the apps do not retry: reason `CHANNEL_CLOSED` at the handshake, `MESSAGE_NOT_DELIVERED` when a frame arrives after the booking ended (that frame is not stored, and the apps put its text back in the draft). Delivery between instances is at-most-once Redis pub/sub, so after any reconnect the apps reload the history; a handshake refused with an expired access token makes them refresh the session first. An open socket marks its user online for that booking, so they are not also sent a push.
+
+**STOMP.** `WebSocketAuthorizationConfig` applies the participant rule to `SUBSCRIBE` and refuses any client `SEND` to `/topic/**` or `/queue/**`, so delivery only happens through the checked service path.
+
+Message object (history, send response and both real-time transports):
+
+```json
+{
+  "id": "9b1c…", "channelId": "4f0e…", "bookingId": "4f0e…", "senderId": "a71d…",
+  "senderRole": "CUSTOMER", "body": "I'm at the gate, which floor? Call +************ if needed.",
+  "sentAt": "2026-10-18T09:30:00Z"
+}
+```
+
+Request body for a REST send:
 
 ```json
 { "body": "I'm at the gate, which floor? Call +919000000001 if needed." }
@@ -1982,6 +2033,8 @@ Port 8087. The gateway routes `/dispatch/offers/**` (providers answering offers)
 | PUT | `/admin/dispatch/weights` | SUPER_ADMIN | Replace them, validated before the store changes |
 | GET | `/admin/dispatch/config` | ADMIN, SUPER_ADMIN, DISPATCHER | Weights plus radius, expansion and offer timeout |
 | PUT | `/admin/dispatch/config` | SUPER_ADMIN | Replace all of those, all-or-nothing |
+
+**Settings are saved in the database** (`dispatch.dispatch_settings`, one row): a PUT applies to every replica within `DISPATCH_SETTINGS_CACHE_TTL` (10 s) and survives restarts, and records the caller in `updated_by`. Fields left out of a PUT are merged with the stored row. The GETs always read the row. Until the first save the `DISPATCH_*` configuration defaults apply. Weights whose decimal digits exceed what a double holds are refused with 400 `INVALID_DISPATCH_WEIGHTS`.
 
 **Offers.** An offer belongs to one provider; anyone else gets 404 `OFFER_NOT_FOUND`. Offers live in Redis, so every replica sees them. Response:
 
@@ -2782,7 +2835,7 @@ Producer status against this contract:
 - `ProviderArriving`, `ProviderArrived`, `JobStarted` and `JobCompleted` now carry `customerId` as well as `providerId`, so they are no longer dead-lettered.
 - `ProviderRejected` is produced by dispatch-engine (see above) with `customerId`, so it resolves a recipient. It is delivered in-app only: dispatch emits one per candidate that declines or lets an offer lapse, and a push for each would buzz the customer repeatedly while one booking is matched.
 
-The delivery log is keyed on `(kafkaEventId, userId, channel)`. A single event can reach several recipients on the same channel, for example a cancellation sent to both customer and provider. Delivery channels are `PUSH`, `SMS`, `EMAIL`, `IN_APP`. Delivery statuses are `DELIVERED`, `PERMANENTLY_FAILED`, `SKIPPED_PREFERENCE`, `SKIPPED_NO_CONTACT`. Because auth-service stores only a phone number, SMS and in-app are the only channels that can deliver today. Nothing on the platform stores a push token. All four channel adapters are logging stubs.
+The delivery log is keyed on `(kafkaEventId, userId, channel)`. A single event can reach several recipients on the same channel, for example a cancellation sent to both customer and provider. Delivery channels are `PUSH`, `SMS`, `EMAIL`, `IN_APP`. Delivery statuses are `DELIVERED`, `PERMANENTLY_FAILED`, `SKIPPED_PREFERENCE`, `SKIPPED_NO_CONTACT`. auth-service returns the mobile number and, once verified, the email address, so SMS, email and in-app can reach a user. Nothing on the platform stores a push token. The email channel sends over SMTP when `NOTIFICATION_EMAIL_PROVIDER=smtp` (Amazon SES in AWS); the SMS and push channels in notification-service default to logging adapters.
 
 ---
 
@@ -2792,7 +2845,7 @@ The extraction surfaced these, all verified in code. Items marked **fixed** are 
 
 1. **RBAC was unconfigured in 17 of 19 services.** Partly fixed: all eighteen servlet services now register role rules. Still open:
    - booking-service's `POST /bookings/**` commands and the assignment answers have no role rule and rely on in-code ownership, which judges staff by the token's first authority only.
-   - location-service checks roles but not ownership, so any provider can post pings for any booking and any listed role can read any position.
+   - location-service ownership is **fixed** (review section 19.1): pings are accepted only from the booking's assigned provider, and the snapshot and stream only for its parties and staff.
 2. **Chat channels were never activated** — **fixed**. `ProviderAccepted` now carries `customerId` from both producers, dispatch-engine and booking-service.
 3. **Four notification topics were dead-lettered** — **fixed**. `ProviderArriving`, `ProviderArrived`, `JobStarted` and `JobCompleted` now carry `customerId`. Contact details come from auth-service by user id rather than from events.
 4. **location-service subscribed to `booking.job-started`** — **fixed**. It now consumes `JobStarted`.
@@ -2800,7 +2853,7 @@ The extraction surfaced these, all verified in code. Items marked **fixed** are 
    - dispatch-engine resolves both from customer-service and catalog-service before matching.
    - provider-service now has `/internal/providers/eligible`.
 
-   An unresolvable booking is now failed through booking-service rather than dead-lettered. Still open: the offer, "no provider" and dispatcher notifications go to notification-service `/internal/notifications/*` endpoints that do not exist, and are sent without a credential. Providers therefore only see offers by polling `GET /dispatch/offers`.
+   An unresolvable booking is now failed through booking-service rather than dead-lettered. The dead calls to notification-service's non-existent `/internal/notifications/*` endpoints were removed (review section 19.1); providers see offers by polling `GET /dispatch/offers` (every 5 s in the provider app).
 6. **`ProviderRejected`, `ProviderAssigned` and `BookingCancelled` had consumers but no producer.** Fixed:
    - dispatch-engine publishes `ProviderRejected`.
    - booking-service publishes `BookingCancelled`.
@@ -2809,9 +2862,18 @@ The extraction surfaced these, all verified in code. Items marked **fixed** are 
 8. **Two services lacked the shared error envelope.** invoice-service is **fixed**: it now has a handler. dispatch-engine still has only controller-local handlers, without `correlationId`. Several other handlers do not map unreadable bodies, missing parameters or type mismatches, which get Spring's default body: booking, payment, complaint, rating-review, promotion and reporting.
 9. **Port and route inconsistencies.** The dispatch-engine shadowing and admin-service's shadowed pricing endpoint are **fixed**: dispatch-engine has its own routes, and admin-service no longer serves module endpoints. Still open:
    - `/notifications/**` is routed to a service with no handler there.
-   - chat's `/ws/chat` is not routed.
-   - The gateway demands a token on `/auth/logout`, `GET /catalog/**` and `/payments/callbacks/**`, which their services permit anonymously.
+   - chat's STOMP `/ws/chat` is not routed (the apps use `/chat/channels/{bookingId}/ws`, which is).
+   - The gateway demands a token on `/auth/logout`, `GET /catalog/**` and `/payments/callbacks/**`, which their services permit anonymously. For logout this is deliberate (revoking a session through the gateway needs a valid token); since 2026-10-18 the three apps send their access token on logout, so a build whose auth calls go through the gateway no longer leaves the refresh token unrevoked.
    - booking-service's `application.yml` default port is 8085, the same as catalog-service's; compose overrides it.
 10. **Duplicate coupon error codes between promotion-service and pricing-engine** — **fixed**. pricing-engine now quotes coupons through promotion-service and passes its codes through.
-11. **Payment retries can open a second charge.** `POST /payments/{id}/retries` can move a `PENDING` payment, with a gateway charge possibly in flight, to `FAILED`. That unlocks the next attempt on `POST /payments`. A late `SUCCEEDED` callback for the first attempt then gets 409 `CALLBACK_CONFLICT`, leaving captured money unrecorded.
-12. **A queued booking does not protect its address.** booking-service's `/internal/bookings/active` does not count `AWAITING_ASSIGNMENT`, so a customer can delete the address of a booking waiting in a Tenant queue.
+11. **Payment retries could open a second charge** — **fixed** (review section 19.1). A retry while a charge may be in flight answers 409 `PAYMENT_IN_FLIGHT`.
+12. **A queued booking did not protect its address** — **fixed** (review section 19.1). `/internal/bookings/active` counts `AWAITING_ASSIGNMENT`.
+13. **Client calls with no server side (gap review 2026-10-18)** — **fixed** (review section 21):
+    - the customer app's invoice download called `GET /invoices/{id}/download`, which did not exist, and waited for a `detail.invoice` field the booking detail never sends. invoice-service now serves `GET /invoices/bookings/{bookingId}` and `GET /invoices/{invoiceId}/download`;
+    - the customer app's Available Professionals screen called `GET /bookings/{id}/professionals`, which never existed, and nothing linked to it. Removed, with three unused catalog functions pointing at missing endpoints;
+    - the Admin Portal had no way to approve a complaint refund, so the refund path could not be reached from any UI. It now has a Refund dialog, plus `GET /complaints/{id}/refund` and `POST /complaints/{id}/refund/resend`;
+    - verification documents were never stored, so the review dialog always showed "no preview". They are stored and served now (verification-service above).
+14. **Fields the apps read that the server never sends** (still open, cosmetic; each screen shows a dash or a fallback):
+    - booking detail: `provider {displayName, verified, rating}`, `description`, `customerDisplayName`, `customerMedia`, `estimatedEarning` (customer and provider apps); the assigned professional's card never renders;
+    - admin lists: `customerName`, `providerName`, `bookingReference`, `reviewerName`, `flagReason`, `mobileNumber`, `completedJobs`, `isOnline`, the pricing table's category and subcategory names, and `actorName` in the audit log;
+    - provider settlements: the app sends `bankAccountId` (the DTO field is `bankAccountRef`, so the stored account is used) and reads `currency` and `completedAt`, which `SettlementResponse` lacks; active-job cards' `customerArea` is always empty.

@@ -3,6 +3,7 @@ import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
 import type { ApiError } from '@api/client';
 import {
   fetchBackgroundChecks,
+  fetchVerificationDocumentContent,
   fetchVerificationDocuments,
   fetchVerificationQueue,
   submitBackgroundCheck,
@@ -18,6 +19,7 @@ export const verificationKeys = {
   queue: ['admin', 'verification', 'queue'] as const,
   backgroundChecks: ['admin', 'verification', 'background-checks'] as const,
   documents: (providerId: string) => ['admin', 'verification', 'documents', providerId] as const,
+  documentContent: (url: string) => ['admin', 'verification', 'document-content', url] as const,
 };
 
 /** Providers in DOCUMENT_SUBMITTED status, oldest-first (Requirement 19.3). */
@@ -36,6 +38,24 @@ export function useVerificationDocuments(
     queryKey: verificationKeys.documents(providerId ?? ''),
     queryFn: () => fetchVerificationDocuments(providerId as string),
     enabled: Boolean(providerId),
+  });
+}
+
+/**
+ * The bytes of one document, fetched as a blob through the API client (the
+ * endpoint needs the bearer header). Identity documents are not kept around:
+ * the blob is dropped from the cache as soon as the viewer unmounts, and a 404
+ * (file never stored) is not retried.
+ */
+export function useVerificationDocumentContent(url: string | null): UseQueryResult<Blob, ApiError> {
+  return useQuery<Blob, ApiError>({
+    queryKey: verificationKeys.documentContent(url ?? ''),
+    queryFn: () => fetchVerificationDocumentContent(url as string),
+    enabled: Boolean(url),
+    staleTime: Infinity,
+    gcTime: 0,
+    // Only a network failure or a 5xx (e.g. 503 storage unavailable) can succeed on a retry.
+    retry: (failureCount, error) => (error.status === 0 || error.status >= 500) && failureCount < 2,
   });
 }
 

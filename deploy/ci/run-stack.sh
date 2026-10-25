@@ -60,7 +60,7 @@ app identity-app -e PORT=8081 \
   -e BOOKING_CLIENT=http -e BOOKING_SERVICE_URL=http://jobs-app:8084 -e BOOKING_SERVICE_URI=http://jobs-app:8084 \
   -e CATALOG_SERVICE_URI=http://jobs-app:8085 -e VERIFICATION_SERVICE_URL=http://identity-app:8094 \
   -e AUTH_SERVICE_URL=http://identity-app:8081 -e PROVIDER_SERVICE_URL=http://identity-app:8083 \
-  -e BANK_ACCOUNT_VERIFICATION=manual
+  -e BANK_ACCOUNT_VERIFICATION=manual -e DOCUMENT_STORAGE_PROVIDER=local
 app jobs-app -e PORT=8084 \
   -e CATALOG_CACHE=memory -e PRICING_CACHE=memory -e PROMOTION_SERVICE_URL=http://jobs-app:8098 \
   -e CATALOG_CLIENT=http -e CATALOG_SERVICE_URL=http://jobs-app:8085 \
@@ -70,13 +70,14 @@ app jobs-app -e PORT=8084 \
   -e NOTIFICATION_SERVICE_URL=http://engagement-app:8090 \
   -e MEDIA_STORAGE_PROVIDER=local -e LOCATION_STORE=redis
 app money-app -e PORT=8088 \
-  -e KMS_DATA_KEY="$KMS" -e RAZORPAY_WEBHOOK_SECRET=ci-rzp -e STRIPE_WEBHOOK_SECRET=ci-stripe \
+  -e KMS_DATA_KEY="$KMS" -e RAZORPAY_WEBHOOK_SECRET=ci-rzp \
   -e BOOKING_SERVICE_URL=http://jobs-app:8084 -e PROVIDER_SERVICE_URL=http://identity-app:8083 \
   -e PROVIDER_WALLET_CLIENT=http -e NOTIFICATION_SERVICE_URL=http://engagement-app:8090 \
   -e PAYMENT_DEFAULT_GATEWAY=simulator -e PAYMENT_SIMULATOR_ENABLED=true \
   -e PAYMENT_SIMULATOR_SECRET=ci-simulator-secret
 app engagement-app -e PORT=8095 \
-  -e PREFERENCE_SERVICE_URL=http://identity-app:8082 -e AUTH_SERVICE_URL=http://identity-app:8081
+  -e PREFERENCE_SERVICE_URL=http://identity-app:8082 -e AUTH_SERVICE_URL=http://identity-app:8081 \
+  -e PAYMENT_SERVICE_URL=http://money-app:8088 -e PROVIDER_SERVICE_URL=http://identity-app:8083
 app api-gateway -p 8080:8080 -e PORT=8080 \
   -e AUTH_SERVICE_URI=http://identity-app:8081 -e AUTH_INTROSPECT_URI=http://identity-app:8081/auth/introspect \
   -e CUSTOMER_SERVICE_URI=http://identity-app:8082 -e PROVIDER_SERVICE_URI=http://identity-app:8083 \

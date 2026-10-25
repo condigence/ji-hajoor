@@ -197,7 +197,8 @@ class AdminVerificationQueueControllerTest {
                 .andExpect(jsonPath("$[0].id").value(v.getDocuments().get(0).getId().toString()))
                 .andExpect(jsonPath("$[0].type").value("Government ID"))
                 .andExpect(jsonPath("$[0].contentType").value("image/jpeg"))
-                // No presigned URL can be produced yet, and the raw storage ref is never exposed.
+                // A document from before bytes were kept has nothing to serve: no url. The raw
+                // storage ref is never exposed.
                 .andExpect(jsonPath("$[0].url").isEmpty())
                 .andExpect(jsonPath("$[0].fileName").isEmpty())
                 .andExpect(jsonPath("$[0].storageRef").doesNotExist());

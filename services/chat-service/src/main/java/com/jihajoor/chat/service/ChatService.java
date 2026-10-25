@@ -151,7 +151,7 @@ public class ChatService {
         UUID recipientId = recipientOf(channel, senderId);
 
         // Real-time delivery over WebSocket (Requirement 18.2).
-        delivery.deliver(message);
+        delivery.deliver(message, channel);
 
         // Offline recipient -> push notification via Notification Service (Requirement 18.3).
         if (!presence.isOnline(bookingId, recipientId)) {
@@ -173,6 +173,20 @@ public class ChatService {
         ChatChannel channel = requireChannel(bookingId);
         requireParticipant(channel, readerId);
         return store.findMessages(bookingId);
+    }
+
+    /**
+     * Returns the booking's channel to one of its participants, whatever its status, so a client
+     * can tell an open chat from a closed one (Requirement 18.1, 18.5).
+     *
+     * @throws ChatException 404 if no channel exists, 403 if the user is not a participant
+     *                       (Property 23)
+     */
+    @Transactional(readOnly = true)
+    public ChatChannel channelFor(UUID bookingId, UUID userId) {
+        ChatChannel channel = requireChannel(bookingId);
+        requireParticipant(channel, userId);
+        return channel;
     }
 
     private ChatChannel requireChannel(UUID bookingId) {

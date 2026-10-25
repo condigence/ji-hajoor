@@ -60,6 +60,11 @@ public class ComplaintException extends RuntimeException {
         return new ComplaintException(HttpStatus.CONFLICT, "REFUND_ALREADY_REQUESTED", message);
     }
 
+    /** The complaint has no refund on record (Requirement 16.5). */
+    public static ComplaintException refundNotFound(String message) {
+        return new ComplaintException(HttpStatus.NOT_FOUND, "REFUND_NOT_FOUND", message);
+    }
+
     /** A retry replayed a refund whose Payment Service outcome is not yet recorded. */
     public static ComplaintException refundInProgress(String message) {
         return new ComplaintException(HttpStatus.CONFLICT, "REFUND_IN_PROGRESS", message);

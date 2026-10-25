@@ -12,8 +12,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>It does not contact an email provider — it records that a message would be sent. The
  * recipient address, subject, and body are never logged (Requirement 26.4). Real deployments
- * supply a concrete vendor adapter (SES/SendGrid) selected via
- * {@code jihajoor.notification.email-provider}.
+ * select the {@link SmtpEmailAdapter} with {@code jihajoor.notification.email-provider=smtp}.
  *
  * <p>Activated when {@code jihajoor.notification.email-provider=log} (the default) or when no
  * other {@link EmailPort} bean is present.

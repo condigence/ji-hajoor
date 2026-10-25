@@ -33,7 +33,9 @@ import org.springframework.stereotype.Service;
  *       ({@code (kafkaEventId, recipient, channel)} dedup), is enabled, and that the recipient
  *       has an address for, attempts delivery with up to {@code maxAttempts} tries and
  *       1 s / 2 s / 4 s exponential backoff, then records the outcome in the delivery log
- *       (Requirements 17.7, 17.8, Property 22).</li>
+ *       (Requirements 17.7, 17.8, Property 22). A failure the adapter reports as
+ *       {@linkplain NotificationDeliveryException#isPermanent() permanent} is recorded as
+ *       {@code PERMANENTLY_FAILED} at once: retrying it cannot succeed.</li>
  * </ol>
  *
  * <p>A channel disabled by preference is skipped and recorded as {@code SKIPPED_PREFERENCE}; a
@@ -130,8 +132,10 @@ public class NotificationDeliveryService {
                                   NotificationChannel channel) {
         int maxAttempts = retrySchedule.maxAttempts();
         NotificationDeliveryException lastFailure = null;
+        int attempts = 0;
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            attempts = attempt;
             try {
                 channelDispatcher.dispatch(channel, event, message);
                 record(event, channel, DeliveryStatus.DELIVERED, attempt - 1, null);
@@ -142,6 +146,10 @@ public class NotificationDeliveryService {
                 lastFailure = ex;
                 log.warn("Attempt {}/{} to deliver event {} on channel {} failed: {}",
                         attempt, maxAttempts, event.kafkaEventId(), channel, ex.getMessage());
+                if (ex.isPermanent()) {
+                    // The same message would fail the same way (e.g. a malformed address): stop here.
+                    break;
+                }
                 if (retrySchedule.shouldRetryAfterAttempt(attempt)) {
                     backoff(attempt);
                 }
@@ -149,9 +157,9 @@ public class NotificationDeliveryService {
         }
 
         String reason = lastFailure == null ? "unknown" : lastFailure.getMessage();
-        record(event, channel, DeliveryStatus.PERMANENTLY_FAILED, maxAttempts, reason);
-        log.error("Delivery of event {} on channel {} permanently failed after {} attempts",
-                event.kafkaEventId(), channel, maxAttempts);
+        record(event, channel, DeliveryStatus.PERMANENTLY_FAILED, attempts, reason);
+        log.error("Delivery of event {} on channel {} permanently failed after {} attempt(s)",
+                event.kafkaEventId(), channel, attempts);
     }
 
     private NotificationPreferences resolvePreferences(UUID userId) {

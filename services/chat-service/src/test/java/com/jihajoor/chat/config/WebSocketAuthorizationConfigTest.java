@@ -97,9 +97,19 @@ class WebSocketAuthorizationConfigTest {
     }
 
     @Test
-    void nonSubscribeFrame_passesThrough() {
+    void sendToBrokerTopic_isDenied() {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SEND);
         accessor.setDestination("/topic/chat/" + booking);
+        Message<?> message = org.springframework.messaging.support.MessageBuilder
+                .createMessage(new byte[0], accessor.getMessageHeaders());
+        assertThatThrownBy(() -> interceptor.preSend(message, channel))
+                .isInstanceOf(MessagingException.class);
+    }
+
+    @Test
+    void sendToApplicationDestination_passesThrough() {
+        StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SEND);
+        accessor.setDestination("/app/chat/" + booking);
         Message<?> message = org.springframework.messaging.support.MessageBuilder
                 .createMessage(new byte[0], accessor.getMessageHeaders());
         assertThat(interceptor.preSend(message, channel)).isSameAs(message);

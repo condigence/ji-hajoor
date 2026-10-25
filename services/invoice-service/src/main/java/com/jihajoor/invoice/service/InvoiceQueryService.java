@@ -120,7 +120,31 @@ public class InvoiceQueryService {
         return new ProviderEarningsStatement(providerId, year, month, invoices.size(), gross, fees, net, true);
     }
 
-    private InvoiceSummary toSummary(Invoice invoice) {
+    /**
+     * Loads one invoice by id. Callers must apply the ownership check before revealing anything
+     * about it, and must answer a failed check with the same 404 as a missing id.
+     *
+     * @throws InvoiceException 404 {@code INVOICE_NOT_FOUND} when no such invoice exists
+     */
+    public Invoice findInvoice(UUID invoiceId) {
+        return invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> InvoiceException.notFound("invoice not found"));
+    }
+
+    /**
+     * Loads the newest invoice generated for a booking. As with {@link #findInvoice}, the caller
+     * applies the ownership check.
+     *
+     * @throws InvoiceException 404 {@code INVOICE_NOT_FOUND} when the booking has no invoice (yet:
+     *                          generation runs asynchronously after the payment completes)
+     */
+    public Invoice findForBooking(UUID bookingId) {
+        return invoiceRepository.findFirstByBookingIdOrderByGeneratedAtDesc(bookingId)
+                .orElseThrow(() -> InvoiceException.notFound("invoice not found"));
+    }
+
+    /** Summary of one invoice, with a freshly-minted signed URL. */
+    public InvoiceSummary toSummary(Invoice invoice) {
         SignedUrl url = storagePort.signedUrl(invoice.getS3Key(), properties.getSignedUrlTtl());
         return InvoiceSummary.from(invoice, url.url(), url.expiresAt());
     }

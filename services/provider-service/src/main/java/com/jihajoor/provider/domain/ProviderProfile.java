@@ -45,8 +45,25 @@ public class ProviderProfile {
     @Column(name = "service_radius_km", nullable = false)
     private int serviceRadiusKm;
 
+    /**
+     * Weighted aggregate of the provider's customer reviews, 0&ndash;5 at 2 dp, as computed and pushed
+     * by the Rating &amp; Review Service ({@link #applyRatingAggregate}). 0 while nobody has
+     * reviewed the provider; {@link #ratingCount} tells "no reviews" apart from a low rating.
+     */
     @Column(name = "aggregate_rating", nullable = false)
     private BigDecimal aggregateRating = BigDecimal.ZERO;
+
+    /** Number of customer reviews {@link #aggregateRating} is over (active, not held by moderation). */
+    @Column(name = "rating_count", nullable = false)
+    private int ratingCount;
+
+    /**
+     * The Rating &amp; Review Service's change number of the aggregate held here. That service bumps
+     * it on every change to the provider's counted reviews, so a lower number is an older aggregate
+     * that arrived late and must not overwrite this one. 0 until the first push.
+     */
+    @Column(name = "rating_sequence", nullable = false)
+    private long ratingSequence;
 
     @Column(name = "wallet_balance", nullable = false, precision = 12, scale = 2)
     private BigDecimal walletBalance = BigDecimal.ZERO;
@@ -224,12 +241,56 @@ public class ProviderProfile {
      * Admin-review flag (Requirement 4.7): rating dropped below threshold and not already
      * flagged. Sets {@code underReview} as a side effect when triggered.
      *
+     * <p>Leaves {@link #ratingCount} and {@link #ratingSequence} alone. Production ratings arrive
+     * through {@link #applyRatingAggregate}, which also orders the pushes; this form remains for
+     * setting a rating directly (test fixtures).
+     *
      * @return {@code true} if the provider was newly flagged for review.
      */
     public boolean applyAggregateRating(BigDecimal newRating, BigDecimal threshold) {
         this.aggregateRating = newRating;
         touch();
-        if (newRating.compareTo(threshold) < 0 && !this.underReview) {
+        return flagIfBelow(newRating, threshold);
+    }
+
+    /**
+     * Sets the aggregate the Rating &amp; Review Service computed over the provider's customer
+     * reviews (Requirements 4.7, 15.4). A <em>set</em>, not an increment: applying the same push
+     * twice leaves the same state, so the sender may retry freely.
+     *
+     * <p>{@code sequence} orders the pushes: one lower than the sequence already held is an older
+     * aggregate that arrived late, and is ignored ({@link RatingUpdateOutcome#STALE}). An equal
+     * sequence is a retry of the aggregate already held and is applied again (a no-op in effect).
+     *
+     * <p>{@code count == 0} means no review counts any more (e.g. the only one was removed by an
+     * Admin): the aggregate returns to 0, the "not rated" value, and is never compared with the
+     * threshold, since no reviews is not a bad rating. A rating back above the threshold does not
+     * lift an existing UNDER_REVIEW flag: clearing it is an Admin decision.
+     *
+     * @param average   the weighted aggregate, 0&ndash;5; ignored (may be {@code null}) when
+     *                  {@code count} is 0. The caller validates the range.
+     * @param count     the number of reviews the aggregate is over, {@code >= 0}
+     * @param sequence  the sender's change number for this aggregate, {@code >= 0}
+     * @param threshold the aggregate below which the provider is flagged for review
+     */
+    public RatingUpdateOutcome applyRatingAggregate(BigDecimal average, int count, long sequence,
+                                                    BigDecimal threshold) {
+        if (sequence < this.ratingSequence) {
+            return RatingUpdateOutcome.STALE;
+        }
+        this.aggregateRating = count == 0 ? BigDecimal.ZERO : average;
+        this.ratingCount = count;
+        this.ratingSequence = sequence;
+        touch();
+        if (count > 0 && flagIfBelow(average, threshold)) {
+            return RatingUpdateOutcome.FLAGGED_FOR_REVIEW;
+        }
+        return RatingUpdateOutcome.APPLIED;
+    }
+
+    /** Flags the provider when {@code rating} is below {@code threshold}; {@code true} if newly flagged. */
+    private boolean flagIfBelow(BigDecimal rating, BigDecimal threshold) {
+        if (rating.compareTo(threshold) < 0 && !this.underReview) {
             this.underReview = true;
             return true;
         }
@@ -264,6 +325,14 @@ public class ProviderProfile {
 
     public BigDecimal getAggregateRating() {
         return aggregateRating;
+    }
+
+    public int getRatingCount() {
+        return ratingCount;
+    }
+
+    public long getRatingSequence() {
+        return ratingSequence;
     }
 
     public BigDecimal getWalletBalance() {

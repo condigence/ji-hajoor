@@ -7,6 +7,9 @@ import java.util.Locale;
  * The text of every email the Auth Service sends (email-auth Requirement 7). Plain text, no
  * password ever (Requirement 7.2). Kept in one place so a production provider with HTML templates
  * replaces one class.
+ *
+ * <p>Codes and links appear in the body only, never in the subject: subjects are logged (by the
+ * logging adapter and on a failed send), and mail clients show them in notifications and lists.
  */
 public final class EmailMessages {
 
@@ -15,7 +18,7 @@ public final class EmailMessages {
 
     /** Sign-up verification code (Requirement 1.3). */
     public static EmailMessage signupCode(String displayName, String code, Duration ttl) {
-        return new EmailMessage("Your Ji-Hajoor verification code: " + code, """
+        return new EmailMessage("Your Ji-Hajoor verification code", """
                 Hi %s,
 
                 Your Ji-Hajoor verification code is %s.
@@ -43,7 +46,7 @@ public final class EmailMessages {
 
     /** Password reset code (Requirement 3.1). */
     public static EmailMessage resetCode(String code, Duration ttl) {
-        return new EmailMessage("Your Ji-Hajoor password reset code: " + code, """
+        return new EmailMessage("Your Ji-Hajoor password reset code", """
                 Hi,
 
                 Your Ji-Hajoor password reset code is %s. It expires in %d minutes.
@@ -55,7 +58,7 @@ public final class EmailMessages {
 
     /** Code confirming an email address added to an existing account (Requirement 4.1). */
     public static EmailMessage emailChangeCode(String code, Duration ttl) {
-        return new EmailMessage("Confirm your email for Ji-Hajoor: " + code, """
+        return new EmailMessage("Confirm your email for Ji-Hajoor", """
                 Hi,
 
                 Enter %s in the Ji-Hajoor app to add this email address to your account.

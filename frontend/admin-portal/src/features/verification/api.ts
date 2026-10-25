@@ -1,4 +1,4 @@
-import { apiClient } from '@api/client';
+import { ApiError, apiClient } from '@api/client';
 
 /**
  * Verification Queue bindings (Requirement 19.3). The Admin Service surfaces
@@ -7,6 +7,7 @@ import { apiClient } from '@api/client';
  * Endpoints (see design.md — Admin Service / Verification Service):
  * - GET  /admin/verification/queue          — providers in DOCUMENT_SUBMITTED
  * - GET  /admin/verification/{id}/documents — a provider's submitted documents
+ * - GET  /admin/verification/{id}/documents/{documentId} — one document's bytes
  * - POST /admin/verification/{id}/decision  — approve/reject the submission
  * - GET  /admin/verification/background-checks      — providers at the background-check step
  * - POST /admin/verification/{id}/background-check  — record the check's result and decide
@@ -20,13 +21,15 @@ export interface VerificationDocument {
   /** MIME type, used to choose an inline renderer (PDF vs image). */
   contentType?: string | null;
   /**
-   * URL the browser can render inline: a short-lived, pre-signed URL so the
-   * document viewer can embed it without a separate download step
-   * (Requirement 19.3). Null when the storage backend cannot issue one; the
-   * viewer then names the document and says no preview is available.
+   * API path of the document's bytes, relative to the API base:
+   * `/admin/verification/{providerId}/documents/{documentId}`. It needs the
+   * admin's bearer token, so it is fetched through the API client as a blob
+   * ({@link fetchVerificationDocumentContent}), never put in an `<img src>`.
+   * Null when the file was never stored (uploaded before document storage
+   * was enabled); the viewer then says so.
    */
   url?: string | null;
-  /** Original upload name; null while the storage adapter cannot report it. */
+  /** Original upload name; null for documents uploaded before it was recorded. */
   fileName?: string | null;
 }
 
@@ -75,6 +78,31 @@ export async function fetchVerificationDocuments(
   const { data } = await apiClient.get<VerificationDocument[]>(
     `/admin/verification/${providerId}/documents`,
   );
+  return data;
+}
+
+/**
+ * GET /admin/verification/{id}/documents/{documentId} — one document's bytes,
+ * at the `url` of its list entry. Served `Cache-Control: private, no-store`;
+ * the Blob's type is the server's content type (an image or PDF, or
+ * `application/octet-stream` for anything it will not let a browser render).
+ * 404 `DOCUMENT_NOT_STORED` for a document uploaded before storage was enabled.
+ *
+ * Only API-relative paths are fetched: an absolute URL would receive the
+ * admin's bearer token.
+ */
+export async function fetchVerificationDocumentContent(url: string): Promise<Blob> {
+  if (!url.startsWith('/') || url.startsWith('//')) {
+    throw new ApiError({
+      status: 400,
+      code: 'INVALID_DOCUMENT_URL',
+      message: 'This document cannot be loaded from its address.',
+    });
+  }
+  const { data } = await apiClient.get<Blob>(url, {
+    responseType: 'blob',
+    headers: { Accept: '*/*' },
+  });
   return data;
 }
 

@@ -71,7 +71,7 @@
         <pact.version>4.7.5</pact.version>
 
         <!-- Build plugins (Spring Boot pins the Apache Maven ones it uses) -->
-        <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
+        <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
         <maven-surefire-plugin.version>3.5.6</maven-surefire-plugin.version>
         <jacoco.version>0.8.15</jacoco.version>
         <!-- Filled in by jacoco:prepare-agent; empty when coverage is skipped. -->

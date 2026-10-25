@@ -15,7 +15,7 @@ import com.jihajoor.payment.domain.PaymentMethod;
  * @param platformFee              platform fee amount to deduct for provider net; if {@code null},
  *                                 it is derived from the configured default platform fee percent
  * @param method                   selected payment method
- * @param gatewayId                target gateway id (e.g. "razorpay", "stripe")
+ * @param gatewayId                target gateway id (e.g. "razorpay")
  * @param rawPaymentCredential     optional gateway credential token to store encrypted; must never
  *                                 be a raw card number (Requirement 12.9)
  * @param bookingReference         the booking's human-readable reference, sent with the provider's

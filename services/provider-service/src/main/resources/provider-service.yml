@@ -77,7 +77,10 @@ jihajoor:
     min-service-radius-km: 1
     max-service-radius-km: 100
     min-settlement-amount: 1.00
-    review-rating-threshold: 3.0
+    # A provider whose customer rating falls below this is flagged UNDER_REVIEW (skipped by
+    # dispatch) and Admin is alerted once. REVIEW_RATING_THRESHOLD is also read by
+    # rating-review-service, so one variable sets both.
+    review-rating-threshold: ${REVIEW_RATING_THRESHOLD:3.0}
   kms:
     # Selects the active KMS encryption adapter behind KmsEncryptionPort.
     # 'local' uses an AES-GCM adapter with a configured data key (dev/test); in production

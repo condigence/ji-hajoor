@@ -150,6 +150,19 @@ public class LifecycleEventConsumer extends IdempotentKafkaConsumer {
         }
     }
 
+    /**
+     * Not in one transaction with the dedup insert: {@code handle()} is contact and preference
+     * lookups plus SMS, email and push sends with back-off between retries, and in one
+     * transaction each in-flight event held a database connection through all of it. With eleven
+     * listeners and a small pool the service ran out of connections under load (review section
+     * 21). Each {@code (kafkaEventId, recipient, channel)} delivery-log row commits on its own, so
+     * a redelivered event skips the channels already sent instead of rolling their records back.
+     */
+    @Override
+    protected boolean handleInOneTransaction() {
+        return false;
+    }
+
     private static Map<String, NotificationEventType> buildTopicIndex(NotificationProperties properties) {
         NotificationProperties.Topics t = properties.getTopics();
         Map<String, NotificationEventType> index = new HashMap<>();

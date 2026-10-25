@@ -195,6 +195,43 @@ class IdempotentKafkaConsumerTransactionTest {
                 .get().extracting(ProcessedEventEntity::isNew).isEqualTo(false);
     }
 
+    @Test
+    void aConsumerThatOptsOutRunsHandleOutsideATransactionAndRecordsTheEventAfterIt() {
+        UUID eventId = UUID.randomUUID();
+        AtomicBoolean inTransaction = new AtomicBoolean(true);
+        AtomicBoolean recordedBeforeHandleReturned = new AtomicBoolean(true);
+        TestConsumer consumer = new TestConsumer(processedEvents, dlqForwarder, rec -> {
+            inTransaction.set(TransactionSynchronizationManager.isActualTransactionActive());
+            recordedBeforeHandleReturned.set(processedEvents.existsByConsumerGroupAndEventId(GROUP, eventId));
+            writeSideEffect(eventId);
+        }, false);
+        consumer.setTransactionManager(transactionManager);
+
+        consumer.consume(record(eventId));
+
+        assertThat(inTransaction).isFalse();
+        assertThat(recordedBeforeHandleReturned).isFalse();
+        assertThat(processedEvents.existsByConsumerGroupAndEventId(GROUP, eventId)).isTrue();
+        assertThat(processedEvents.existsByConsumerGroupAndEventId(SIDE_EFFECT_GROUP, eventId)).isTrue();
+    }
+
+    @Test
+    void anOptedOutFailureKeepsWhatHandleCommittedAndLeavesTheEventUnrecorded() {
+        UUID eventId = UUID.randomUUID();
+        TestConsumer consumer = new TestConsumer(processedEvents, dlqForwarder, rec -> {
+            writeSideEffect(eventId);
+            throw new IllegalStateException("downstream unavailable");
+        }, false);
+        consumer.setTransactionManager(transactionManager);
+
+        consumer.consume(record(eventId));
+
+        // The side effect committed on its own (a consumer that opts out guards it with its own
+        // idempotency); the event itself is not marked processed, so it is dead-lettered.
+        assertThat(processedEvents.existsByConsumerGroupAndEventId(SIDE_EFFECT_GROUP, eventId)).isTrue();
+        assertThat(processedEvents.existsByConsumerGroupAndEventId(GROUP, eventId)).isFalse();
+    }
+
     // ---------------------------------------------------------------------
 
     private TestConsumer consumer(ProcessedEventRepository repository,
@@ -242,11 +279,23 @@ class IdempotentKafkaConsumerTransactionTest {
 
     private static final class TestConsumer extends IdempotentKafkaConsumer {
         private final Consumer<ConsumerRecord<String, String>> handler;
+        private final boolean inOneTransaction;
 
         TestConsumer(ProcessedEventRepository repository, DlqForwarder dlqForwarder,
                      Consumer<ConsumerRecord<String, String>> handler) {
+            this(repository, dlqForwarder, handler, true);
+        }
+
+        TestConsumer(ProcessedEventRepository repository, DlqForwarder dlqForwarder,
+                     Consumer<ConsumerRecord<String, String>> handler, boolean inOneTransaction) {
             super(GROUP, repository, dlqForwarder);
             this.handler = handler;
+            this.inOneTransaction = inOneTransaction;
+        }
+
+        @Override
+        protected boolean handleInOneTransaction() {
+            return inOneTransaction;
         }
 
         @Override

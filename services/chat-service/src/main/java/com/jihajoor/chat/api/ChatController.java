@@ -6,14 +6,12 @@ import java.util.stream.Collectors;
 
 import com.jihajoor.chat.api.dto.MessageResponse;
 import com.jihajoor.chat.api.dto.SendMessageRequest;
+import com.jihajoor.chat.domain.ChatChannel;
 import com.jihajoor.chat.domain.ChatMessage;
-import com.jihajoor.chat.service.ChatException;
 import com.jihajoor.chat.service.ChatService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -43,33 +41,19 @@ public class ChatController {
     @PostMapping
     public ResponseEntity<MessageResponse> send(@PathVariable UUID bookingId,
                                                 @Valid @RequestBody SendMessageRequest req) {
-        ChatMessage message = chatService.sendMessage(bookingId, currentUser(), req.body());
-        return ResponseEntity.status(HttpStatus.CREATED).body(MessageResponse.from(message));
+        UUID user = CurrentUser.id();
+        ChatMessage message = chatService.sendMessage(bookingId, user, req.body());
+        ChatChannel channel = chatService.channelFor(bookingId, user);
+        return ResponseEntity.status(HttpStatus.CREATED).body(MessageResponse.from(message, channel));
     }
 
     /** Read the booking's message history (Requirement 18.4, 18.7). */
     @GetMapping
     public List<MessageResponse> history(@PathVariable UUID bookingId) {
-        return chatService.readMessages(bookingId, currentUser()).stream()
-                .map(MessageResponse::from)
+        UUID user = CurrentUser.id();
+        ChatChannel channel = chatService.channelFor(bookingId, user);
+        return chatService.readMessages(bookingId, user).stream()
+                .map(message -> MessageResponse.from(message, channel))
                 .collect(Collectors.toList());
-    }
-
-    /**
-     * @return the authenticated user's ID, taken from the principal name populated by the shared
-     *         {@code JwtValidationFilter} (Task 4).
-     */
-    private UUID currentUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated()) {
-            throw new ChatException(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED",
-                    "no authenticated principal");
-        }
-        try {
-            return UUID.fromString(authentication.getName());
-        } catch (IllegalArgumentException e) {
-            throw new ChatException(HttpStatus.UNAUTHORIZED, "INVALID_PRINCIPAL",
-                    "authenticated principal is not a valid user ID");
-        }
     }
 }

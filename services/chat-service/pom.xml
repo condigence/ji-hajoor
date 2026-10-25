@@ -87,6 +87,14 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- ===== Redis: cross-node message fan-out (pub/sub) and shared presence ===== -->
+        <!-- Only used when jihajoor.chat.cluster=redis (the deployed default); 'local' needs no
+             Redis server: the Lettuce connection is opened lazily and nothing touches it. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
         <!-- ===== Kafka: consume ProviderAccepted / PaymentCompleted / BookingCancelled ===== -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -5,12 +5,10 @@ import type { ApiError } from '@api/client';
 import { useAuthStore } from '@stores/authStore';
 import { buildSseUrl } from '@lib/realtime';
 import {
-  fetchAvailableProfessionals,
   fetchChatChannel,
   fetchChatHistory,
   fetchLocationSnapshot,
   toLocationSnapshot,
-  type AvailableProfessional,
   type ChatChannel,
   type ChatMessage,
   type LocationSnapshot,
@@ -28,25 +26,10 @@ import {
 const NO_FIX_POLL_MS = 5_000;
 
 export const trackingKeys = {
-  professionals: (bookingId: string) => ['tracking', 'professionals', bookingId] as const,
   location: (bookingId: string) => ['tracking', 'location', bookingId] as const,
   chatChannel: (bookingId: string) => ['tracking', 'chat', 'channel', bookingId] as const,
   chatHistory: (channelId: string) => ['tracking', 'chat', 'history', channelId] as const,
 };
-
-/** List of eligible Providers for a Booking (Requirement 28.6). */
-export function useAvailableProfessionals(
-  bookingId: string,
-): UseQueryResult<AvailableProfessional[], ApiError> {
-  return useQuery<AvailableProfessional[], ApiError>({
-    queryKey: trackingKeys.professionals(bookingId),
-    queryFn: () => fetchAvailableProfessionals(bookingId),
-    enabled: Boolean(bookingId),
-    // Availability, distance and ETA drift quickly; keep this fresh.
-    staleTime: 15_000,
-    refetchInterval: 30_000,
-  });
-}
 
 /**
  * Live location for a Booking (Requirement 10).

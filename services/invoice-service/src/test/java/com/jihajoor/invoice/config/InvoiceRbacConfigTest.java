@@ -132,4 +132,66 @@ class InvoiceRbacConfigTest {
     void unauthenticatedCustomerHistory_isUnauthorized() throws Exception {
         assertRejectedWith(invoke("GET", customerHistoryPath()), HttpStatus.UNAUTHORIZED);
     }
+
+    // ------------------------------------------- single invoice: by booking, download
+
+    private static String downloadPath() {
+        return "/invoices/" + UUID.randomUUID() + "/download";
+    }
+
+    private static String bookingInvoicePath() {
+        return "/invoices/bookings/" + UUID.randomUUID();
+    }
+
+    @Test
+    void customer_mayDownloadInvoice() throws Exception {
+        authenticateAs("CUSTOMER");
+
+        assertPassedThrough(invoke("GET", downloadPath()));
+    }
+
+    @Test
+    void serviceProvider_mayDownloadInvoice() throws Exception {
+        authenticateAs("SERVICE_PROVIDER");
+
+        assertPassedThrough(invoke("GET", downloadPath()));
+    }
+
+    @Test
+    void financeAdmin_mayDownloadInvoice() throws Exception {
+        authenticateAs("FINANCE_ADMIN");
+
+        assertPassedThrough(invoke("GET", downloadPath()));
+    }
+
+    @Test
+    void dispatcher_isForbiddenFromInvoiceDownload() throws Exception {
+        authenticateAs("DISPATCHER");
+
+        assertRejectedWith(invoke("GET", downloadPath()), HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void unauthenticatedDownload_isUnauthorized() throws Exception {
+        assertRejectedWith(invoke("GET", downloadPath()), HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void customer_mayReadBookingInvoice() throws Exception {
+        authenticateAs("CUSTOMER");
+
+        assertPassedThrough(invoke("GET", bookingInvoicePath()));
+    }
+
+    @Test
+    void supportAgent_isForbiddenFromBookingInvoice() throws Exception {
+        authenticateAs("SUPPORT_AGENT");
+
+        assertRejectedWith(invoke("GET", bookingInvoicePath()), HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void unauthenticatedBookingInvoice_isUnauthorized() throws Exception {
+        assertRejectedWith(invoke("GET", bookingInvoicePath()), HttpStatus.UNAUTHORIZED);
+    }
 }

@@ -1,4 +1,4 @@
-import { useCallback, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
   Alert,
@@ -8,6 +8,8 @@ import {
   Card,
   CardContent,
   Divider,
+  ImageList,
+  ImageListItem,
   Link,
   Stack,
   Typography,
@@ -24,30 +26,33 @@ import NearMeRoundedIcon from '@mui/icons-material/NearMeRounded';
 import ReplayRoundedIcon from '@mui/icons-material/ReplayRounded';
 import SearchOffRoundedIcon from '@mui/icons-material/SearchOffRounded';
 import HandymanRoundedIcon from '@mui/icons-material/HandymanRounded';
+import PhotoCameraRoundedIcon from '@mui/icons-material/PhotoCameraRounded';
 import { Link as RouterLink } from 'react-router';
 import { AppShell } from '@components/AppShell';
 import { QueryStateView } from '@components/QueryStateView';
 import { EmptyState, IconTile } from '@components/StateViews';
 import { ProgressTimeline } from '@components/ProgressTimeline';
-import { isApiError } from '@api/client';
+import { friendlyErrorMessage } from '@api/client';
 import { formatCurrency, formatDateTime } from '@lib/format';
 import { brand, radius } from '@lib/theme';
 import { CategoryIcon } from '@features/catalog/categoryIcon';
 import { categoryArt } from '@features/catalog/categoryArt';
+import { categoryIconKey } from '@features/catalog/api';
 import { isPayableStatus } from '@features/payment/api';
 import { PartsList, PaymentCardActions } from '@features/payment/PaymentPanel';
 import { ChatButton } from '@features/tracking/ChatButton';
 import { CHAT_STATUSES, journeySteps } from '@features/tracking/progress';
-import type { BookingDetail } from './api';
-import { useBookingDetail, useInvoiceDownload } from './hooks';
+import type { BookingDetail, JobPhoto, PhotoKind } from './api';
+import { useBookingDetail, useBookingInvoice, useInvoiceDownload, useJobPhoto } from './hooks';
 import { StatusChip } from './StatusChip';
 import { isTerminalStatus } from './status';
 import { useBookingService } from './useServiceName';
 
 /**
  * Booking Detail screen (Requirement 28.7). Reached from Service History. Shows
- * the booking, its progress, and — when an invoice exists — lets the Customer
- * download the PDF via a freshly minted signed URL (Requirement 13.3). Active
+ * the booking, its progress and the professional's before/after photos, and —
+ * once the booking is paid and its invoice generated — lets the Customer
+ * download the invoice PDF (Requirement 13). Active
  * bookings also link to live tracking and the in-app chat, and a completed job
  * that is still unpaid can be paid from here (Requirement 12).
  */
@@ -56,27 +61,6 @@ export function BookingDetailScreen() {
   const navigate = useNavigate();
 
   const query = useBookingDetail(bookingId);
-  const invoiceDownload = useInvoiceDownload();
-
-  const invoiceMutate = invoiceDownload.mutate;
-  const handleDownloadInvoice = useCallback(
-    (invoiceId: string) => {
-      invoiceMutate(invoiceId, {
-        onSuccess: ({ url }) => {
-          // Open the signed URL so the browser renders/downloads the PDF
-          // (Task 33 acceptance: "invoice download opens PDF").
-          window.open(url, '_blank', 'noopener,noreferrer');
-        },
-      });
-    },
-    [invoiceMutate],
-  );
-
-  const invoiceError =
-    invoiceDownload.isError && isApiError(invoiceDownload.error)
-      ? invoiceDownload.error.message
-      : null;
-
   const notFound = query.isError && (query.error.status === 404 || query.error.status === 403);
 
   return (
@@ -105,9 +89,6 @@ export function BookingDetailScreen() {
               onTrack={() => void navigate(`/bookings/${bookingId}/track`)}
               onChat={() => void navigate(`/bookings/${bookingId}/chat`)}
               onBookAgain={(subcategoryId) => void navigate(`/book/${subcategoryId}`)}
-              onDownloadInvoice={handleDownloadInvoice}
-              invoicePending={invoiceDownload.isPending}
-              invoiceError={invoiceError}
             />
           ) : null}
         </QueryStateView>
@@ -137,20 +118,21 @@ function BookingDetailBody({
   onTrack,
   onChat,
   onBookAgain,
-  onDownloadInvoice,
-  invoicePending,
-  invoiceError,
 }: {
   detail: BookingDetail;
   onTrack: () => void;
   onChat: () => void;
   onBookAgain: (subcategoryId: string) => void;
-  onDownloadInvoice: (invoiceId: string) => void;
-  invoicePending: boolean;
-  invoiceError: string | null;
 }) {
   const { name, category } = useBookingService(detail.serviceName, detail.subcategoryId);
-  const art = categoryArt(category?.icon, category?.name);
+  const art = categoryArt(categoryIconKey(category), category?.name);
+  // The invoice lives in the Invoice Service, not on the booking detail.
+  const invoice = useBookingInvoice(detail.bookingId, detail.status).data;
+  const invoiceDownload = useInvoiceDownload();
+  const invoiceError = invoiceDownload.isError
+    ? friendlyErrorMessage(invoiceDownload.error, INVOICE_DOWNLOAD_FAILED)
+    : null;
+  const photos = detail.photos ?? [];
   const terminal = isTerminalStatus(detail.status);
   const canChat = CHAT_STATUSES.includes(detail.status);
   const when = detail.scheduledAt ?? (detail.emergency ? undefined : detail.date);
@@ -165,8 +147,10 @@ function BookingDetailBody({
         display: 'grid',
         gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 360px' },
         gridTemplateAreas: {
-          xs: payable ? '"actions" "summary" "progress"' : '"summary" "actions" "progress"',
-          md: '"summary actions" "progress actions"',
+          xs: payable
+            ? '"actions" "summary" "progress" "photos"'
+            : '"summary" "actions" "progress" "photos"',
+          md: '"summary actions" "progress actions" "photos actions"',
         },
         gap: { xs: 2, md: 3 },
         alignItems: 'start',
@@ -183,7 +167,7 @@ function BookingDetailBody({
           >
             <IconTile size={52} bg={art.wash} color={art.accent}>
               {category ? (
-                <CategoryIcon iconKey={category.icon} categoryName={category.name} />
+                <CategoryIcon iconKey={categoryIconKey(category)} categoryName={category.name} />
               ) : (
                 <HandymanRoundedIcon />
               )}
@@ -313,7 +297,7 @@ function BookingDetailBody({
             )}
             {canChat ? <ChatButton bookingId={detail.bookingId} onOpen={onChat} /> : null}
 
-            {detail.invoice ? (
+            {invoice ? (
               <>
                 {invoiceError ? <Alert severity="error">{invoiceError}</Alert> : null}
                 <Button
@@ -321,18 +305,18 @@ function BookingDetailBody({
                   fullWidth
                   size="large"
                   startIcon={<DownloadRoundedIcon />}
-                  onClick={() => detail.invoice && onDownloadInvoice(detail.invoice.invoiceId)}
-                  disabled={invoicePending}
-                  aria-label={`Download invoice ${detail.invoice.invoiceNumber}`}
+                  onClick={() => invoiceDownload.mutate(invoice)}
+                  disabled={invoiceDownload.isPending}
+                  aria-label={`Download invoice ${invoice.invoiceNumber}`}
                 >
-                  {invoicePending ? 'Preparing…' : 'Download invoice'}
+                  {invoiceDownload.isPending ? 'Preparing…' : 'Download invoice'}
                 </Button>
               </>
             ) : null}
 
             {terminal && detail.subcategoryId ? (
               <Button
-                variant={detail.invoice ? 'outlined' : 'contained'}
+                variant={invoice ? 'outlined' : 'contained'}
                 size="large"
                 fullWidth
                 startIcon={<ReplayRoundedIcon />}
@@ -373,6 +357,101 @@ function BookingDetailBody({
           <ProgressTimeline steps={journeySteps(detail.status)} />
         </CardContent>
       </Card>
+
+      {photos.length ? (
+        <Card sx={{ gridArea: 'photos' }}>
+          <CardContent>
+            <Typography variant="h5" component="h2" sx={{ mb: 2 }}>
+              Job photos
+            </Typography>
+            <Stack spacing={2.5}>
+              <PhotoGroup bookingId={detail.bookingId} kind="BEFORE" photos={photos} />
+              <PhotoGroup bookingId={detail.bookingId} kind="AFTER" photos={photos} />
+            </Stack>
+          </CardContent>
+        </Card>
+      ) : null}
+    </Box>
+  );
+}
+
+const INVOICE_DOWNLOAD_FAILED = "We couldn't download the invoice. Please try again.";
+
+const PHOTO_KIND_LABEL: Record<PhotoKind, string> = { BEFORE: 'Before', AFTER: 'After' };
+
+/** The professional's photos of one kind, as a grid of tiles; nothing when there are none. */
+function PhotoGroup({
+  bookingId,
+  kind,
+  photos,
+}: {
+  bookingId: string;
+  kind: PhotoKind;
+  photos: JobPhoto[];
+}) {
+  const ofKind = photos.filter((photo) => photo.kind === kind);
+  if (!ofKind.length) return null;
+  return (
+    <Box>
+      <Typography variant="subtitle2" component="h3" sx={{ color: 'text.secondary', mb: 1 }}>
+        {PHOTO_KIND_LABEL[kind]} the job
+      </Typography>
+      <ImageList cols={3} gap={8} sx={{ m: 0 }}>
+        {ofKind.map((photo) => (
+          <ImageListItem key={photo.id}>
+            <StoredPhoto bookingId={bookingId} photo={photo} />
+          </ImageListItem>
+        ))}
+      </ImageList>
+    </Box>
+  );
+}
+
+/**
+ * One stored photo. Its bytes come from GET /bookings/{key}/photos/{photoId},
+ * which needs the bearer header, so it is fetched through the API client as a
+ * blob and shown from an object URL rather than a plain <img src>. A photo with
+ * no stored bytes (404 MEDIA_NOT_FOUND: uploaded before photos were kept) or a
+ * failed read shows a tile saying a photo is on file.
+ */
+function StoredPhoto({ bookingId, photo }: { bookingId: string; photo: JobPhoto }) {
+  const label = `${PHOTO_KIND_LABEL[photo.kind]} photo`;
+  const blob = useJobPhoto(bookingId, photo.id);
+  // One object URL per fetched blob, released when the blob changes or the tile unmounts.
+  const objectUrl = useMemo(() => (blob.data ? URL.createObjectURL(blob.data) : null), [blob.data]);
+  useEffect(
+    () => () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    },
+    [objectUrl],
+  );
+
+  if (objectUrl) {
+    return (
+      <Box
+        component="img"
+        src={objectUrl}
+        alt={label}
+        loading="lazy"
+        sx={{ borderRadius: 1, aspectRatio: '1 / 1', objectFit: 'cover', width: '100%' }}
+      />
+    );
+  }
+  return (
+    <Box
+      role="img"
+      aria-label={blob.isError ? `${label} on file` : `Loading ${label.toLowerCase()}`}
+      aria-busy={blob.isLoading}
+      sx={{
+        borderRadius: 1,
+        aspectRatio: '1 / 1',
+        bgcolor: 'action.hover',
+        color: 'text.secondary',
+        display: 'grid',
+        placeItems: 'center',
+      }}
+    >
+      <PhotoCameraRoundedIcon />
     </Box>
   );
 }

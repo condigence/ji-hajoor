@@ -119,6 +119,18 @@ class CustomerRbacConfigTest {
     }
 
     @Test
+    void customerCaller_passesAddressListing_andAProviderIsForbidden() throws Exception {
+        authenticate("ROLE_CUSTOMER");
+        FilterChain chain = mock(FilterChain.class);
+        assertThat(dispatch("GET", "/customers/" + CUSTOMER_ID + "/addresses", chain).getStatus()).isEqualTo(200);
+        verify(chain).doFilter(any(), any());
+
+        authenticate("ROLE_SERVICE_PROVIDER");
+        assertThat(dispatch("GET", "/customers/" + CUSTOMER_ID + "/addresses", mock(FilterChain.class)).getStatus())
+                .isEqualTo(403);
+    }
+
+    @Test
     void serviceProviderCaller_isForbiddenOnAddressDeletion() throws Exception {
         authenticate("ROLE_SERVICE_PROVIDER");
         FilterChain chain = mock(FilterChain.class);

@@ -27,7 +27,11 @@ public class RatingProperties {
     /** Weight multiplier for older reviews (Requirement 15.4, Property 16). */
     private BigDecimal olderWeight = new BigDecimal("1.0");
 
-    /** Aggregate below this threshold auto-flags the provider UNDER_REVIEW (Requirement 15.7, 15.8). */
+    /**
+     * Aggregate below this threshold auto-flags the provider UNDER_REVIEW (Requirement 15.7, 15.8).
+     * Applied here only by the logging provider-rating adapter; with the HTTP adapter the Provider
+     * Service decides with its own {@code jihajoor.provider.review-rating-threshold}.
+     */
     private BigDecimal underReviewThreshold = new BigDecimal("3.0");
 
     /** Maximum length of the optional text review (Requirement 15.3). */
@@ -41,6 +45,9 @@ public class RatingProperties {
 
     @NestedConfigurationProperty
     private Topics topics = new Topics();
+
+    @NestedConfigurationProperty
+    private ProviderSync providerSync = new ProviderSync();
 
     public Duration getReviewWindow() {
         return reviewWindow;
@@ -112,6 +119,45 @@ public class RatingProperties {
 
     public void setTopics(Topics topics) {
         this.topics = topics;
+    }
+
+    public ProviderSync getProviderSync() {
+        return providerSync;
+    }
+
+    public void setProviderSync(ProviderSync providerSync) {
+        this.providerSync = providerSync;
+    }
+
+    /**
+     * Re-sending provider ratings the Provider Service has not confirmed ({@code ProviderRatingSweeper},
+     * Requirements 4.7, 15.4). The sweep interval itself is
+     * {@code jihajoor.rating.provider-sync.sweep-interval} (ISO-8601), read by the scheduler.
+     */
+    public static class ProviderSync {
+        /**
+         * A change must be at least this old before the sweeper re-sends it, so the sweep stays clear
+         * of the push made right after the commit.
+         */
+        private Duration sweepMinAge = Duration.ofMinutes(1);
+        /** Most ratings re-sent per sweep, oldest change first. */
+        private int sweepBatchSize = 100;
+
+        public Duration getSweepMinAge() {
+            return sweepMinAge;
+        }
+
+        public void setSweepMinAge(Duration sweepMinAge) {
+            this.sweepMinAge = sweepMinAge;
+        }
+
+        public int getSweepBatchSize() {
+            return sweepBatchSize;
+        }
+
+        public void setSweepBatchSize(int sweepBatchSize) {
+            this.sweepBatchSize = sweepBatchSize;
+        }
     }
 
     /** Fraud-detection tuning (Requirement 15.5, Property 17). */

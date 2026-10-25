@@ -17,8 +17,8 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 /**
  * Enforces the participant-only access rule (Requirement 18.7, Property 23) on the real-time read
  * path: a STOMP {@code SUBSCRIBE} to {@code /topic/chat/{bookingId}} is rejected unless the
- * connected principal is the booking's customer or provider. This mirrors, for WebSocket reads,
- * the same check the {@link com.jihajoor.chat.service.ChatService} applies to REST reads and sends.
+ * connected principal is the booking's customer or provider. Client writes to broker destinations
+ * are rejected so message delivery can only go through the participant-checked chat service.
  */
 @Configuration
 public class WebSocketAuthorizationConfig implements WebSocketMessageBrokerConfigurer {
@@ -38,22 +38,38 @@ public class WebSocketAuthorizationConfig implements WebSocketMessageBrokerConfi
             public Message<?> preSend(Message<?> message, MessageChannel channel) {
                 StompHeaderAccessor accessor =
                         MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
-                if (accessor == null || !StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
+                if (accessor == null) {
                     return message;
                 }
                 String destination = accessor.getDestination();
+                if (StompCommand.SEND.equals(accessor.getCommand())
+                        && isBrokerDestination(destination)) {
+                    throw denied();
+                }
+                if (!StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
+                    return message;
+                }
                 if (destination == null || !destination.startsWith(DESTINATION_PREFIX)) {
                     return message;
                 }
                 UUID bookingId = parseBookingId(destination);
                 UUID userId = parsePrincipal(accessor.getUser());
                 if (bookingId == null || userId == null || !isParticipant(bookingId, userId)) {
-                    throw new org.springframework.messaging.MessagingException(
-                            "subscription to chat channel denied: not a participant");
+                    throw denied();
                 }
                 return message;
             }
         });
+    }
+
+    private static boolean isBrokerDestination(String destination) {
+        return destination != null
+                && (destination.startsWith("/topic/") || destination.startsWith("/queue/"));
+    }
+
+    private static org.springframework.messaging.MessagingException denied() {
+        return new org.springframework.messaging.MessagingException(
+                "client access to broker destination denied");
     }
 
     private boolean isParticipant(UUID bookingId, UUID userId) {

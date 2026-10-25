@@ -18,7 +18,7 @@ Production-grade AWS infrastructure for the Ji-Hajoor on-demand home services pl
 | `waf` | WAFv2 Regional — OWASP CRS, Known Bad Inputs, SQLi, IP reputation, rate limiting |
 | `api_gateway` | HTTP API v2, JWT authorizer, throttling, WAF association, access logging |
 | `secrets_manager` | Placeholder secrets for all 19 microservices (rotated by CI/CD) |
-| `k8s_namespaces` | 6 namespaces with ResourceQuotas, LimitRanges, and NetworkPolicies |
+| `k8s_namespaces` | The one namespace the five deployables run in (`k8s_namespace`, default `jihajoor`), with ResourceQuota, LimitRange and NetworkPolicies |
 
 ## Prerequisites
 
@@ -85,6 +85,14 @@ echo "eks_cluster_ca_data  = \"$EKS_CA\""       >> terraform.tfvars
 terraform apply -target=module.iam -target=module.k8s_namespaces
 ```
 
+The namespace and the IRSA roles must agree with the deploy pipeline:
+
+- Set the GitHub environment variable `K8S_NAMESPACE` (`.github/workflows/deploy-services.yml`) to `k8s_namespace` (default `jihajoor`).
+- `module.iam` creates one role per deployable, `<prefix>-irsa-<deployable>` (api-gateway, identity-app, jobs-app, money-app, engagement-app), trusting the ServiceAccount the chart creates under that name in the namespace. Put each ARN (output `irsa_role_arns`) in that release's `serviceAccount.annotations.eks.amazonaws.com/role-arn`.
+- Monitoring, log routing and KEDA in `infra/k8s/observability` select the deployables by label or container name, so they need no namespace edits.
+
+Earlier versions created six per-domain namespaces and per-service roles; applying this version replaces them (the old namespaces and roles are destroyed), so migrate any workloads first.
+
 ### Step 5 — Verify
 
 ```bash
@@ -94,8 +102,8 @@ aws eks update-kubeconfig --region ap-south-1 --name jihajoor-production-cluster
 # Confirm nodes are Ready
 kubectl get nodes
 
-# Confirm namespaces
-kubectl get namespaces
+# Confirm the platform namespace
+kubectl get namespace jihajoor
 
 # Confirm network policies
 kubectl get networkpolicy --all-namespaces

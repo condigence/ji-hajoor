@@ -64,6 +64,25 @@ jihajoor:
     standard-resolution-sla: ${COMPLAINT_STANDARD_SLA:72h}
     # Stats aggregation refresh window for Admin reports (Requirement 16.9).
     stats-refresh-window: ${COMPLAINT_STATS_REFRESH_WINDOW:60m}
+    # A refund call with no recorded outcome counts as in flight this long: a same-key retry is 409
+    # REFUND_IN_PROGRESS until then, and re-sends the refund (same idempotency key) after. Keep it
+    # well above payment.connect-timeout + payment.read-timeout.
+    refund-attempt-lease: ${COMPLAINT_REFUND_ATTEMPT_LEASE:5m}
+    # Approved refunds move money through the Payment Service's service-to-service
+    # POST /internal/payments/refunds (Requirement 16.5).
+    payment:
+      # 'http' (default) refunds through the Payment Service. 'logging' is LOCAL/DEV ONLY: it records
+      # every refund SUCCEEDED and moves no money.
+      client: ${COMPLAINT_PAYMENT_CLIENT:http}
+      base-url: ${PAYMENT_SERVICE_URL:http://payment-service:8088}
+      # Shared service credential sent as X-Internal-Api-Key; the Payment Service checks the same
+      # INTERNAL_API_KEY. No usable default: when unset, no refund is sent and every approval answers
+      # 502 REFUND_OUTCOME_UNKNOWN (the refund stays PENDING and can be re-sent once it is set).
+      internal-api-key: ${INTERNAL_API_KEY:}
+      connect-timeout: ${COMPLAINT_PAYMENT_CONNECT_TIMEOUT:2s}
+      # Generous: the Payment Service answers only after the gateway does. A call cut short here
+      # leaves the refund PENDING with an unknown outcome.
+      read-timeout: ${COMPLAINT_PAYMENT_READ_TIMEOUT:60s}
     attachments:
       # Evidence attachment limits (Requirement 16.1).
       max-count: ${COMPLAINT_MAX_ATTACHMENTS:5}

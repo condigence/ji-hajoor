@@ -70,8 +70,8 @@ import jakarta.annotation.PostConstruct;
 public class ComplaintRbacConfig {
 
     /**
-     * Staff tier permitted to moderate complaints: change status (16.3), approve refunds (16.5),
-     * mark disputes (16.7), read aggregated statistics (16.9) and work the Admin Portal complaint
+     * Staff tier permitted to moderate complaints: change status (16.3), approve, re-send and read
+     * refunds (16.5, 16.6), mark disputes (16.7), read aggregated statistics (16.9) and work the Admin Portal complaint
      * list (19.2). Logical OR.
      */
     private static final List<String> SUPPORT_TIER =
@@ -107,6 +107,11 @@ public class ComplaintRbacConfig {
         // Staff moderation of an individual complaint (16.3, 16.5/16.6, 16.7).
         rules.put("POST /complaints/*/status", SUPPORT_TIER);
         rules.put("POST /complaints/*/refund", SUPPORT_TIER);
+        // Re-send of a PENDING refund whose outcome is unknown, and the refund's recorded status
+        // (16.5/16.6). Without their own rules these would match nothing and pass through to any
+        // authenticated caller: "*/refund" does not match "*/refund/resend".
+        rules.put("POST /complaints/*/refund/resend", SUPPORT_TIER);
+        rules.put("GET /complaints/*/refund", SUPPORT_TIER);
         rules.put("POST /complaints/*/dispute", SUPPORT_TIER);
         // Customer-facing complaint creation (16.1); the customer id comes from the JWT, never
         // from the body. Declared last so it can never shadow a staff path above.
