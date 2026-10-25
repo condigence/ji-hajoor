@@ -23,6 +23,7 @@ import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import { useAuthStore } from '@stores/authStore';
 import { BrandLogo } from './BrandLogo';
+import SiteCredit from './SiteCredit';
 
 /** Height reserved for the fixed bottom navigation, in theme spacing units. */
 const BOTTOM_NAV_SPACING = 9;
@@ -151,6 +152,7 @@ export function AppShell({ title, children, onBack, branded = false, action }: A
         sx={{ flexGrow: 1, py: { xs: 2.5, md: 4 }, px: { xs: 2, md: 3 } }}
       >
         {children}
+        <SiteCredit component="footer" sx={{ display: 'block', mt: 4, textAlign: 'center' }} />
       </Container>
 
       <Paper

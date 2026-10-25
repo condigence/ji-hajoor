@@ -15,9 +15,9 @@ import { BrandLogo } from '@components/BrandLogo';
 import { HomeRedirect } from '@components/HomeRedirect';
 import { useAuthStore } from '@stores/authStore';
 import { brand } from '@lib/theme';
+import SiteCredit from '../../components/SiteCredit';
 
 /** Read once at load: the footer year needs no re-render to stay current within a session. */
-const CURRENT_YEAR = new Date().getFullYear();
 
 const SERVICES = [
   { icon: PlumbingRoundedIcon, label: 'Plumbing' },
@@ -287,9 +287,7 @@ export function HomeScreen() {
           }}
         >
           <BrandLogo size={28} />
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            © {CURRENT_YEAR} Ji-Hajoor. All rights reserved.
-          </Typography>
+          <SiteCredit variant="body2" />
         </Container>
       </Box>
     </Box>

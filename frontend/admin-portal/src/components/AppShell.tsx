@@ -31,6 +31,7 @@ import type { NavBadge } from '@config/navigation';
 import { TENANT_ROLES, hasAnyRole } from '@config/roles';
 import { useMyTenant, useQueueCount } from '@features/tenant-portal/hooks';
 import { brand } from '@lib/theme';
+import SiteCredit from './SiteCredit';
 
 /** Fixed width of the desktop sidebar drawer. */
 const DRAWER_WIDTH = 268;
@@ -452,7 +453,10 @@ export function AppShell({ title, children }: AppShellProps) {
         }}
       >
         <Toolbar />
-        <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1480, mx: 'auto' }}>{children}</Box>
+        <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1480, mx: 'auto' }}>
+          {children}
+          <SiteCredit component="footer" sx={{ display: 'block', mt: 4, textAlign: 'center' }} />
+        </Box>
       </Box>
     </Box>
   );

@@ -31,9 +31,9 @@ import { useClientSetting } from '@config/clientConfig';
 import { brand, layout, radius, visuallyHidden } from '@lib/theme';
 import { BrandLogo } from './BrandLogo';
 import { ServiceSearchField } from './ServiceSearchField';
+import SiteCredit from './SiteCredit';
 
 /** For the footer's copyright line; read once, not on every render. */
-const COPYRIGHT_YEAR = new Date().getFullYear();
 
 /** Primary destinations. Four, so each stays thumb-reachable on the tab bar. */
 const NAV_ITEMS = [
@@ -441,14 +441,7 @@ function SiteFooter() {
           </Box>
         </Box>
         <Box sx={{ mt: { xs: 4, md: 5 }, pt: 2.5, borderTop: `1px solid ${brand.lineStrong}` }}>
-          <Typography
-            variant="caption"
-            sx={{
-              color: 'text.secondary',
-            }}
-          >
-            © {COPYRIGHT_YEAR} Ji-Hajoor. Verified Help. Anytime. Anywhere.
-          </Typography>
+          <SiteCredit />
         </Box>
       </Container>
     </Box>
