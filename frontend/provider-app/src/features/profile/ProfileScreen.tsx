@@ -27,6 +27,7 @@ import { formatMobileNumber } from '@features/auth/phone';
 import { useVerificationState } from '@features/verification/hooks';
 import { describeVerificationStatus } from '@features/verification/status';
 import { useAuthStore } from '@stores/authStore';
+import { AgencyCard } from '@features/agency/AgencyCard';
 import { BankAccountCard } from './BankAccountCard';
 import { EmailPasswordCard } from './EmailPasswordCard';
 import { WorkProfileCard } from './WorkProfileCard';
@@ -115,6 +116,8 @@ export function ProfileScreen() {
         </Card>
 
         <WorkProfileCard />
+
+        <AgencyCard />
 
         <BankAccountCard />
 

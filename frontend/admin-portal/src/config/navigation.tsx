@@ -164,4 +164,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
   },
   { label: 'Team', path: '/tenant/team', icon: <GroupsRoundedIcon />, roles: TENANT_ROLES },
   { label: 'Jobs', path: '/tenant/jobs', icon: <WorkHistoryRoundedIcon />, roles: TENANT_ROLES },
+  {
+    label: 'Earnings',
+    path: '/tenant/earnings',
+    icon: <PaymentsRoundedIcon />,
+    roles: TENANT_ROLES,
+  },
 ] as const;
