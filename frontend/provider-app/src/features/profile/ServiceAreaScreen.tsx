@@ -175,8 +175,8 @@ export function ServiceAreaForm({ profile, onSaved }: ServiceAreaFormProps) {
           ) : null}
           {locate.status === 'denied' ? (
             <Alert severity="warning" sx={{ mt: 1.5 }}>
-              Location permission is turned off for Ji-Hajoor. Allow it in your phone&apos;s settings,
-              or type your coordinates below.
+              Location permission is turned off for Ji-Hajoor. Allow it in your phone&apos;s
+              settings, or type your coordinates below.
             </Alert>
           ) : null}
           {locate.status === 'unavailable' ? (

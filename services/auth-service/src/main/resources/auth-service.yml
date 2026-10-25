@@ -82,6 +82,8 @@ jihajoor:
       # TEMPORARY TEST MODE: every OTP is this code and no SMS is sent; staff accounts are
       # refused (they use username/password). Unset it once SMS delivery works.
       fixed-code: ${OTP_FIXED_CODE:}
+      # The code works only for these test numbers; every other number gets a real SMS.
+      fixed-code-numbers: ${OTP_FIXED_CODE_NUMBERS:+919000090001,+919000090002,+919000090011,+919000090012}
     # Username/password sign-in. The lockout mirrors the OTP flow so both
     # authentication surfaces resist brute force identically (Requirement 1.3).
     password:

@@ -366,8 +366,8 @@ function PhasePanel({
     case 'searching':
       return status === 'AWAITING_ASSIGNMENT' ? (
         <StatePanel icon={null} visual={<SearchingVisual />} title="Finding you a professional">
-          No one nearby could take it straight away, so a local Ji-Hajoor partner is assigning one of
-          their verified professionals to your job. We&apos;ll notify you as soon as someone is
+          No one nearby could take it straight away, so a local Ji-Hajoor partner is assigning one
+          of their verified professionals to your job. We&apos;ll notify you as soon as someone is
           assigned, so you can leave this page.
         </StatePanel>
       ) : (

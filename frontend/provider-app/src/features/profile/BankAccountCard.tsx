@@ -185,8 +185,8 @@ export function BankAccountCard() {
                 color: 'text.secondary',
               }}
             >
-              Add the bank account your settlements should be paid into. Ji-Hajoor verifies it before
-              the first payout.
+              Add the bank account your settlements should be paid into. Ji-Hajoor verifies it
+              before the first payout.
             </Typography>
           )}
 

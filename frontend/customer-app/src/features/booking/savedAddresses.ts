@@ -57,9 +57,12 @@ interface SavedAddressState {
  * anything else becomes line 1.
  */
 function fromServer(server: ServerAddress): SavedAddress['address'] {
-  const parts = (server.label ?? server.address ?? '').split(',').map((part) => part.trim()).filter(Boolean);
+  const parts = (server.label ?? server.address ?? '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
   const pin = parts.length >= 3 && /^\d{6}$/.test(parts[parts.length - 1] ?? '') ? parts.pop() : '';
-  const city = parts.length >= 2 ? parts.pop() ?? '' : '';
+  const city = parts.length >= 2 ? (parts.pop() ?? '') : '';
   const [line1 = 'Saved address', ...rest] = parts;
   return {
     line1,
@@ -87,11 +90,17 @@ export const useSavedAddressStore = create<SavedAddressState>()(
         });
       },
       syncFromServer: (userId, server) => {
-        const local = new Map((get().byUser[userId] ?? []).map((saved) => [saved.addressId, saved]));
+        const local = new Map(
+          (get().byUser[userId] ?? []).map((saved) => [saved.addressId, saved]),
+        );
         // Keep the device's own form values where it has them; the service's order
         // (default first, then newest) otherwise.
         const merged = server.map(
-          (entry) => local.get(entry.addressId) ?? { addressId: entry.addressId, address: fromServer(entry) },
+          (entry) =>
+            local.get(entry.addressId) ?? {
+              addressId: entry.addressId,
+              address: fromServer(entry),
+            },
         );
         set({ byUser: { ...get().byUser, [userId]: merged.slice(0, MAX_SAVED_ADDRESSES) } });
       },

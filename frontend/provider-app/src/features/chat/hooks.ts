@@ -77,7 +77,10 @@ const MESSAGE_NOT_DELIVERED = 'MESSAGE_NOT_DELIVERED';
  * so the screen shows it closed, and a message the server dropped on the way
  * out comes back as `undelivered`.
  */
-export function useChatSocket(channelId: string, bookingId?: string): {
+export function useChatSocket(
+  channelId: string,
+  bookingId?: string,
+): {
   state: ChatConnectionState;
   /** Sends the text; false when the link is not open (keep the draft). */
   send: (body: string) => boolean;
@@ -148,7 +151,8 @@ export function useChatSocket(channelId: string, bookingId?: string): {
             setUndelivered(lastSentRef.current);
           }
           lastSentRef.current = null;
-          if (bookingId) void queryClient.invalidateQueries({ queryKey: chatKeys.channel(bookingId) });
+          if (bookingId)
+            void queryClient.invalidateQueries({ queryKey: chatKeys.channel(bookingId) });
           return;
         }
         const token = useAuthStore.getState().accessToken;

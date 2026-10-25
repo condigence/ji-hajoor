@@ -97,7 +97,8 @@ export function VerifyEmailScreen() {
           {email}
         </Box>
         {validMinutes ? `. It’s valid for ${validMinutes} minutes.` : '.'} If that address already
-        has a Ji-Hajoor account, we’ve emailed you about it instead — sign in or reset your password.
+        has a Ji-Hajoor account, we’ve emailed you about it instead — sign in or reset your
+        password.
       </Typography>
 
       <EmailCodeStep
