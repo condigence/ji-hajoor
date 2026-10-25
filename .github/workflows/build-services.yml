@@ -213,14 +213,29 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.title=${{ matrix.service }}
 
-      - name: Scan image (fails on fixable CRITICAL vulnerabilities)
+      - name: Scan image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0, pinned by commit
         with:
           image-ref: ${{ env.LOCAL_IMAGE }}
-          format: table
+          format: json
+          output: trivy-image.json
           severity: CRITICAL
           ignore-unfixed: true
-          exit-code: '1'
+          exit-code: '0'
+
+      - name: Fail on fixable CRITICAL vulnerabilities
+        shell: python
+        run: |
+          import json, sys
+          report = json.load(open("trivy-image.json"))
+          found = []
+          for result in report.get("Results") or []:
+              for v in result.get("Vulnerabilities") or []:
+                  found.append((v.get("VulnerabilityID"), v.get("PkgName"), v.get("InstalledVersion"),
+                                v.get("FixedVersion"), result.get("Target")))
+          for vid, pkg, have, fixed, target in sorted(set(found))[:20]:
+              print(f"::error title={vid}::{pkg} {have} -> fixed in {fixed} ({target})")
+          sys.exit(1 if found else 0)
 
       - name: Check push configuration
         if: inputs.push-images
