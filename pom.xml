@@ -69,6 +69,9 @@
         <logstash-encoder.version>9.0</logstash-encoder.version>
         <jqwik.version>1.10.2</jqwik.version>
         <pact.version>4.7.5</pact.version>
+        <!-- Ahead of Spring Boot 4.1.1's 11.0.24: CVE-2026-65182, CVE-2026-65905 and
+             CVE-2026-68525 (CRITICAL) are fixed in 11.0.25. Drop once Boot ships it. -->
+        <tomcat.version>11.0.25</tomcat.version>
 
         <!-- Build plugins (Spring Boot pins the Apache Maven ones it uses) -->
         <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
@@ -80,6 +83,22 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- Declared before the Boot BOM so these versions win over the imported ones. -->
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-core</artifactId>
+                <version>${tomcat.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-el</artifactId>
+                <version>${tomcat.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-websocket</artifactId>
+                <version>${tomcat.version}</version>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
