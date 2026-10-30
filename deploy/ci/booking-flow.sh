@@ -157,6 +157,13 @@ REVIEW_ID="$(head -1 <<<"$RV" | jq -r '.reviewId // empty')"
 c="$(code "$GATEWAY/public/workers/$PROVIDER_ID")"; [ "$c" = 200 ] && ok "worker's public page opens without signing in" || bad "worker's public page" "HTTP $c"
 c="$(code "$GATEWAY/public/workers/00000000-0000-0000-0000-000000000000")"; [ "$c" = 404 ] && ok "an unknown worker has no public page" || bad "unknown worker has no public page" "HTTP $c"
 if [ -n "$REVIEW_ID" ]; then
+  # A review from an account created minutes ago is held for moderation (fraud check), so it
+  # stays off the public page until staff publish it.
+  PUB="$(api "$GATEWAY/public/workers/$PROVIDER_ID/reviews")"
+  jq -e '.summary.count == 0' <<<"$PUB" >/dev/null \
+    && ok "a brand-new account's review waits for moderation" || bad "new account's review is held" "$(head -c 200 <<<"$PUB")"
+  c="$(code -X POST -H "$A" -H "$JSON" -d '{"action":"PUBLISH"}' "$GATEWAY/admin/reviews/$REVIEW_ID/moderate")"
+  [ "$c" = 200 ] && ok "admin published the review" || bad "admin published the review" "HTTP $c"
   c="$(code -X POST -H "$P" -H "$JSON" -d '{"text":"Thank you!"}' "$GATEWAY/reviews/$REVIEW_ID/reply")"
   [ "$c" = 200 ] && ok "worker replied to the review" || bad "worker replied to the review" "HTTP $c"
   c="$(code -X POST -H "$C" -H "$JSON" -d '{"text":"Not mine"}' "$GATEWAY/reviews/$REVIEW_ID/reply")"
