@@ -13,8 +13,6 @@ import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
-import com.jihajoor.auth.config.AuthTokenProperties;
-
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -39,12 +37,14 @@ public class RefreshCookie implements ResponseBodyAdvice<Object> {
     private final boolean secure;
     private final Duration ttl;
 
-    public RefreshCookie(AuthTokenProperties tokens,
+    // Plain properties rather than AuthTokenProperties: as a controller advice this bean is in
+    // every web-slice test, which does not load the configuration-properties beans.
+    public RefreshCookie(@Value("${jihajoor.auth.token.refresh-ttl:30d}") Duration ttl,
                          @Value("${jihajoor.auth.refresh-cookie.path:/api/auth}") String path,
                          @Value("${jihajoor.auth.refresh-cookie.secure:true}") boolean secure) {
         this.path = path;
         this.secure = secure;
-        this.ttl = tokens.getRefreshTtl();
+        this.ttl = ttl;
     }
 
     /** True when the caller asked for the refresh token in a cookie. */

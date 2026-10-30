@@ -38,7 +38,7 @@ class SessionControllerTest {
     void setUp() {
         refreshService = mock(RefreshService.class);
         socialLoginService = mock(SocialLoginService.class);
-        RefreshCookie cookie = new RefreshCookie(new com.jihajoor.auth.config.AuthTokenProperties(), "/api/auth", true);
+        RefreshCookie cookie = new RefreshCookie(java.time.Duration.ofDays(30), "/api/auth", true);
         mockMvc = MockMvcBuilders
                 .standaloneSetup(new SessionController(refreshService, socialLoginService, cookie))
                 .setControllerAdvice(new GlobalExceptionHandler(), cookie)
