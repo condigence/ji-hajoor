@@ -33,6 +33,27 @@ public class InMemoryReviewPromptRepository implements ReviewPromptRepository {
     }
 
     @Override
+    public List<ReviewPrompt> findTop50ByReviewerIdAndCreatedAtAfterOrderByCreatedAtDesc(UUID reviewerId,
+                                                                                        java.time.Instant since) {
+        return byId.values().stream()
+                .filter(p -> p.getReviewerId().equals(reviewerId) && p.getCreatedAt().isAfter(since))
+                .sorted(java.util.Comparator.comparing(ReviewPrompt::getCreatedAt).reversed())
+                .limit(50)
+                .toList();
+    }
+
+    @Override
+    public List<ReviewPrompt> findDueReminders(ReviewerRole role, java.time.Instant cutoff, java.time.Instant now,
+                                               org.springframework.data.domain.Pageable page) {
+        return byId.values().stream()
+                .filter(p -> !p.isFulfilled() && p.getRemindedAt() == null && p.getReviewerRole() == role
+                        && p.getCreatedAt().isBefore(cutoff) && p.getExpiresAt().isAfter(now))
+                .sorted(java.util.Comparator.comparing(ReviewPrompt::getCreatedAt))
+                .limit(page.getPageSize())
+                .toList();
+    }
+
+    @Override
     public boolean existsByPaymentId(UUID paymentId) {
         return byId.values().stream().anyMatch(p -> p.getPaymentId().equals(paymentId));
     }

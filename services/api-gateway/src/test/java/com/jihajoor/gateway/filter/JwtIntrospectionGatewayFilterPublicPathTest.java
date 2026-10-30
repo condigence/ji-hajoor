@@ -36,6 +36,9 @@ class JwtIntrospectionGatewayFilterPublicPathTest {
             "/auth/invitations/abc123/acceptance",
             // The web apps' public settings.
             "/config/client",
+            // A verified worker's public page and reviews.
+            "/public/workers/7e4b1c93-0d58-4a26-bf71-3c9e5d2a8b64",
+            "/public/workers/7e4b1c93-0d58-4a26-bf71-3c9e5d2a8b64/reviews",
             // Encoded spellings of public paths stay public: the same decoded path is served.
             "/auth/login/%73ocial",
             "//auth/login/password"
@@ -75,6 +78,10 @@ class JwtIntrospectionGatewayFilterPublicPathTest {
             "/config",
             "/config/clientX",
             "/config/client/../../admin/users",
+            // Only the worker pages are public, not anything else under /public.
+            "/public",
+            "/public/workersX",
+            "/public/workers/../../providers/me/earnings",
             // Dot segments and encoded separators resolve to a protected path.
             "/auth/register/../../admin/users",
             "/auth/login/%2e%2e/%2e%2e/bookings/1",

@@ -57,6 +57,12 @@ public class RatingRbacConfig {
     private static final List<String> PROVIDER_REVIEWER =
             List.of("SERVICE_PROVIDER", "ADMIN", "SUPER_ADMIN", "SUPPORT_AGENT");
 
+    /** The worker themself: their received reviews and replies. */
+    private static final List<String> WORKER_ONLY = List.of("SERVICE_PROVIDER");
+
+    /** Anyone who can be asked to review: customers and workers. */
+    private static final List<String> REVIEWERS = List.of("CUSTOMER", "SERVICE_PROVIDER");
+
     private final RbacProperties rbacProperties;
 
     public RatingRbacConfig(RbacProperties rbacProperties) {
@@ -74,6 +80,11 @@ public class RatingRbacConfig {
         // Most specific first: Admin/Support moderation of flagged or offending reviews (15.5, 15.9).
         rules.put("POST /reviews/*/approval", MODERATION_TIER);
         rules.put("POST /reviews/*/removal", MODERATION_TIER);
+        // A worker's public reply to a review they received; the service checks it is theirs.
+        rules.put("POST /reviews/*/reply", WORKER_ONLY);
+        rules.put("GET /reviews/received", WORKER_ONLY);
+        // The caller's own review prompts, customer or worker.
+        rules.put("GET /reviews/prompts/mine", REVIEWERS);
         // Provider -> customer rating (15.10).
         rules.put("POST /reviews/customer", PROVIDER_REVIEWER);
         // Customer -> provider review (15.2, 15.3).

@@ -16,6 +16,7 @@ import { ServiceRail } from './ServiceRail';
 import { ServiceTile } from './ServiceTile';
 import { SpotlightCarousel } from './SpotlightCarousel';
 import { useCategories } from './hooks';
+import { PendingReviewsBanner } from '@features/reviews/PendingReviewsBanner';
 import {
   cheapestPerCategory,
   featuredServices,
@@ -83,6 +84,8 @@ export function HomeScreen() {
         maxWidth={false}
         sx={{ maxWidth: layout.maxWidth, px: layout.gutter, pt: { xs: 2, md: 5 } }}
       >
+        <PendingReviewsBanner />
+
         {/* Mobile has no room for search in the bar, so it leads the page. */}
         <Box sx={{ display: { md: 'none' }, mb: 3 }}>
           <ServiceSearchField variant="page" />

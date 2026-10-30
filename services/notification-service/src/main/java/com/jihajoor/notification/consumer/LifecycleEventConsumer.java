@@ -120,6 +120,11 @@ public class LifecycleEventConsumer extends IdempotentKafkaConsumer {
         consume(record);
     }
 
+    @KafkaListener(topics = "${jihajoor.notification.topics.review-reminder:ReviewReminder}", groupId = CONSUMER_GROUP)
+    public void onReviewReminder(ConsumerRecord<String, String> record) {
+        consume(record);
+    }
+
     // ----- complaint events (Requirements 16.2, 16.3) -----
 
     @KafkaListener(topics = "${jihajoor.notification.topics.complaint-created:ComplaintCreated}", groupId = CONSUMER_GROUP)
@@ -177,6 +182,7 @@ public class LifecycleEventConsumer extends IdempotentKafkaConsumer {
         index.put(t.getPaymentCompleted(), NotificationEventType.PAYMENT_COMPLETED);
         index.put(t.getBookingCancelled(), NotificationEventType.BOOKING_CANCELLED);
         index.put(t.getReviewSubmitted(), NotificationEventType.REVIEW_SUBMITTED);
+        index.put(t.getReviewReminder(), NotificationEventType.REVIEW_REMINDER);
         index.put(t.getComplaintCreated(), NotificationEventType.COMPLAINT_CREATED);
         index.put(t.getComplaintStatusChanged(), NotificationEventType.COMPLAINT_STATUS_CHANGED);
         return Map.copyOf(index);

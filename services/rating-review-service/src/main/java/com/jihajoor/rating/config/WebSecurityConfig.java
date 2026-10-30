@@ -47,6 +47,9 @@ public class WebSecurityConfig {
                                 "/metrics",
                                 "/prometheus")
                         .permitAll()
+                        // A worker's verified reviews are public (their shareable profile page).
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/public/workers/*/reviews")
+                        .permitAll()
                         // Everything else requires an authenticated principal; fine-grained
                         // role checks are performed by the shared RbacEnforcementFilter.
                         .anyRequest().authenticated())

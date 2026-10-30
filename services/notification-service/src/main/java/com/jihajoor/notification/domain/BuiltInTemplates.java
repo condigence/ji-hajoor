@@ -118,7 +118,8 @@ public final class BuiltInTemplates {
             "PAYMENT_COMPLETED.CUSTOMER", NotificationEventType.PAYMENT_COMPLETED,
             "Payment completed (customer)", ALL,
             "Payment received",
-            "Payment for {{bookingReference}} was successful. Your invoice is ready.");
+            "Payment for {{bookingReference}} was successful. Your invoice is ready. "
+                    + "How was your professional? Rate the job in the app; it helps others choose.");
 
     public static final TemplateDefinition BOOKING_CANCELLED_PROVIDER = template(
             "BOOKING_CANCELLED.PROVIDER", NotificationEventType.BOOKING_CANCELLED,
@@ -150,6 +151,14 @@ public final class BuiltInTemplates {
             "Review received (reviewee)", PUSH_IN_APP,
             "New review",
             "You received a new review for {{bookingReference}}.");
+
+    /** One reminder, a day after payment, to a customer who has not rated the job yet. */
+    public static final TemplateDefinition REVIEW_REMINDER_CUSTOMER = template(
+            "REVIEW_REMINDER.CUSTOMER", NotificationEventType.REVIEW_REMINDER,
+            "Review reminder (customer)", PUSH_SMS_IN_APP,
+            "How was your service?",
+            "How did your recent Ji-Hajoor job go? Rate your professional in the app: "
+                    + "it takes ten seconds and helps other customers and good professionals.");
 
     /** Requirement 16.2: acknowledge every new complaint to the customer. */
     public static final TemplateDefinition COMPLAINT_CREATED_CUSTOMER = template(
@@ -184,6 +193,7 @@ public final class BuiltInTemplates {
             BOOKING_CANCELLED_CUSTOMER,
             REVIEW_SUBMITTED_REVIEWER,
             REVIEW_SUBMITTED_REVIEWEE,
+            REVIEW_REMINDER_CUSTOMER,
             COMPLAINT_CREATED_CUSTOMER,
             COMPLAINT_STATUS_CHANGED_CUSTOMER);
 
@@ -249,6 +259,7 @@ public final class BuiltInTemplates {
                 case REVIEWEE -> REVIEW_SUBMITTED_REVIEWEE;
                 default -> throw noTemplate(event);
             };
+            case REVIEW_REMINDER -> customerOnly(event, REVIEW_REMINDER_CUSTOMER);
             case COMPLAINT_CREATED -> customerOnly(event, COMPLAINT_CREATED_CUSTOMER);
             case COMPLAINT_STATUS_CHANGED -> customerOnly(event, COMPLAINT_STATUS_CHANGED_CUSTOMER);
         };

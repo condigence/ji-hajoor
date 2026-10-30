@@ -311,6 +311,10 @@ public class ProviderProfile {
         return userId;
     }
 
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
     public String getDisplayName() {
         return displayName;
     }

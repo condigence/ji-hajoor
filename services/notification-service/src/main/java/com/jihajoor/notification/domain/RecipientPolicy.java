@@ -42,7 +42,7 @@ public class RecipientPolicy {
         List<Recipient> recipients = new ArrayList<>(2);
         switch (eventType) {
             case BOOKING_CREATED, PROVIDER_ACCEPTED, PROVIDER_REJECTED, PROVIDER_ARRIVING,
-                 PROVIDER_ARRIVED, JOB_STARTED, JOB_COMPLETED,
+                 PROVIDER_ARRIVED, JOB_STARTED, JOB_COMPLETED, REVIEW_REMINDER,
                  COMPLAINT_CREATED, COMPLAINT_STATUS_CHANGED ->
                     recipients.add(required(eventType, participants.customerId(), "customerId",
                             NotificationAudience.CUSTOMER));

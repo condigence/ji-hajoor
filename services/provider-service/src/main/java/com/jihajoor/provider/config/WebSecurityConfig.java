@@ -82,6 +82,9 @@ public class WebSecurityConfig {
                         .permitAll()
                         // Service-to-service only: the authority is granted solely by the
                         // internal-API filter, never by a user token.
+                        // A verified worker's public page (shareable link); GET only.
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/public/workers/*")
+                        .permitAll()
                         .requestMatchers("/internal/**")
                         .hasAuthority(InternalApiKeyFilter.INTERNAL_AUTHORITY)
                         // Everything else requires an authenticated principal; fine-grained

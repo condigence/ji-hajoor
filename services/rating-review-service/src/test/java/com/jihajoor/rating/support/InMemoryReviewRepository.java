@@ -71,6 +71,23 @@ public class InMemoryReviewRepository implements ReviewRepository {
         return newestFirst(r -> !r.isActive(), page);
     }
 
+    @Override
+    public Optional<Review> findFirstByBookingIdAndReviewerId(UUID bookingId, UUID reviewerId) {
+        return byId.values().stream()
+                .filter(r -> r.getBookingId().equals(bookingId) && r.getReviewerId().equals(reviewerId))
+                .findFirst();
+    }
+
+    @Override
+    public List<Review> findVisibleForWorker(UUID worker, Pageable page) {
+        return byId.values().stream()
+                .filter(r -> r.getRevieweeId().equals(worker) && r.isPubliclyVisible())
+                .sorted(Comparator.comparing(Review::getSubmittedAt).reversed())
+                .skip(page.getOffset())
+                .limit(page.getPageSize())
+                .toList();
+    }
+
     private List<Review> newestFirst(Predicate<Review> filter, Pageable page) {
         return byId.values().stream()
                 .filter(filter)

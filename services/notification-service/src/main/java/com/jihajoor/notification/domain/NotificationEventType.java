@@ -20,6 +20,7 @@ public enum NotificationEventType {
     PAYMENT_COMPLETED("PaymentCompleted"),
     BOOKING_CANCELLED("BookingCancelled"),
     REVIEW_SUBMITTED("ReviewSubmitted"),
+    REVIEW_REMINDER("ReviewReminder"),
     COMPLAINT_CREATED("ComplaintCreated"),
     COMPLAINT_STATUS_CHANGED("ComplaintStatusChanged");
 
