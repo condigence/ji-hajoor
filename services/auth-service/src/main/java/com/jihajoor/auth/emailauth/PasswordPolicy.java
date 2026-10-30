@@ -35,7 +35,8 @@ public final class PasswordPolicy {
             "internet", "samsung", "apple", "google", "facebook", "whatsapp", "qazwsx", "aaaaaa");
 
     private static final String[] SEQUENCES = {
-            "0123456789", "9876543210", "abcdefghijklmnopqrstuvwxyz", "zyxwvutsrqponmlkjihgfedcba",
+            "0123456789", "1234567890", "9876543210", "0987654321",
+            "abcdefghijklmnopqrstuvwxyz", "zyxwvutsrqponmlkjihgfedcba",
             "qwertyuiop", "asdfghjkl", "zxcvbnm", "1qaz2wsx3edc"};
 
     private PasswordPolicy() {
@@ -63,10 +64,17 @@ public final class PasswordPolicy {
         }
         String lower = password.toLowerCase(Locale.ROOT);
         String letters = lower.replaceAll("[^\\p{L}]", "");
-        if (COMMON_WORDS.contains(letters) || COMMON_WORDS.contains(leetToLetters(lower))) {
+        String digits = lower.replaceAll("[^0-9]", "");
+        // The word part once a leading or trailing run of digits and symbols ("@2024", "123!") is
+        // set aside: "p@ssw0rd2024" is "p@ssw0rd", which reads "password".
+        String core = lower.replaceAll("^[^\\p{L}]+|[^\\p{L}]+$", "");
+        if (COMMON_WORDS.contains(letters) || COMMON_WORDS.contains(leetToLetters(lower))
+                || COMMON_WORDS.contains(leetToLetters(core))) {
             throw EmailAuthException.weakPassword("That password is too common. Choose something less predictable.");
         }
-        if (lower.chars().distinct().count() <= 3 || isSequence(lower)) {
+        if (lower.chars().distinct().count() <= 3 || isSequence(lower)
+                || (letters.length() >= 6 && inSequence(letters) && digits.length() <= 4)
+                || (digits.length() >= 6 && inSequence(digits) && letters.length() <= 2)) {
             throw EmailAuthException.weakPassword("Avoid repeated characters and simple sequences.");
         }
         if (personal != null) {
@@ -92,8 +100,13 @@ public final class PasswordPolicy {
         if (compact.length() < MIN_LENGTH - 2) {
             return false;
         }
+        return inSequence(compact);
+    }
+
+    /** True when {@code part} sits inside one keyboard, alphabet or number run. */
+    private static boolean inSequence(String part) {
         for (String sequence : SEQUENCES) {
-            if (sequence.contains(compact)) {
+            if (sequence.contains(part)) {
                 return true;
             }
         }
