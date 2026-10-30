@@ -85,11 +85,20 @@ public class ReviewController {
                 attachments, clientIp(servletRequest));
     }
 
-    private static String clientIp(HttpServletRequest request) {
+    /**
+     * The reviewer's address for the fraud checks: {@code X-Real-IP}, which Railway's edge sets and
+     * the web apps' nginx forwards. The first {@code X-Forwarded-For} entry is never used: the
+     * client writes it, so a review ring could pick any address it liked.
+     */
+    static String clientIp(HttpServletRequest request) {
+        String real = request.getHeader("X-Real-IP");
+        if (real != null && !real.isBlank() && real.length() <= 64) {
+            return real.strip();
+        }
         String forwarded = request.getHeader("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank()) {
-            // First hop is the originating client.
-            return forwarded.split(",")[0].trim();
+            String[] hops = forwarded.split(",");
+            return hops[hops.length - 1].strip();
         }
         return request.getRemoteAddr();
     }

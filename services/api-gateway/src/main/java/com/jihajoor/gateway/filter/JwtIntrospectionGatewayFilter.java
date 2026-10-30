@@ -69,6 +69,8 @@ public class JwtIntrospectionGatewayFilter implements GlobalFilter, Ordered {
             // The web apps' public settings (config.app_config rows marked exposed_to_clients),
             // read before sign-in; the route only forwards GET.
             "/config/client",
+            // A verified worker's public page and reviews; the routes only forward GET.
+            "/public/workers",
             "/actuator",
             "/health");
 

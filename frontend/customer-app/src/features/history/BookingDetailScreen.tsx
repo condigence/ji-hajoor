@@ -46,6 +46,7 @@ import type { BookingDetail, JobPhoto, PhotoKind } from './api';
 import { useBookingDetail, useBookingInvoice, useInvoiceDownload, useJobPhoto } from './hooks';
 import { StatusChip } from './StatusChip';
 import { isTerminalStatus } from './status';
+import { RateJobCard } from '@features/reviews/RateJobCard';
 import { useBookingService } from './useServiceName';
 
 /**
@@ -223,7 +224,10 @@ function BookingDetailBody({
           {detail.provider ? (
             <>
               <Divider sx={{ my: { xs: 2, md: 2.5 } }} />
-              <ProviderRow provider={detail.provider} />
+              <ProviderRow
+                provider={detail.provider}
+                {...(detail.providerId ? { profileHref: `/workers/${detail.providerId}` } : {})}
+              />
             </>
           ) : null}
         </CardContent>
@@ -283,6 +287,12 @@ function BookingDetailBody({
           )}
 
           <Stack spacing={1.25} sx={{ mt: 2.5 }}>
+            {paid ? (
+              <RateJobCard
+                bookingId={detail.bookingId}
+                {...(detail.provider ? { workerName: detail.provider.displayName } : {})}
+              />
+            ) : null}
             {payable ? <PaymentCardActions detail={detail} /> : null}
             {terminal ? null : (
               <Button
@@ -522,7 +532,13 @@ function DetailRow({ icon, label, value }: { icon: ReactNode; label: string; val
   );
 }
 
-function ProviderRow({ provider }: { provider: NonNullable<BookingDetail['provider']> }) {
+function ProviderRow({
+  provider,
+  profileHref,
+}: {
+  provider: NonNullable<BookingDetail['provider']>;
+  profileHref?: string;
+}) {
   const initials = provider.displayName
     .split(' ')
     .map((part) => part.charAt(0))
@@ -576,6 +592,11 @@ function ProviderRow({ provider }: { provider: NonNullable<BookingDetail['provid
             />
           ) : null}
         </Stack>
+        {profileHref && provider.verified ? (
+          <Link component={RouterLink} to={profileHref} variant="caption" underline="hover">
+            See profile and reviews
+          </Link>
+        ) : null}
       </Box>
       <Stack
         direction="row"

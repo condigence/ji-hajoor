@@ -16,6 +16,7 @@ import { ChatScreen } from '@features/tracking/ChatScreen';
 import { ServiceHistoryScreen } from '@features/history/ServiceHistoryScreen';
 import { BookingDetailScreen } from '@features/history/BookingDetailScreen';
 import { ProfileScreen } from '@features/profile/ProfileScreen';
+import { WorkerProfileScreen } from '@features/reviews/WorkerProfileScreen';
 import { HelpScreen } from '@features/help/HelpScreen';
 
 /**
@@ -52,6 +53,11 @@ export const router = createBrowserRouter([
       {
         path: '/forgot-password',
         element: <ForgotPasswordScreen />,
+      },
+      {
+        // A verified professional's public page (the link they share): no sign-in.
+        path: '/workers/:workerId',
+        element: <WorkerProfileScreen />,
       },
       {
         path: '/home',

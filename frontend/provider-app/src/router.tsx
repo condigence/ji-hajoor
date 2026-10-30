@@ -18,6 +18,7 @@ import { ActiveJobScreen } from '@features/jobs/ActiveJobScreen';
 import { JobCompletionScreen } from '@features/jobs/JobCompletionScreen';
 import { EarningsScreen } from '@features/earnings/EarningsScreen';
 import { ChatScreen } from '@features/chat/ChatScreen';
+import { MyReviewsScreen } from '@features/reviews/MyReviewsScreen';
 
 /**
  * Provider App routes. Screen set follows Requirement 28.8:
@@ -115,6 +116,14 @@ export const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <EarningsScreen />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/reviews',
+    element: (
+      <RequireAuth>
+        <MyReviewsScreen />
       </RequireAuth>
     ),
   },

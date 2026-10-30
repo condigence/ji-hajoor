@@ -121,6 +121,7 @@ public class NotificationProperties {
         private String paymentCompleted = "PaymentCompleted";
         private String bookingCancelled = "BookingCancelled";
         private String reviewSubmitted = "ReviewSubmitted";
+        private String reviewReminder = "ReviewReminder";
         private String complaintCreated = "ComplaintCreated";
         private String complaintStatusChanged = "ComplaintStatusChanged";
 
@@ -202,6 +203,14 @@ public class NotificationProperties {
 
         public void setBookingCancelled(String bookingCancelled) {
             this.bookingCancelled = bookingCancelled;
+        }
+
+        public String getReviewReminder() {
+            return reviewReminder;
+        }
+
+        public void setReviewReminder(String reviewReminder) {
+            this.reviewReminder = reviewReminder;
         }
 
         public String getReviewSubmitted() {

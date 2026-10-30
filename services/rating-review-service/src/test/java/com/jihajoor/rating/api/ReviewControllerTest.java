@@ -30,7 +30,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 /**
  * Web-layer tests for {@link ReviewController}. The submission endpoints (no {@code @PathVariable})
  * are exercised through standalone MockMvc with a JWT-style principal and the client IP resolved
- * from {@code X-Forwarded-For}; the moderation endpoints (which use {@code @PathVariable}) are
+ * from {@code X-Real-IP}; the moderation endpoints (which use {@code @PathVariable}) are
  * exercised by direct invocation because the build does not enable the {@code -parameters} flag.
  */
 class ReviewControllerTest {
@@ -77,7 +77,9 @@ class ReviewControllerTest {
                  "pricingTransparency":5,"reviewText":"ok"}
                 """.formatted(booking);
 
-        mvc.perform(post("/reviews").header("X-Forwarded-For", "203.0.113.9, 10.0.0.1")
+        // The client's own X-Forwarded-For entry is ignored; the edge's X-Real-IP is used.
+        mvc.perform(post("/reviews").header("X-Forwarded-For", "6.6.6.6, 10.0.0.1")
+                        .header("X-Real-IP", "203.0.113.9")
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.reviewerRole").value("CUSTOMER"))

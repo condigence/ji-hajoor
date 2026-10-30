@@ -222,6 +222,19 @@ export const accountClient: AxiosInstance = axios.create({
   baseURL: env.authBaseUrl,
 });
 
+/**
+ * Web builds keep the refresh token out of JavaScript: with this header the Auth
+ * Service returns it as an HttpOnly, Secure, SameSite=Strict cookie (path
+ * /api/auth) instead of in the JSON, and reads it back from there on refresh and
+ * logout. A native build cannot rely on cookies, so it sends no header and keeps
+ * receiving the token in the body.
+ */
+export const SESSION_TRANSPORT_HEADER = 'X-Session-Transport';
+if (!env.isNative) {
+  authClient.defaults.headers.common[SESSION_TRANSPORT_HEADER] = 'cookie';
+  accountClient.defaults.headers.common[SESSION_TRANSPORT_HEADER] = 'cookie';
+}
+
 /** Tag an outbound request with a correlation id unless it already carries one. */
 function withCorrelationId(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
   if (!config.headers.has(CORRELATION_ID_HEADER)) {

@@ -128,7 +128,7 @@ public class AccountCredentialsService {
             throw new EmailAuthException(HttpStatus.BAD_REQUEST, "EMAIL_REQUIRED",
                     "Add and verify an email address first, so you can sign in with the password.");
         }
-        PasswordPolicy.requireAcceptable(newPassword);
+        PasswordPolicy.requireAcceptable(newPassword, account.getEmail(), account.getUsername());
         requireCurrentPassword(account, currentPassword);
         account.changePasswordHash(passwordEncoder.encode(newPassword));
         userRepository.save(account);

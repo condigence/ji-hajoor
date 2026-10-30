@@ -143,6 +143,38 @@ c="$(tail -1 <<<"$PAY")"
 S=""; for _ in $(seq 1 40); do S="$(status)"; [ "$S" = PAYMENT_COMPLETED ] && break; sleep 1; done
 [ "$S" = PAYMENT_COMPLETED ] && ok "booking reached PAYMENT_COMPLETED (via Kafka)" || bad "booking reached PAYMENT_COMPLETED" "status $S"
 
+echo "== Reviews: the customer rates, the public page shows it, the worker replies"
+S=""; for _ in $(seq 1 30); do
+  S="$(api -H "$C" "$GATEWAY/reviews/prompts/mine" | jq -r --arg b "$BOOKING_ID" '.[] | select(.bookingId == $b) | .status' | head -1)"
+  [ "$S" = OPEN ] && break; sleep 1; done
+[ "$S" = OPEN ] && ok "customer is asked to rate the job" || bad "customer is asked to rate the job" "prompt status '$S'"
+REVIEW="{\"bookingId\":\"$BOOKING_ID\",\"overall\":5,\"quality\":5,\"timeliness\":4,\"behavior\":5,\"pricingTransparency\":5,\"reviewText\":\"CI: quick and tidy.\"}"
+RV=""; for _ in $(seq 1 30); do
+  RV="$(curl -sS -w '\n%{http_code}' -H 'X-Forwarded-Proto: https' -X POST -H "$C" -H "$JSON" -d "$REVIEW" "$GATEWAY/reviews")"
+  [ "$(tail -1 <<<"$RV")" = 201 ] && break; sleep 1; done
+REVIEW_ID="$(head -1 <<<"$RV" | jq -r '.reviewId // empty')"
+[ -n "$REVIEW_ID" ] && ok "customer reviewed the worker" || bad "customer reviewed the worker" "$(head -c 200 <<<"$RV")"
+c="$(code "$GATEWAY/public/workers/$PROVIDER_ID")"; [ "$c" = 200 ] && ok "worker's public page opens without signing in" || bad "worker's public page" "HTTP $c"
+c="$(code "$GATEWAY/public/workers/00000000-0000-0000-0000-000000000000")"; [ "$c" = 404 ] && ok "an unknown worker has no public page" || bad "unknown worker has no public page" "HTTP $c"
+if [ -n "$REVIEW_ID" ]; then
+  # A review from an account created minutes ago is held for moderation (fraud check), so it
+  # stays off the public page until staff publish it.
+  PUB="$(api "$GATEWAY/public/workers/$PROVIDER_ID/reviews")"
+  jq -e '.summary.count == 0' <<<"$PUB" >/dev/null \
+    && ok "a brand-new account's review waits for moderation" || bad "new account's review is held" "$(head -c 200 <<<"$PUB")"
+  c="$(code -X POST -H "$A" -H "$JSON" -d '{"action":"PUBLISH"}' "$GATEWAY/admin/reviews/$REVIEW_ID/moderate")"
+  [ "$c" = 200 ] && ok "admin published the review" || bad "admin published the review" "HTTP $c"
+  c="$(code -X POST -H "$P" -H "$JSON" -d '{"text":"Thank you!"}' "$GATEWAY/reviews/$REVIEW_ID/reply")"
+  [ "$c" = 200 ] && ok "worker replied to the review" || bad "worker replied to the review" "HTTP $c"
+  c="$(code -X POST -H "$C" -H "$JSON" -d '{"text":"Not mine"}' "$GATEWAY/reviews/$REVIEW_ID/reply")"
+  [ "$c" = 403 ] || [ "$c" = 404 ] && ok "a customer cannot reply as the worker (HTTP $c)" || bad "customer cannot reply" "HTTP $c"
+  PUB="$(api "$GATEWAY/public/workers/$PROVIDER_ID/reviews")"
+  jq -e '.reviews[0].reply == "Thank you!" and .summary.count >= 1' <<<"$PUB" >/dev/null \
+    && ok "public reviews show the rating and the reply" || bad "public reviews" "$(head -c 300 <<<"$PUB")"
+  jq -e 'tostring | test("'"$CUSTOMER_ID"'") | not' <<<"$PUB" >/dev/null \
+    && ok "public reviews do not reveal the customer" || bad "public reviews hide the customer" "customer id present"
+fi
+
 echo "== Event relay health"
 FAILED_EVENTS="$(docker exec postgres psql -U postgres -d railway -tAc "SELECT count(*) FROM outbox.outbox_event WHERE status = 'FAILED'")"
 [ "$FAILED_EVENTS" = 0 ] && ok "no failed outbox events" || bad "no failed outbox events" "$FAILED_EVENTS failed"

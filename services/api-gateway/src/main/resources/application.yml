@@ -12,6 +12,18 @@ spring:
           # Routes to downstream microservices. TLS is terminated at the AWS edge (Task 1); the
           # X-Forwarded-Proto header conveys the original scheme to the HTTPS-redirect filter.
           routes:
+            # A verified worker's public page and reviews (the link workers share). GET only;
+            # the reviews route must stay above the profile route.
+            - id: public-worker-reviews
+              uri: ${RATING_SERVICE_URI:http://engagement-app:8097}
+              predicates:
+                - Path=/public/workers/*/reviews
+                - Method=GET
+            - id: public-worker
+              uri: ${PROVIDER_SERVICE_URI:http://identity-app:8083}
+              predicates:
+                - Path=/public/workers/*
+                - Method=GET
             - id: auth-service
               uri: ${AUTH_SERVICE_URI:http://identity-app:8081}
               predicates:

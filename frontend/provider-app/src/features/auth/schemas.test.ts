@@ -20,25 +20,25 @@ const SIGN_UP: SignUpFormValues = {
   displayName: '  Ravi Kumar ',
   email: ' ravi@example.com ',
   mobileNumber: '9876543210',
-  password: 'secret123',
-  confirmPassword: 'secret123',
+  password: 'secret12345',
+  confirmPassword: 'secret12345',
 };
 
 describe('newPasswordField (the Auth Service password rule)', () => {
-  it('accepts 8+ characters with a letter and a digit', () => {
-    expect(newPasswordField.safeParse('abcdefg1').success).toBe(true);
-    expect(newPasswordField.safeParse('пароль12').success).toBe(true);
+  it('accepts 10+ characters with a letter and a digit', () => {
+    expect(newPasswordField.safeParse('abcdefghi1').success).toBe(true);
+    expect(newPasswordField.safeParse('парольпа12').success).toBe(true);
   });
 
   it('refuses fewer than 8 characters', () => {
-    expect(firstError(newPasswordField.safeParse('abc123'))).toBe('Use at least 8 characters');
+    expect(firstError(newPasswordField.safeParse('abc123'))).toBe('Use at least 10 characters');
   });
 
   it('refuses a password with no digit or no letter', () => {
-    expect(firstError(newPasswordField.safeParse('abcdefgh'))).toBe(
+    expect(firstError(newPasswordField.safeParse('abcdefghij'))).toBe(
       'Use at least one letter and one number',
     );
-    expect(firstError(newPasswordField.safeParse('12345678'))).toBe(
+    expect(firstError(newPasswordField.safeParse('1234567890'))).toBe(
       'Use at least one letter and one number',
     );
   });
@@ -65,7 +65,7 @@ describe('signUpSchema', () => {
   });
 
   it('requires the two passwords to match, reported on the confirmation', () => {
-    const result = signUpSchema.safeParse({ ...SIGN_UP, confirmPassword: 'secret124' });
+    const result = signUpSchema.safeParse({ ...SIGN_UP, confirmPassword: 'secret12346' });
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]?.path).toEqual(['confirmPassword']);
   });
@@ -89,7 +89,7 @@ describe('toEmailSignupPayload', () => {
       displayName: 'Ravi Kumar',
       email: 'ravi@example.com',
       mobileNumber: '+919876543210',
-      password: 'secret123',
+      password: 'secret12345',
     });
   });
 });
@@ -113,7 +113,7 @@ describe('emailCodeSchema', () => {
 
 describe('resetPasswordSchema', () => {
   it('needs the code, a valid new password and a matching confirmation', () => {
-    const valid = { code: '123456', newPassword: 'newpass99', confirmPassword: 'newpass99' };
+    const valid = { code: '123456', newPassword: 'newpass9999', confirmPassword: 'newpass9999' };
     expect(resetPasswordSchema.safeParse(valid).success).toBe(true);
     expect(firstError(resetPasswordSchema.safeParse({ ...valid, confirmPassword: 'x' }))).toBe(
       'The passwords do not match',
@@ -122,7 +122,7 @@ describe('resetPasswordSchema', () => {
       firstError(
         resetPasswordSchema.safeParse({ ...valid, newPassword: 'short', confirmPassword: 'short' }),
       ),
-    ).toBe('Use at least 8 characters');
+    ).toBe('Use at least 10 characters');
   });
 });
 
@@ -135,7 +135,11 @@ describe('credential change schemas', () => {
       firstError(buildEmailChangeSchema(true).safeParse({ email: 'a@b.co', currentPassword: '' })),
     ).toBe('Enter your password');
 
-    const change = { currentPassword: '', newPassword: 'newpass99', confirmPassword: 'newpass99' };
+    const change = {
+      currentPassword: '',
+      newPassword: 'newpass9999',
+      confirmPassword: 'newpass9999',
+    };
     expect(buildPasswordChangeSchema(false).safeParse(change).success).toBe(true);
     expect(firstError(buildPasswordChangeSchema(true).safeParse(change))).toBe(
       'Enter your current password',

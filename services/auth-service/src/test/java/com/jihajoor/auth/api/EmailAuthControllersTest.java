@@ -101,6 +101,19 @@ class EmailAuthControllersTest {
     }
 
     @Test
+    void signup_prefersTheEdgesRealIpOverForwardedFor() throws Exception {
+        when(signupService.register(any(), eq("203.0.113.7"))).thenReturn(600L);
+
+        mvc.perform(post("/auth/register/email").contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Forwarded-For", "1.2.3.4, 10.0.0.9")
+                        .header("X-Real-IP", "203.0.113.7")
+                        .content("""
+                                {"displayName":"Asha Rao","email":"asha@example.com","mobileNumber":"+919811100001",
+                                 "password":"jihajoor2026","role":"CUSTOMER"}"""))
+                .andExpect(status().isAccepted());
+    }
+
+    @Test
     void signup_withABadEmailOrMobile_is400() throws Exception {
         mvc.perform(post("/auth/register/email").contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -136,9 +149,9 @@ class EmailAuthControllersTest {
     @Test
     void reset_is204() throws Exception {
         mvc.perform(post("/auth/password/reset").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"asha@example.com\",\"code\":\"123456\",\"newPassword\":\"next2026x\"}"))
+                        .content("{\"email\":\"asha@example.com\",\"code\":\"123456\",\"newPassword\":\"next2026xyz\"}"))
                 .andExpect(status().isNoContent());
-        verify(resetService).reset("asha@example.com", "123456", "next2026x");
+        verify(resetService).reset("asha@example.com", "123456", "next2026xyz");
     }
 
     @Test
@@ -154,9 +167,9 @@ class EmailAuthControllersTest {
                 .andExpect(jsonPath("$.hasPassword").value(true));
 
         mvc.perform(put("/auth/me/password").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"newPassword\":\"next2026x\"}"))
+                        .content("{\"newPassword\":\"next2026xyz\"}"))
                 .andExpect(status().isNoContent());
-        verify(credentialsService).changePassword(eq(userId), isNull(), eq("next2026x"));
+        verify(credentialsService).changePassword(eq(userId), isNull(), eq("next2026xyz"));
     }
 
     @Test

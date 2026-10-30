@@ -43,7 +43,7 @@ export const emailField = z
 
 /**
  * A new password, matching the Auth Service rule (email-auth Requirement 1.2):
- * 8–72 characters (72 UTF-8 bytes, bcrypt's limit) with a letter and a digit.
+ * 10–72 characters (72 UTF-8 bytes, bcrypt's limit) with a letter and a digit.
  * Sign-in does not apply it, so a password set under an older rule still works.
  */
 export const newPasswordField = z

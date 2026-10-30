@@ -1,9 +1,8 @@
 package com.jihajoor.auth.api;
 
-import jakarta.validation.constraints.NotBlank;
-
 /**
- * Request body for {@code POST /auth/logout} (Requirement 1.12).
+ * The refresh token, for the native apps. Web apps send no body (or a null token): theirs is in
+ * the HttpOnly {@code jh_refresh} cookie (see {@link RefreshCookie}).
  */
-public record LogoutRequest(@NotBlank String refreshToken) {
+public record LogoutRequest(String refreshToken) {
 }

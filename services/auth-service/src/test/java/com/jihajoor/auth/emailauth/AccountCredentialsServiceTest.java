@@ -109,20 +109,20 @@ class AccountCredentialsServiceTest {
 
         assertThatThrownBy(() -> service.requestEmailChange(otpAccount.getId(), NEW_EMAIL, "wrong"))
                 .extracting("errorCode").isEqualTo("CURRENT_PASSWORD_INCORRECT");
-        assertThatThrownBy(() -> service.changePassword(otpAccount.getId(), null, "next2026x"))
+        assertThatThrownBy(() -> service.changePassword(otpAccount.getId(), null, "next2026xyz"))
                 .extracting("errorCode").isEqualTo("CURRENT_PASSWORD_INCORRECT");
 
-        service.changePassword(otpAccount.getId(), "current2026", "next2026x");
-        assertThat(encoder.matches("next2026x", otpAccount.getPasswordHash())).isTrue();
+        service.changePassword(otpAccount.getId(), "current2026", "next2026xyz");
+        assertThat(encoder.matches("next2026xyz", otpAccount.getPasswordHash())).isTrue();
     }
 
     @Test
     void aPassword_needsAnEmailToSignInWith() {
-        assertThatThrownBy(() -> service.changePassword(otpAccount.getId(), null, "first2026"))
+        assertThatThrownBy(() -> service.changePassword(otpAccount.getId(), null, "first2026ab"))
                 .extracting("errorCode").isEqualTo("EMAIL_REQUIRED");
 
         otpAccount.setVerifiedEmail(NEW_EMAIL, Instant.now());
-        service.changePassword(otpAccount.getId(), null, "first2026");
+        service.changePassword(otpAccount.getId(), null, "first2026ab");
 
         assertThat(otpAccount.hasPassword()).isTrue();
         assertThat(otpAccount.hasPasswordCredentials()).isTrue();

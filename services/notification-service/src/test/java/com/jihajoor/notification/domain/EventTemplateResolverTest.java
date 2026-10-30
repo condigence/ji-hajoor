@@ -42,8 +42,17 @@ class EventTemplateResolverTest {
 
     @Test
     void lifecycleAndComplaintEventTypesAreModelled() {
-        // Requirement 17.5's 11 lifecycle events plus the two complaint events (16.2, 16.3).
-        assertThat(NotificationEventType.values()).hasSize(13);
+        // Requirement 17.5's 11 lifecycle events, the review reminder and the two complaint events.
+        assertThat(NotificationEventType.values()).hasSize(14);
+    }
+
+    @Test
+    void theReviewReminderAsksTheCustomerByPushSmsAndInApp() {
+        RenderedMessage message = resolver.resolve(
+                event(NotificationEventType.REVIEW_REMINDER, NotificationAudience.CUSTOMER, Map.of()));
+
+        assertThat(message.channels()).contains(NotificationChannel.PUSH, NotificationChannel.SMS);
+        assertThat(message.body()).contains("Rate your professional");
     }
 
     @Test

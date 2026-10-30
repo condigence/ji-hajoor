@@ -47,11 +47,16 @@ final class RequestContext {
     }
 
     /**
-     * The client address for rate limits (email-auth Requirement 8.1). Behind the apps' nginx and
-     * the gateway, the last {@code X-Forwarded-For} entry is the address our own proxy saw; entries
-     * before it come from the client and are not trusted. Without the header, the socket peer.
+     * The client address for rate limits (email-auth Requirement 8.1). Railway's edge sets
+     * {@code X-Real-IP} to the visitor's address and the web apps' nginx forwards it, so it wins.
+     * Otherwise the last {@code X-Forwarded-For} entry (the address our own proxy saw; earlier
+     * entries come from the client and are not trusted), and failing that the socket peer.
      */
     static String clientIp(HttpServletRequest request) {
+        String real = request.getHeader("X-Real-IP");
+        if (real != null && !real.isBlank() && real.length() <= 64) {
+            return real.strip();
+        }
         String forwarded = request.getHeader("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank()) {
             String[] hops = forwarded.split(",");

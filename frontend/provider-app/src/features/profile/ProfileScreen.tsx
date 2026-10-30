@@ -31,6 +31,7 @@ import { AgencyCard } from '@features/agency/AgencyCard';
 import { BankAccountCard } from './BankAccountCard';
 import { EmailPasswordCard } from './EmailPasswordCard';
 import { WorkProfileCard } from './WorkProfileCard';
+import { ShareProfileCard } from '@features/reviews/ShareProfileCard';
 
 /**
  * Provider profile: identity, the live verification badge, the work profile
@@ -116,6 +117,8 @@ export function ProfileScreen() {
         </Card>
 
         <WorkProfileCard />
+
+        <ShareProfileCard />
 
         <AgencyCard />
 

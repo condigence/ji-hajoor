@@ -2,6 +2,7 @@ package com.jihajoor.customer.api;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -21,5 +22,10 @@ public record ProfileUpdateRequest(
         @Email(message = "email must be a valid address")
         String email,
 
+        // An https address or a path on this site, nothing else: the apps put it in <img src>, and
+        // another scheme (javascript:, data:, http:) or a tracking host has no business there.
+        @Size(max = 2048, message = "photoUrl must be at most 2048 characters")
+        @Pattern(regexp = "^$|^https://[^\\s\"'<>]+$|^/[^/\\s\"'<>][^\\s\"'<>]*$",
+                message = "photoUrl must be an https address")
         String photoUrl) {
 }

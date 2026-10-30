@@ -2,7 +2,11 @@ package com.jihajoor.rating.domain;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -22,6 +26,14 @@ public interface ReviewRepository extends JpaRepository<Review, UUID> {
 
     /** True if a review already exists for the booking from this reviewer (one review per prompt). */
     boolean existsByBookingIdAndReviewerId(UUID bookingId, UUID reviewerId);
+
+    Optional<Review> findFirstByBookingIdAndReviewerId(UUID bookingId, UUID reviewerId);
+
+    /** A worker's publicly visible customer reviews, newest first. */
+    @Query("select r from Review r where r.revieweeId = :worker"
+            + " and r.reviewerRole = com.jihajoor.rating.domain.ReviewerRole.CUSTOMER"
+            + " and r.active = true and r.flagged = false order by r.submittedAt desc")
+    List<Review> findVisibleForWorker(@Param("worker") UUID worker, Pageable page);
 
     // ---- Admin Portal moderation list (Requirement 19.2) -----------------------------------------
     // One query per derived ModerationStatus, newest first, bounded by the caller's page.

@@ -56,6 +56,10 @@ public class ReviewPrompt {
     @Column(name = "fulfilled", nullable = false)
     private boolean fulfilled;
 
+    /** When the one reminder to rate this job was sent; null until then. */
+    @Column(name = "reminded_at")
+    private Instant remindedAt;
+
     protected ReviewPrompt() {
         // JPA
     }
@@ -87,6 +91,14 @@ public class ReviewPrompt {
      */
     public boolean isOpenAt(Instant now) {
         return now.isBefore(expiresAt);
+    }
+
+    public void markReminded(Instant now) {
+        this.remindedAt = now;
+    }
+
+    public Instant getRemindedAt() {
+        return remindedAt;
     }
 
     public void markFulfilled() {

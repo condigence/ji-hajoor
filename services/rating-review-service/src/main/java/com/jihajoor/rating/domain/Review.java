@@ -76,6 +76,13 @@ public class Review {
     @Column(name = "submitted_at", nullable = false, updatable = false)
     private Instant submittedAt;
 
+    /** The reviewed worker's public answer, if they gave one. */
+    @Column(name = "provider_reply", length = 500)
+    private String providerReply;
+
+    @Column(name = "replied_at")
+    private Instant repliedAt;
+
     protected Review() {
         // JPA
     }
@@ -130,6 +137,25 @@ public class Review {
     }
 
     /** Whether this review contributes to the provider's aggregate (active and not flagged). */
+    /** Sets (or replaces) the worker's public answer to this review. */
+    public void reply(String text, Instant now) {
+        this.providerReply = text;
+        this.repliedAt = now;
+    }
+
+    public String getProviderReply() {
+        return providerReply;
+    }
+
+    public Instant getRepliedAt() {
+        return repliedAt;
+    }
+
+    /** Shown publicly: a customer's review that is active and not held for moderation. */
+    public boolean isPubliclyVisible() {
+        return reviewerRole == ReviewerRole.CUSTOMER && countsTowardAggregate();
+    }
+
     public boolean countsTowardAggregate() {
         return active && !flagged;
     }

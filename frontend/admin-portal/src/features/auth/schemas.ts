@@ -56,7 +56,7 @@ const emailField = z
 
 /**
  * A new password, mirroring the Auth Service's policy (email-auth Requirement
- * 1.2): 8–72 characters with at least one letter and one digit. Unlike the
+ * 1.2): 10–72 characters with at least one letter and one digit. Unlike the
  * sign-in field this one does apply the rule, because the server would refuse
  * it with WEAK_PASSWORD anyway.
  */

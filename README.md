@@ -52,6 +52,24 @@ the agency and ₹810 to the worker. An independent worker keeps the whole net (
 worker's earnings list shows the agency share as its own line; the agency sees every job's split on
 its Earnings page. Each booking is credited once, however many times the payment service retries.
 
+### Reviews that build trust
+
+Reviews are how good workers win more jobs and how customers choose with confidence:
+
+- **Asked at the right moment.** When a job is paid, the receipt asks the customer to rate it, the
+  booking shows a one-tap "Rate this job" card, and the home screen lists jobs still waiting for a
+  rating. If a job is not rated within 24 hours, one reminder goes out (push, SMS and in-app); never
+  more than one.
+- **Public worker page.** Every verified worker has a page at `/workers/<id>` in the customer app:
+  skills, years of experience, agency, rating with a 5-to-1 star breakdown, the four aspect scores
+  (quality, timeliness, behaviour, price transparency) and recent reviews. It opens without signing
+  in, never shows who wrote a review, and only exists for workers Ji-Hajoor has approved.
+- **Workers answer.** In the partner app, *My reviews* lists every review a worker received; they
+  can reply once (and edit it), and the reply shows under the review on their public page.
+- **Share your profile.** The partner app's profile has a "Share my profile" card (the phone's share
+  sheet, e.g. WhatsApp, or copy link), so a worker can send their rated page to new customers and bring them to the
+  platform. Agencies benefit through their workers' ratings.
+
 ## Repository layout
 
 | Path | Contents |
@@ -179,16 +197,25 @@ defence in depth, plus the checks that stop regressions.
   and Razorpay checkout), `X-Frame-Options: DENY`, `nosniff`, a Referrer-Policy and a
   Permissions-Policy. Metrics, health and internal paths are not reachable from the internet.
 - **Identity:** short-lived JWT access tokens checked at the gateway (introspection) and again in
-  every service; refresh-token rotation; role rules on every endpoint (`RbacEnforcementFilter`)
+  every service; refresh-token rotation, and in the web apps the refresh token lives in an
+  `HttpOnly; Secure; SameSite=Strict` cookie scoped to `/api/auth`, so page scripts can never read
+  it; role rules on every endpoint (`RbacEnforcementFilter`)
   plus ownership checks, so a user can only read or change their own bookings, payments, documents
   and agency. Agencies only ever see their own team, queue and earnings.
+- **Passwords:** stored as BCrypt hashes, never in plain text. New passwords must be at least 10
+  characters with a letter and a digit, and are refused when they are common (also in
+  `P@ssw0rd`-style spellings), keyboard or number sequences, mostly one character, or contain the
+  person's name or email.
 - **Brute force:** OTP codes expire, lock after 5 wrong tries and are limited to 5 requests per
   number per hour; passwords lock after repeated failures; the gateway also limits each IP's
-  sign-in attempts and signed-out traffic, and each user's request rate.
+  sign-in attempts and signed-out traffic, and each user's request rate. Limits key on the
+  visitor's real address from Railway's edge (`X-Real-IP`), which a client cannot forge.
 - **Input:** a WAF filter at the gateway rejects common injection and traversal patterns; request
   bodies are validated; uploads are judged by their bytes, not their declared type (photos must be
   real JPEG, PNG or video; documents must be an image or a PDF) and are served back with `nosniff`
-  and safe content types.
+  and safe content types. Profile photo and icon links must be `https://` or a same-site path, so
+  no `javascript:` or `data:` link can reach a page. The web servers' access logs hide query
+  strings, so no code or token is ever written to a log.
 - **Money:** Razorpay signatures are verified on checkout and webhooks; each booking is credited
   once (unique indexes); only finance roles can refund or settle.
 - **Secrets:** kept in Railway variables (or AWS Secrets Manager), never in the repository;
@@ -197,7 +224,8 @@ defence in depth, plus the checks that stop regressions.
   vulnerabilities in Maven and npm dependencies and Docker images (Trivy, npm audit) on every
   change and weekly.
 
-Still to do (operational): rotate `JWT_SECRET` and the test-staff password before real customers
+Still to do (operational): turn off `PAYMENT_SIMULATOR_ENABLED` and set the Razorpay live keys
+before taking real money, rotate `JWT_SECRET` and the test-staff password before real customers
 arrive, remove `OTP_FIXED_CODE` once MSG91 delivery is confirmed, keep the Railway gateway without
 a public domain, and act on the weekly vulnerability report.
 

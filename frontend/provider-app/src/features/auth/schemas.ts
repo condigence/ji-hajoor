@@ -48,7 +48,7 @@ function utf8Length(value: string): number {
 
 /**
  * The Auth Service's password rule (Requirement 1.2), which stays
- * authoritative: 8–72 characters, at least one letter and one digit. Never
+ * authoritative: 10–72 characters, at least one letter and one digit. Never
  * trimmed — a space is a legitimate password character.
  */
 export const newPasswordField = z

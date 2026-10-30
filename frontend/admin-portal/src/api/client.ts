@@ -101,6 +101,16 @@ export const authClient: AxiosInstance = axios.create({
   baseURL: env.authBaseUrl,
 });
 
+/**
+ * Web builds keep the refresh token out of JavaScript: with this header the Auth
+ * Service returns it as an HttpOnly, Secure, SameSite=Strict cookie (path
+ * /api/auth) instead of in the JSON, and reads it back from there on refresh and
+ * logout.
+ */
+export const SESSION_TRANSPORT_HEADER = 'X-Session-Transport';
+// The Admin Portal is web-only.
+authClient.defaults.headers.common[SESSION_TRANSPORT_HEADER] = 'cookie';
+
 /** Tag an outbound request with a correlation id unless it already carries one. */
 function withCorrelationId(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
   if (!config.headers.has(CORRELATION_ID_HEADER)) {

@@ -26,7 +26,7 @@ export const OTP_LOCKED_CODE = 'OTP_SESSION_LOCKED';
 export const EMAIL_CODE_RESEND_SECONDS = 60;
 
 /** Password rule mirrored from the Auth Service (email-auth Requirement 1.2). */
-export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MIN_LENGTH = 10;
 /** bcrypt's limit, counted in UTF-8 bytes by the server. */
 export const PASSWORD_MAX_BYTES = 72;
 
