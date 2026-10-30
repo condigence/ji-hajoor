@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Ji-Hajoor Provider App — manage jobs, upload photos, track earnings, and verification status.",
+  "description": "Ji-Hajoor Pro (partner app) — manage jobs, upload photos, track earnings, and verification status.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
