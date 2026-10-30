@@ -79,7 +79,7 @@ public class PasswordResetService {
      *                            not spend the code) or {@code INVALID_CODE}; 410 {@code CODE_EXPIRED}
      */
     public void reset(String rawEmail, String code, String newPassword) {
-        PasswordPolicy.requireAcceptable(newPassword);
+        PasswordPolicy.requireAcceptable(newPassword, rawEmail);
         String email = EmailAddresses.normalise(rawEmail);
         codes.consume(CodePurpose.RESET, email, code);
         UserAccount account = userRepository.findByEmail(email)

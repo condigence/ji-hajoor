@@ -106,14 +106,30 @@ class EmailCodesTest {
 
     @Test
     void passwordPolicy_needsLengthALetterAndADigit_withinBcryptsLimit() {
-        assertThatThrownBy(() -> PasswordPolicy.requireAcceptable("abc123")).extracting("errorCode")
+        assertThatThrownBy(() -> PasswordPolicy.requireAcceptable("abc12345")).extracting("errorCode")
                 .isEqualTo("WEAK_PASSWORD");
-        assertThatThrownBy(() -> PasswordPolicy.requireAcceptable("abcdefghij")).extracting("errorCode")
+        assertThatThrownBy(() -> PasswordPolicy.requireAcceptable("abcdefghijk")).extracting("errorCode")
                 .isEqualTo("WEAK_PASSWORD");
-        assertThatThrownBy(() -> PasswordPolicy.requireAcceptable("1234567890")).extracting("errorCode")
+        assertThatThrownBy(() -> PasswordPolicy.requireAcceptable("19283746501")).extracting("errorCode")
                 .isEqualTo("WEAK_PASSWORD");
         assertThatThrownBy(() -> PasswordPolicy.requireAcceptable("a1" + "€".repeat(24))).extracting("errorCode")
                 .isEqualTo("WEAK_PASSWORD");
         PasswordPolicy.requireAcceptable("jihajoor2026");
+        PasswordPolicy.requireAcceptable("Tulsi-Ghat-9Mango");
+    }
+
+    @Test
+    void passwordPolicy_refusesCommonPasswordsSequencesAndPersonalDetails() {
+        for (String weak : java.util.List.of("Password@123", "p@ssw0rd2024", "qwerty12345", "India@20241",
+                "Welcome1234", "1234567890a", "abcdefgh12", "aaaaaaaa11", "Admin@12345")) {
+            assertThatThrownBy(() -> PasswordPolicy.requireAcceptable(weak)).as(weak).extracting("errorCode")
+                    .isEqualTo("WEAK_PASSWORD");
+        }
+        assertThatThrownBy(() -> PasswordPolicy.requireAcceptable("ravikumar2026", "ravi.kumar@example.com"))
+                .extracting("errorCode").isEqualTo("WEAK_PASSWORD");
+        assertThatThrownBy(() -> PasswordPolicy.requireAcceptable("Priyanka#77x", "a@b.in", "Priyanka"))
+                .extracting("errorCode").isEqualTo("WEAK_PASSWORD");
+        // A short email name is not worth refusing.
+        PasswordPolicy.requireAcceptable("Tulsi-Ghat-9Mango", "al@example.com");
     }
 }

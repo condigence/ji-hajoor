@@ -265,7 +265,7 @@ public class StaffInvitationService {
             throw new EmailAuthException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
                     "Enter your name (2-80 characters) and your mobile number with country code.");
         }
-        PasswordPolicy.requireAcceptable(command.password());
+        PasswordPolicy.requireAcceptable(command.password(), email, name);
         users.findByMobileNumber(mobile).ifPresent(other -> {
             throw EmailAuthException.mobileInUse();
         });

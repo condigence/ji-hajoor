@@ -67,7 +67,8 @@ export interface AuthSessionResponse {
   userId: string;
   roles: UserRole[];
   accessToken: string;
-  refreshToken: string;
+  /** Null for a web build: the token is in the HttpOnly cookie instead. */
+  refreshToken: string | null;
   /** Always "Bearer". */
   tokenType: string;
   /** Access token lifetime in seconds. */
@@ -89,7 +90,10 @@ export function toSession(
   user: UserProfile;
 } {
   return {
-    tokens: { accessToken: response.accessToken, refreshToken: response.refreshToken },
+    tokens: {
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken ?? COOKIE_SESSION,
+    },
     user: {
       id: response.userId,
       roles: response.roles,
@@ -126,6 +130,12 @@ export async function socialLogin(payload: SocialLoginPayload): Promise<AuthSess
   return data;
 }
 
+/**
+ * Stands in for the refresh token when a web build's real token is in the
+ * HttpOnly cookie: it is not a secret, it only records that a session exists.
+ */
+export const COOKIE_SESSION = 'cookie-session';
+
 /** Request body for the refresh + logout endpoints. */
 export interface RefreshTokenPayload {
   refreshToken: string;
@@ -141,8 +151,11 @@ export interface RefreshTokenPayload {
  * the caller must persist `refreshToken` from the response.
  */
 export async function refreshSession(payload: RefreshTokenPayload): Promise<AuthSessionResponse> {
-  const { data } = await authClient.post<AuthSessionResponse>('/auth/token/refresh', payload);
-  return data;
+  const { data } = await authClient.post<AuthSessionResponse>(
+    '/auth/token/refresh',
+    payload.refreshToken === COOKIE_SESSION ? {} : payload,
+  );
+  return { ...data, refreshToken: data.refreshToken ?? COOKIE_SESSION };
 }
 
 /**
@@ -156,7 +169,7 @@ export async function revokeRefreshToken(payload: RefreshTokenPayload): Promise<
   const accessToken = readAccessToken();
   await authClient.post(
     '/auth/logout',
-    payload,
+    payload.refreshToken === COOKIE_SESSION ? {} : payload,
     accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : undefined,
   );
 }

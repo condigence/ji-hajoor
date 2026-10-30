@@ -26,6 +26,15 @@ map $http_x_forwarded_for $first_forwarded_for {
     default                 $remote_addr;
     "~^\s*([0-9a-fA-F:.]+)" $1;
 }
+# Access logs never record query strings: live-tracking and chat streams carry the
+# access token there (?access_token=), and searches can hold personal details.
+map $request_uri $loggable_uri {
+    "~^(?<uri_path>[^?]*)\?" "$uri_path?***";
+    default                   $request_uri;
+}
+log_format jh_safe '$remote_addr [$time_local] "$request_method $loggable_uri $server_protocol" '
+                   '$status $body_bytes_sent $request_time "$http_user_agent"';
+
 map $http_x_real_ip $client_real_ip {
     default $http_x_real_ip;
     ''      $first_forwarded_for;
@@ -35,6 +44,7 @@ server {
     listen ${PORT};
     ${NGINX_LISTEN_V6}
     server_name _;
+    access_log /var/log/nginx/access.log jh_safe;
 
     # Railway's edge accepts plain http too and says so in X-Forwarded-Proto:
     # send those visitors to https. Requests without the header (health checks,

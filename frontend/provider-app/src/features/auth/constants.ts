@@ -35,7 +35,7 @@ export const RESEND_COOLDOWN_SECONDS = 60;
  * least one letter and one digit. 72 is bcrypt's limit in UTF-8 bytes, which
  * is how the server counts it.
  */
-export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MIN_LENGTH = 10;
 export const PASSWORD_MAX_BYTES = 72;
 
 /** Display name length accepted by email sign-up. */

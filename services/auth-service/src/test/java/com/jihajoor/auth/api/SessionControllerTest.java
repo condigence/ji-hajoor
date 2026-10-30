@@ -38,9 +38,10 @@ class SessionControllerTest {
     void setUp() {
         refreshService = mock(RefreshService.class);
         socialLoginService = mock(SocialLoginService.class);
+        RefreshCookie cookie = new RefreshCookie(new com.jihajoor.auth.config.AuthTokenProperties(), "/api/auth", true);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new SessionController(refreshService, socialLoginService))
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .standaloneSetup(new SessionController(refreshService, socialLoginService, cookie))
+                .setControllerAdvice(new GlobalExceptionHandler(), cookie)
                 .build();
     }
 
@@ -74,12 +75,56 @@ class SessionControllerTest {
     }
 
     @Test
-    void refresh_missingToken_returns400() throws Exception {
+    void refresh_withNoTokenAnywhere_isAnInvalidRefreshToken() throws Exception {
         mockMvc.perform(post("/auth/token/refresh")
                         .contentType("application/json")
                         .content("{}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+                .andExpect(status().isUnauthorized());
+        verify(refreshService, org.mockito.Mockito.never()).refresh(org.mockito.ArgumentMatchers.any());
+    }
+
+    // ----- Web apps: the refresh token lives in an HttpOnly cookie -----
+
+    @Test
+    void aWebAppGetsTheRefreshTokenAsAnHttpOnlyCookie_notInTheBody() throws Exception {
+        when(refreshService.refresh(eq("r-old")))
+                .thenReturn(new RefreshResult("user-1", List.of("CUSTOMER"),
+                        new TokenPair("new-access", "r-new", 900L)));
+
+        mockMvc.perform(post("/auth/token/refresh")
+                        .header(RefreshCookie.TRANSPORT_HEADER, "cookie")
+                        .contentType("application/json")
+                        .content("{\"refreshToken\":\"r-old\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("new-access"))
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Set-Cookie", org.hamcrest.Matchers.allOf(
+                                org.hamcrest.Matchers.startsWith("jh_refresh=r-new"),
+                                org.hamcrest.Matchers.containsString("HttpOnly"),
+                                org.hamcrest.Matchers.containsString("Secure"),
+                                org.hamcrest.Matchers.containsString("SameSite=Strict"),
+                                org.hamcrest.Matchers.containsString("Path=/api/auth"))));
+    }
+
+    @Test
+    void refreshAndLogoutReadTheTokenFromTheCookie() throws Exception {
+        when(refreshService.refresh(eq("r-cookie")))
+                .thenReturn(new RefreshResult("user-1", List.of("CUSTOMER"),
+                        new TokenPair("a", "r-next", 900L)));
+
+        mockMvc.perform(post("/auth/token/refresh")
+                        .header(RefreshCookie.TRANSPORT_HEADER, "cookie")
+                        .cookie(new jakarta.servlet.http.Cookie("jh_refresh", "r-cookie")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("a"));
+
+        mockMvc.perform(post("/auth/logout")
+                        .cookie(new jakarta.servlet.http.Cookie("jh_refresh", "r-next")))
+                .andExpect(status().isNoContent())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Set-Cookie", org.hamcrest.Matchers.containsString("Max-Age=0")));
+        verify(refreshService).logout("r-next");
     }
 
     // ----- Social login (Requirement 1.5) -----
@@ -123,10 +168,11 @@ class SessionControllerTest {
     }
 
     @Test
-    void logout_missingToken_returns400() throws Exception {
+    void logout_withNoToken_stillSignsOutTheBrowser() throws Exception {
         mockMvc.perform(post("/auth/logout")
                         .contentType("application/json")
                         .content("{}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isNoContent());
+        verify(refreshService, org.mockito.Mockito.never()).logout(org.mockito.ArgumentMatchers.any());
     }
 }

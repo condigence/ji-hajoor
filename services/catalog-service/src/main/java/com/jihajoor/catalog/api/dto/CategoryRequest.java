@@ -1,6 +1,7 @@
 package com.jihajoor.catalog.api.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -10,6 +11,9 @@ import jakarta.validation.constraints.Size;
 public record CategoryRequest(
         @NotBlank @Size(max = 120) String name,
         @Size(max = 1000) String description,
-        @Size(max = 512) String iconUrl,
+        @Size(max = 512)
+        @Pattern(regexp = "^$|^https://[^\\s\"'<>]+$|^/[^/\\s\"'<>][^\\s\"'<>]*$",
+                message = "iconUrl must be an https address")
+        String iconUrl,
         int displayOrder) {
 }

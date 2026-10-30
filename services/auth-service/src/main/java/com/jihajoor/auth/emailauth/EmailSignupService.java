@@ -79,7 +79,7 @@ public class EmailSignupService {
      */
     public long register(SignupCommand command, String clientIp) {
         Role role = selfServiceRole(command.role());
-        PasswordPolicy.requireAcceptable(command.password());
+        PasswordPolicy.requireAcceptable(command.password(), command.email(), command.displayName());
         String email = EmailAddresses.normalise(command.email());
         String displayName = command.displayName().strip();
         String mobile = command.mobileNumber().strip();

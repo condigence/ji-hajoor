@@ -26,7 +26,7 @@ export const EMAIL_CODE_EXPIRY_SECONDS = 10 * 60;
 export const EMAIL_CODE_RESEND_SECONDS = 60;
 
 /** Password rule for new passwords (email-auth Requirement 1.2), mirrored from the server. */
-export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MIN_LENGTH = 10;
 export const PASSWORD_MAX_LENGTH = 72;
 
 /** Right password, but the email sign-up's code was never entered (Requirement 2.3). */

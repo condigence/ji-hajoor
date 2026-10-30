@@ -1,5 +1,9 @@
 package com.jihajoor.auth.api;
 
+import org.springframework.http.HttpHeaders;
+import com.jihajoor.auth.token.TokenException;
+import jakarta.servlet.http.HttpServletRequest;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,10 +28,13 @@ public class SessionController {
 
     private final RefreshService refreshService;
     private final SocialLoginService socialLoginService;
+    private final RefreshCookie refreshCookie;
 
-    public SessionController(RefreshService refreshService, SocialLoginService socialLoginService) {
+    public SessionController(RefreshService refreshService, SocialLoginService socialLoginService,
+                             RefreshCookie refreshCookie) {
         this.refreshService = refreshService;
         this.socialLoginService = socialLoginService;
+        this.refreshCookie = refreshCookie;
     }
 
     /**
@@ -36,8 +43,14 @@ public class SessionController {
      * (Requirement 1.10, Property 26).
      */
     @PostMapping("/token/refresh")
-    public ResponseEntity<TokenResponse> refresh(@Valid @RequestBody RefreshRequest request) {
-        RefreshResult result = refreshService.refresh(request.refreshToken());
+    public ResponseEntity<TokenResponse> refresh(@RequestBody(required = false) RefreshRequest request,
+                                                 HttpServletRequest http) {
+        // A web app sends no token: it lives in the HttpOnly cookie (see RefreshCookie).
+        String token = RefreshCookie.resolve(request == null ? null : request.refreshToken(), http);
+        if (token == null) {
+            throw TokenException.invalidRefreshToken();
+        }
+        RefreshResult result = refreshService.refresh(token);
         return ResponseEntity.ok(TokenResponse.from(result.userId(), result.roles(), result.tokens()));
     }
 
@@ -57,8 +70,15 @@ public class SessionController {
      * (Requirement 1.12). Idempotent: returns 204 even if the token was already revoked.
      */
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@Valid @RequestBody LogoutRequest request) {
-        refreshService.logout(request.refreshToken());
-        return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
+    public ResponseEntity<Void> logout(@RequestBody(required = false) LogoutRequest request,
+                                       HttpServletRequest http) {
+        String token = RefreshCookie.resolve(request == null ? null : request.refreshToken(), http);
+        if (token != null) {
+            refreshService.logout(token);
+        }
+        // Always clear the cookie, so a signed-out browser holds nothing.
+        return ResponseEntity.status(HttpStatus.NO_CONTENT)
+                .header(HttpHeaders.SET_COOKIE, refreshCookie.header(null))
+                .build();
     }
 }

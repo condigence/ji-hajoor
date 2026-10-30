@@ -1,9 +1,8 @@
 package com.jihajoor.auth.api;
 
-import jakarta.validation.constraints.NotBlank;
-
 /**
- * Request body for {@code POST /auth/token/refresh} (Requirement 1.9).
+ * The refresh token, for the native apps. Web apps send no body (or a null token): theirs is in
+ * the HttpOnly {@code jh_refresh} cookie (see {@link RefreshCookie}).
  */
-public record RefreshRequest(@NotBlank String refreshToken) {
+public record RefreshRequest(String refreshToken) {
 }

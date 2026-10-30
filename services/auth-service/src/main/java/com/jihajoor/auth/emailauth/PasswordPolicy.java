@@ -1,25 +1,55 @@
 package com.jihajoor.auth.emailauth;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+import java.util.Set;
 
 /**
- * The password rule for every password this feature sets: sign-up, reset, profile change and
- * invitation acceptance (email-auth Requirement 1.2). 8 to 72 characters with at least one letter
- * and one digit. 72 is bcrypt's limit in bytes, so a longer password would be silently truncated;
- * it is counted in UTF-8 bytes for that reason.
+ * The rule for every new password: sign-up, reset, change and staff invitations. Sign-in never
+ * applies it, so a password set under an older rule keeps working.
  *
- * <p>Sign-in does not apply this rule: tightening it later must not lock out existing passwords.
+ * <ul>
+ *   <li>10 to 72 UTF-8 bytes (bcrypt's limit), with at least one letter and one digit;</li>
+ *   <li>not a well-known password once its digits and symbols are set aside ("Password@123",
+ *       "qwerty12345", "india@2024");</li>
+ *   <li>not a run of one character or a keyboard/number sequence;</li>
+ *   <li>not built on the person's own email name or username.</li>
+ * </ul>
  */
 public final class PasswordPolicy {
 
-    public static final int MIN_LENGTH = 8;
+    public static final int MIN_LENGTH = 10;
     public static final int MAX_BYTES = 72;
+
+    /**
+     * Words that, with digits and symbols added, make up most guessed passwords (from the public
+     * most-common-password lists), plus local favourites.
+     */
+    private static final Set<String> COMMON_WORDS = Set.of(
+            "password", "passw", "passwd", "pass", "qwerty", "qwertyuiop", "asdf", "asdfgh", "asdfghjkl",
+            "zxcvbn", "zxcvbnm", "abc", "abcd", "abcde", "abcdef", "admin", "administrator", "welcome",
+            "letmein", "iloveyou", "love", "monkey", "dragon", "master", "login", "hello", "secret",
+            "sunshine", "princess", "football", "cricket", "baseball", "superman", "batman", "trustno",
+            "india", "bharat", "hindustan", "mumbai", "delhi", "krishna", "ganesh", "shiva", "sairam",
+            "omsairam", "jaishreeram", "user", "test", "guest", "default", "changeme", "computer",
+            "internet", "samsung", "apple", "google", "facebook", "whatsapp", "qazwsx", "aaaaaa");
+
+    private static final String[] SEQUENCES = {
+            "0123456789", "9876543210", "abcdefghijklmnopqrstuvwxyz", "zyxwvutsrqponmlkjihgfedcba",
+            "qwertyuiop", "asdfghjkl", "zxcvbnm", "1qaz2wsx3edc"};
 
     private PasswordPolicy() {
     }
 
-    /** @throws EmailAuthException 400 {@code WEAK_PASSWORD} naming what is missing */
     public static void requireAcceptable(String password) {
+        requireAcceptable(password, (String[]) null);
+    }
+
+    /**
+     * @param personal the account's email address, username or name, if known; a password built
+     *                 on any of them is refused
+     */
+    public static void requireAcceptable(String password, String... personal) {
         if (password == null || password.length() < MIN_LENGTH) {
             throw EmailAuthException.weakPassword("Use at least " + MIN_LENGTH + " characters.");
         }
@@ -31,5 +61,56 @@ public final class PasswordPolicy {
         if (!letter || !digit) {
             throw EmailAuthException.weakPassword("Use at least one letter and one number.");
         }
+        String lower = password.toLowerCase(Locale.ROOT);
+        String letters = lower.replaceAll("[^\\p{L}]", "");
+        if (COMMON_WORDS.contains(letters) || COMMON_WORDS.contains(leetToLetters(lower))) {
+            throw EmailAuthException.weakPassword("That password is too common. Choose something less predictable.");
+        }
+        if (lower.chars().distinct().count() <= 3 || isSequence(lower)) {
+            throw EmailAuthException.weakPassword("Avoid repeated characters and simple sequences.");
+        }
+        if (personal != null) {
+            for (String value : personal) {
+                String base = personalBase(value);
+                if (base != null && lower.contains(base)) {
+                    throw EmailAuthException.weakPassword("Don't use your name or email address in your password.");
+                }
+            }
+        }
+    }
+
+    /** The letters of a password once common character swaps (@ for a, 0 for o...) are undone. */
+    private static String leetToLetters(String lower) {
+        return lower.replace('@', 'a').replace('4', 'a').replace('0', 'o').replace('1', 'i')
+                .replace('3', 'e').replace('$', 's').replace('5', 's').replace('7', 't')
+                .replaceAll("[^\\p{L}]", "");
+    }
+
+    /** True when the password, without its symbols, sits inside one long keyboard or number run. */
+    private static boolean isSequence(String lower) {
+        String compact = lower.replaceAll("[^\\p{L}\\p{Nd}]", "");
+        if (compact.length() < MIN_LENGTH - 2) {
+            return false;
+        }
+        for (String sequence : SEQUENCES) {
+            if (sequence.contains(compact)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The part of an email (before @) or a name worth refusing, or null when too short to matter. */
+    private static String personalBase(String value) {
+        if (value == null) {
+            return null;
+        }
+        String base = value.toLowerCase(Locale.ROOT).strip();
+        int at = base.indexOf('@');
+        if (at >= 0) {
+            base = base.substring(0, at);
+        }
+        base = base.replaceAll("[^\\p{L}\\p{Nd}]", "");
+        return base.length() >= 4 ? base : null;
     }
 }
