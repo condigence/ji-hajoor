@@ -3,6 +3,8 @@
 **Audience:** engineers joining the platform, and anyone reviewing its design.
 **Companion documents:** [API_CONTRACTS.md](API_CONTRACTS.md) for JSON payloads, [LOCAL_ACCESS.md](LOCAL_ACCESS.md) for test users and URLs, [../CODEBASE_REVIEW.md](../CODEBASE_REVIEW.md) for the findings audit.
 
+*Last updated 30 October 2026: security review (cookie sessions, password policy, client IP, link checks, log masking) and the reviews engine (section 5.11). Business and user documents: [REVENUE_MODEL.md](REVENUE_MODEL.md), [BRAND_AND_MARKETING.md](BRAND_AND_MARKETING.md), [guides/](guides/).*
+
 Diagrams are Mermaid and render natively on GitHub. Where a diagram shows an integration that is currently broken in code, the break is marked and cross-referenced to the review.
 
 ---
@@ -328,7 +330,9 @@ sequenceDiagram
     end
 ```
 
-The check and the mark are one Lua script (`RedisRefreshTokenStore.consume`), so two concurrent refreshes of one token cannot both succeed. Tokens are stored hashed, and logout revokes the whole family. See review sections 8.2 and 16.6.
+The check and the mark are one Lua script (`RedisRefreshTokenStore.consume`), so two concurrent refreshes of one token cannot both succeed. Tokens are stored hashed, and logout revokes the whole family.
+
+**Web apps (cookie transport).** The three web apps send `X-Session-Transport: cookie` on sign-in, refresh and logout. `RefreshCookie` (a `ResponseBodyAdvice` in auth-service) then moves the refresh token out of the JSON body into a `jh_refresh` cookie (`HttpOnly; Secure; SameSite=Strict; Path=/api/auth`, Max-Age = refresh TTL) and returns `refreshToken: null`. Refresh and logout accept an empty body and read the cookie; logout always clears it. Page scripts therefore never see the refresh token, so an XSS bug cannot steal a long-lived session. Native builds (Capacitor) omit the header and keep the body token in secure storage. See review sections 8.2 and 16.6.
 
 ### 5.3 Booking creation through to provider acceptance
 
@@ -655,6 +659,40 @@ sequenceDiagram
 
 The socket handshake admits only the booking's customer and provider (401/403/404 otherwise); the gateway accepts `?access_token=` on this path only. With `CHAT_CLUSTER=redis` (the default) a node never writes to its own sockets directly: every message reaches every node through one Redis pub/sub channel, including the node that sent it, so each socket gets it exactly once. Pub/sub is at-most-once; a node that misses a message during a reconnect is covered by the apps reloading history. Presence is a sorted set per (booking, user) of `{node}/{session}` members scored with an expiry: each node re-stamps its live sockets every 3 s (`CHAT_PRESENCE_HEARTBEAT`) for 10 s (`CHAT_OFFLINE_PUSH_WINDOW`), a closed socket is removed at once, and a crashed node's sockets lapse within 10 s. If Redis is down a send is still stored and the recipient is pushed. `CHAT_CLUSTER=local` keeps everything in one process for a single instance or tests.
 
+### 5.11 Reviews engine: prompts, reminders, public pages and replies
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant KF as Kafka (via outbox)
+    participant RATE as rating-review-service
+    participant APP as customer-app
+    participant NOTIF as notification-service
+    participant GW as api-gateway
+    participant PROV as provider-service
+    participant PRO as provider-app (Ji-Hajoor Pro)
+    participant ADM as admin-portal
+
+    KF->>RATE: PaymentCompleted → open review_prompt (customer and provider)
+    KF->>NOTIF: PaymentCompleted → receipt that asks for a rating
+    APP->>RATE: GET /reviews/prompts/mine
+    RATE-->>APP: OPEN / REVIEWED / EXPIRED, last 30 days (Rate card, Home banner)
+    note over RATE: @Scheduled every 15 min: prompts still open 24 h after creation<br/>and not yet reminded → mark reminded_at + outbox ReviewReminder
+    RATE->>KF: ReviewReminder {bookingId, customerId, providerId}
+    KF->>NOTIF: ReviewReminder → push, SMS, in-app to the customer (once)
+    APP->>RATE: POST /reviews {bookingId, overall, aspects, text}
+    note over RATE: FraudDetector: SAME_IP_BURST, RATING_DEVIATION, FRESH_ACCOUNT<br/>→ flagged reviews wait for moderation
+    ADM->>RATE: POST /admin/reviews/{id}/moderate {PUBLISH | REMOVE}
+    GW->>PROV: GET /public/workers/{id} (no token; APPROVED workers only, else 404)
+    GW->>RATE: GET /public/workers/{id}/reviews?page&size (no token)
+    RATE-->>GW: summary (average, count, 5..1 distribution, aspect means) + reviews, no reviewer identity
+    PRO->>RATE: GET /reviews/received
+    PRO->>RATE: POST /reviews/{reviewId}/reply {text ≤ 500}
+    note over RATE: only the reviewee, only on a publicly visible review;<br/>anything else is 404 REVIEW_NOT_FOUND
+```
+
+The two public paths are the only unauthenticated routes added: they are `GET`-only gateway routes placed before the auth route, allowed by the gateway's `PUBLIC_PREFIXES` entry `/public/workers` (whole-segment match on the normalised path), and by `permitAll` for `GET` in each service. The public profile is cached for five minutes (`Cache-Control: public, max-age=300`). Migrations: `rating-review-service` V4 (`review.provider_reply`, `replied_at`, `review_prompt.reminded_at` and three indexes) and `notification-service` V4 (REVIEW_REMINDER templates and the rating line on the payment receipt). The partner app's **Share my profile** card links to `<customer app>/workers/{id}`, taking the customer-app address from `GET /config/client`.
+
 ## 6. Event topology
 
 ```mermaid
@@ -683,6 +721,7 @@ graph LR
         T11["ReviewSubmitted"]
         T12["ComplaintCreated"]
         T13["ComplaintStatusChanged"]
+        T14["ReviewReminder"]
     end
 
     subgraph Consumers
@@ -702,7 +741,7 @@ graph LR
     RATE --> OUT
 
     OUT --> T1 & T2 & T3 & T4 & T5 & T6 & T7 & T8 & T9 & T10 & T11
-    OUT --> T12 & T13
+    OUT --> T12 & T13 & T14
 
     T1 --> CDISP
     T10 --> CDISP
@@ -713,7 +752,7 @@ graph LR
     T9 --> CCHAT
     T10 --> CCHAT
     T7 --> CLOC
-    T1 & T2 & T3 & T4 & T5 & T6 & T7 & T8 & T9 & T10 & T11 & T12 & T13 --> CNOTIF
+    T1 & T2 & T3 & T4 & T5 & T6 & T7 & T8 & T9 & T10 & T11 & T12 & T13 & T14 --> CNOTIF
 ```
 
 | Topic | Produced by | When |
@@ -726,9 +765,10 @@ graph LR
 | BookingCancelled | booking-service | `CANCELLED` or `SEARCHING_FAILED` (dispatch failure, or the Tenant assignment deadline) |
 | PaymentCompleted | payment-service | a transaction reached `SUCCESS` |
 | ReviewSubmitted | rating-review-service | review submitted |
+| ReviewReminder | rating-review-service | a customer's review prompt is still open 24 h after the job was paid; sent once (5.11) |
 | ComplaintCreated, ComplaintStatusChanged | complaint-service | complaint lifecycle |
 
-Consumer groups: `booking-service.payment-completed`, `dispatch-engine.booking-created`, `dispatch-engine.booking-cancelled`, `notification-service.lifecycle`, `invoice-service.payment-completed`, `chat-service.lifecycle`, `rating-review-service.payment-completed`, `location-service.job-started`. Any event type without an explicit mapping falls through to the `domain-events` topic, where nothing subscribes; all thirteen above are mapped. Ratings do not travel over Kafka: rating-review-service owns the reviews and pushes each provider's aggregate (weighted average of customer reviews, count, and a sequence number) to provider-service's `PUT /internal/providers/{id}/rating` after any submit, approval or removal commits. The push is an idempotent set; a failed one stays owed in `rating.provider_rating_sync` and `ProviderRatingSweeper` re-sends it every minute, and a lower sequence never overwrites a newer rating. provider-service stores it on the profile, where dispatch's rating score and the apps read it, and flags the provider for review below the threshold.
+Consumer groups: `booking-service.payment-completed`, `dispatch-engine.booking-created`, `dispatch-engine.booking-cancelled`, `notification-service.lifecycle`, `invoice-service.payment-completed`, `chat-service.lifecycle`, `rating-review-service.payment-completed`, `location-service.job-started`. Any event type without an explicit mapping falls through to the `domain-events` topic, where nothing subscribes; all fourteen above are mapped. Ratings do not travel over Kafka: rating-review-service owns the reviews and pushes each provider's aggregate (weighted average of customer reviews, count, and a sequence number) to provider-service's `PUT /internal/providers/{id}/rating` after any submit, approval or removal commits. The push is an idempotent set; a failed one stays owed in `rating.provider_rating_sync` and `ProviderRatingSweeper` re-sends it every minute, and a lower sequence never overwrites a newer rating. provider-service stores it on the profile, where dispatch's rating score and the apps read it, and flags the provider for review below the threshold.
 
 ### Outbox and delivery guarantees
 
@@ -1644,6 +1684,20 @@ graph LR
 Actuator endpoints are exposed at the root path, not under `/actuator`; the Helm chart probes `/health/liveness` and `/health/readiness` on each service's own port. They are also unauthenticated.
 
 Resilience is meant to wrap every synchronous call through the shared `ResilientCall` helper: per-call timeout, three retries with exponential backoff, then a circuit breaker that opens at 50 percent failures over a 10-call window for 30 seconds. booking-service, dispatch-engine, payment-service and provider-service use it; the other outbound clients set connect and read timeouts of their own (customer-service's booking check, 3 s by default, was the last one without).
+
+### Security controls (review of 30 October 2026)
+
+| Concern | Control | Where |
+| --- | --- | --- |
+| Session theft in the browser | Refresh token only in an `HttpOnly; Secure; SameSite=Strict` cookie scoped to `/api/auth` (5.2) | `auth-service` `RefreshCookie`, web apps' `client.ts` |
+| Password storage | BCrypt (`PasswordEncoderConfig`) | auth-service |
+| Weak passwords | `PasswordPolicy`: ≥ 10 characters and ≤ 72 bytes, a letter and a digit; refuses common words (also leet-decoded and with digits or symbols stripped), ≤ 3 distinct characters, keyboard and number sequences, and the person's name or email | sign-up, invitations, reset, change password |
+| Rate-limit evasion | Client IP is `X-Real-IP` from Railway's edge, then the last `X-Forwarded-For` hop, then the socket address | auth `RequestContext`, rating `ReviewController`, gateway `AnonymousIpRateLimitGatewayFilter` |
+| Script injection through links | `photoUrl` and `iconUrl` must be `https://` or a same-site path | `ProfileUpdateRequest`, `CategoryRequest` |
+| Secrets in logs | nginx `jh_safe` log format masks query strings as `?***` | `frontend/*/nginx/default.conf.template` |
+| Vulnerable dependencies | `npm audit` clean in all three apps; Trivy and gitleaks in CI | `security.yml` |
+
+Still owned by the founders (environment, not code): switch `PAYMENT_SIMULATOR_ENABLED` off and add Razorpay live keys, remove `OTP_FIXED_CODE`, rotate `JWT_SECRET` and the test staff password, remove the unused `STRIPE_WEBHOOK_SECRET`, and align payment-service's `default-platform-fee-percent` (20% of the amount paid) with the per-service platform fee used in estimates (10% starter).
 
 ---
 

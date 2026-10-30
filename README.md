@@ -5,11 +5,13 @@ scheduled or emergency jobs (plumbing, electrical, AC, cleaning). Workers are on
 through document verification and a background check, then matched to jobs by a dispatch
 engine. Service agencies run their own teams of workers on the platform.
 
-Live: [jihajoor.com](https://jihajoor.com) (customers), [partner.jihajoor.com](https://partner.jihajoor.com)
-(workers and agencies' workers), [admin.jihajoor.com](https://admin.jihajoor.com) (Ji-Hajoor staff
-and agency administrators).
+Live: [jihajoor.com](https://jihajoor.com) — **Ji-Hajoor**, for customers;
+[partner.jihajoor.com](https://partner.jihajoor.com) — **Ji-Hajoor Pro**, for workers and agencies'
+workers; [admin.jihajoor.com](https://admin.jihajoor.com) — **Ji-Hajoor Admin**, for Ji-Hajoor staff
+and agency administrators (**My agency**).
 
-> **Naming.** The apps and these docs say *agency* and *worker*. The code, APIs and database
+> **Naming.** The apps and these docs say *agency* and *worker* (customers see *professional*); the
+> full conventions are in [docs/BRAND_AND_MARKETING.md](docs/BRAND_AND_MARKETING.md). The code, APIs and database
 > keep their original names: an agency is a `Tenant` (`/admin/tenants`, `/tenant/**`,
 > `provider.tenant`) and a worker is a `Provider` / `SERVICE_PROVIDER` (`/providers/**`).
 
@@ -17,10 +19,10 @@ and agency administrators).
 
 | Role | App | What they do |
 |---|---|---|
-| Customer | customer app | Sign in with mobile OTP, email or Google; book, track, chat, pay (Razorpay), review, raise complaints, download invoices |
-| Worker / agent | partner app | Register directly, upload verification documents, set services, area and availability, take jobs, record work (photos, parts, quotes), see earnings and request settlements |
-| Agency administrator | admin portal ("My agency") | Apply to become an agency, invite workers, assign requests no independent worker took, follow its jobs, see its earnings |
-| Ji-Hajoor staff | admin portal | Approve agencies and workers, set each agency's share, run bookings, payments, complaints, reviews, coupons, dispatch rules, settings and the audit log (roles: `SUPER_ADMIN`, `ADMIN`, `FINANCE_ADMIN`, `DISPATCHER`, `SUPPORT_AGENT`) |
+| Customer | Ji-Hajoor (customer app) | Sign in with mobile OTP, email or Google; book, track, chat, pay (Razorpay), review, raise complaints, download invoices |
+| Worker / agent | Ji-Hajoor Pro (partner app) | Register directly, upload verification documents, set services, area and availability, take jobs, record work (photos, parts, quotes), see earnings and request settlements |
+| Agency administrator | Ji-Hajoor Admin ("My agency") | Apply to become an agency, invite workers, assign requests no independent worker took, follow its jobs, see its earnings |
+| Ji-Hajoor staff | Ji-Hajoor Admin | Approve agencies and workers, set each agency's share, run bookings, payments, complaints, reviews, coupons, dispatch rules, settings and the audit log (roles: `SUPER_ADMIN`, `ADMIN`, `FINANCE_ADMIN`, `DISPATCHER`, `SUPPORT_AGENT`) |
 
 ### Two supply channels
 
@@ -225,14 +227,35 @@ defence in depth, plus the checks that stop regressions.
   change and weekly.
 
 Still to do (operational): turn off `PAYMENT_SIMULATOR_ENABLED` and set the Razorpay live keys
-before taking real money, rotate `JWT_SECRET` and the test-staff password before real customers
+before taking real money, align payment-service's default 20% fee with the per-service platform fee
+(see [docs/REVENUE_MODEL.md](docs/REVENUE_MODEL.md)), rotate `JWT_SECRET` and the test-staff password before real customers
 arrive, remove `OTP_FIXED_CODE` once MSG91 delivery is confirmed, keep the Railway gateway without
 a public domain, and act on the weekly vulnerability report.
 
 ## Documentation
 
+Everything lives in [`docs/`](docs/), with a PDF of each deck and guide in [`docs/pdf/`](docs/pdf/)
+for sharing. The whole set is also bundled as one review pack:
+[`docs/pdf/JiHajoor_Documentation_Pack.pdf`](docs/pdf/JiHajoor_Documentation_Pack.pdf).
+
+**How to use Ji-Hajoor** (share these with users):
+
+- [Customer Guide](docs/guides/CUSTOMER_GUIDE.md): book, track, pay, rate
+- [Worker Guide — Ji-Hajoor Pro](docs/guides/WORKER_GUIDE.md): verification, jobs, earnings, reviews, sharing your profile
+- [Agency Guide](docs/guides/AGENCY_GUIDE.md): apply, build a team, assign requests, earnings
+- [Staff Guide — Ji-Hajoor Admin](docs/guides/ADMIN_GUIDE.md): roles, daily checklist, every admin page
+
+**Business:**
+
+- [Pitch deck](docs/JiHajoor_Pitch_Deck.pptx)
+- [Revenue model](docs/REVENUE_MODEL.md) and [deck](docs/JiHajoor_Revenue_Model.pptx)
+- [Brand, naming and marketing](docs/BRAND_AND_MARKETING.md) and [deck](docs/JiHajoor_Brand_and_Marketing.pptx)
+
+**Technology:**
+
+- [Tech stack and security deck](docs/JiHajoor_Tech_Stack.pptx)
 - [Architecture and diagrams](docs/ARCHITECTURE.md)
-- [Architecture deck (PowerPoint)](docs/JiHajoor_Architecture.pptx)
+- [Architecture deck (PowerPoint)](docs/JiHajoor_Architecture.pptx) and [design review deck](docs/JiHajoor_Design_Deck.pptx)
 - [API contracts](docs/API_CONTRACTS.md)
 - [Running locally, test users and URLs](docs/LOCAL_ACCESS.md)
 - [Mobile builds](frontend/MOBILE.md)

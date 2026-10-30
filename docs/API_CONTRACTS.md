@@ -114,7 +114,7 @@ Global filters, in order, each rejection using the shared envelope:
 | -100 | `HttpsRedirectGatewayFilter` | 301 when `X-Forwarded-Proto` is not https and enforcement is on |
 | -90 | `CorrelationIdGatewayFilter` | Sets or echoes `X-Correlation-ID` |
 | -80 | `WafInspectionGatewayFilter` | Regex scan of path, query values, `User-Agent`, `Referer`, `X-Forwarded-For`, `Cookie` → 400 |
-| -70 | `JwtIntrospectionGatewayFilter` | Calls `GET /auth/introspect`; 401 unless the path starts with `/auth/register`, `/auth/login`, `/auth/token/refresh`, `/auth/introspect`, `/actuator`, `/health`. An active result is reused for up to `jihajoor.gateway.auth.introspection-cache.ttl` (default `30s`, env `INTROSPECTION_CACHE_TTL`, `0` disables) and never past the token's `exp`. Entries are keyed by the token's SHA-256 and capped at `max-entries` (default 10000, env `INTROSPECTION_CACHE_MAX_ENTRIES`). Inactive results and failed or timed-out calls are never cached, and they still give 401 |
+| -70 | `JwtIntrospectionGatewayFilter` | Calls `GET /auth/introspect`; 401 unless the path starts with `/auth/register`, `/auth/login`, `/auth/token/refresh`, `/auth/introspect`, `/actuator`, `/health` (plus the Razorpay webhook, `/config/client`, and since 30 October 2026 `/public/workers`; whole segments only, on the decoded and normalised path). An active result is reused for up to `jihajoor.gateway.auth.introspection-cache.ttl` (default `30s`, env `INTROSPECTION_CACHE_TTL`, `0` disables) and never past the token's `exp`. Entries are keyed by the token's SHA-256 and capped at `max-entries` (default 10000, env `INTROSPECTION_CACHE_MAX_ENTRIES`). Inactive results and failed or timed-out calls are never cached, and they still give 401 |
 | -60 | `OtpRateLimitGatewayFilter` | On `/auth/register/otp`, over 5 per phone per hour → 429, `Retry-After: 3600` |
 | -50 | `RateLimitGatewayFilter` | 60-second fixed window per subject: CUSTOMER 100, provider 60, default 60 (`RATE_LIMIT_CUSTOMER_PER_MINUTE`, `RATE_LIMIT_PROVIDER_PER_MINUTE`, `RATE_LIMIT_DEFAULT_PER_MINUTE`) → 429, `Retry-After: 60`. Under load a provider doing jobs back to back reaches 60 (review section 21) |
 
@@ -222,11 +222,15 @@ Response 201, and the same body is returned by `/auth/token/refresh` and `/auth/
 
 `tokenType` is always `Bearer`. The access token TTL defaults to 15 minutes. The refresh token is opaque, two concatenated UUIDs, TTL 30 days.
 
-**POST /auth/token/refresh** and **POST /auth/logout** take the same single `@NotBlank` field:
+**POST /auth/token/refresh** and **POST /auth/logout** take the same single field:
 
 ```json
 { "refreshToken": "22690c5e-221a-4d50-8d87-dc141e63c991..." }
 ```
+
+**Cookie transport (web apps, since 30 October 2026).** When a sign-in, refresh or logout request carries `X-Session-Transport: cookie`, the response sets `Set-Cookie: jh_refresh=<token>; Path=/api/auth; Max-Age=<refresh TTL>; HttpOnly; Secure; SameSite=Strict` and the body's `refreshToken` is `null`. Refresh and logout then take an empty body (`{}` or none) and read the cookie; the body token, if sent, wins. Refresh with neither returns 401 `INVALID_REFRESH_TOKEN`; logout always answers 204 and clears the cookie (`Max-Age=0`). Without the header (native apps) nothing changes. Properties: `jihajoor.auth.refresh-cookie.path` (default `/api/auth`) and `jihajoor.auth.refresh-cookie.secure` (default `true`).
+
+**Password policy (all password-setting endpoints).** At least 10 characters and at most 72 bytes, with at least one letter and one digit. Refused with 400 `WEAK_PASSWORD` (the message says why): common passwords (also in leet spellings and with leading or trailing digits or symbols removed), three or fewer distinct characters, keyboard or number sequences, and passwords containing the person's name or email local part (4+ characters).
 
 Refresh rotates within a token family and re-resolves roles. Replaying an already-rotated token revokes the whole family with `REFRESH_TOKEN_REPLAY`. Rotation is atomic: if two refreshes present the same token at once, exactly one consumes it. The other counts as a replay and revokes the family, and that includes the successor the first refresh was issuing. Clients must therefore send one refresh at a time per session. Logout revokes the presented token's whole family (or just that token if it is unknown), returns 204 with no body and is idempotent.
 
@@ -488,6 +492,7 @@ Port 8083. `/providers/{id}` for the provider's own profile and wallet, `/admin/
 | GET | `/providers/{id}/earnings?page=&size=` | same | Paginated earnings history |
 | GET | `/providers/{id}/summary` | same | Dashboard: wallet and today's earnings |
 | GET | `/providers/{id}/settlement-info` | same | Available balance and masked bank accounts |
+| GET | `/public/workers/{workerId}` | public (`GET` only) | A verified worker's public profile; 404 unless verification is `APPROVED` and not under review |
 | GET | `/providers/{id}/active-jobs` | SERVICE_PROVIDER, ADMIN, SUPER_ADMIN, DISPATCHER, SUPPORT_AGENT; owner or staff | In-flight jobs for the dashboard |
 | GET | `/admin/providers?search=` | ADMIN, SUPER_ADMIN | Admin portal list |
 | PATCH | `/admin/providers/{id}/status` | ADMIN, SUPER_ADMIN | Suspend or reinstate |
@@ -1944,7 +1949,7 @@ A channel is opened by `ProviderAccepted`, which now carries `customerId` from b
 
 ### rating-review-service
 
-Port 8097 locally, controller at `/reviews`. The reviewer is the JWT subject. The client IP for fraud detection is the first hop of `X-Forwarded-For`, which a client can set freely.
+Port 8097 locally, controller at `/reviews`. The reviewer is the JWT subject. The client IP for fraud detection is `X-Real-IP` (set by Railway's edge, at most 64 characters), else the last `X-Forwarded-For` hop, else the socket address.
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
@@ -1954,6 +1959,10 @@ Port 8097 locally, controller at `/reviews`. The reviewer is the JWT subject. Th
 | POST | `/reviews/{reviewId}/removal` | ADMIN, SUPER_ADMIN, SUPPORT_AGENT | Remove a review and recalculate, 204 |
 | GET | `/admin/reviews?status=` | ADMIN, SUPER_ADMIN, SUPPORT_AGENT | Admin portal list, newest first, at most 200 |
 | POST | `/admin/reviews/{reviewId}/moderate` | ADMIN, SUPER_ADMIN, SUPPORT_AGENT | Publish or remove a review |
+| GET | `/reviews/prompts/mine` | CUSTOMER, SERVICE_PROVIDER | My review prompts from the last 30 days |
+| GET | `/reviews/received` | SERVICE_PROVIDER | Reviews I received that are publicly visible, newest first |
+| POST | `/reviews/{reviewId}/reply` | SERVICE_PROVIDER (the reviewee) | Reply publicly, or replace the reply |
+| GET | `/public/workers/{workerId}/reviews?page=&size=` | public (`GET` only) | Rating summary and visible customer reviews, paged |
 
 ```json
 {
@@ -1987,6 +1996,49 @@ Response 201:
 A flagged review is excluded from the aggregate until approved. The four sub-scores and the text are not echoed back. Removal requires `{"reason": "..."}`, `@NotBlank` with a 1000-character cap, and returns 204.
 
 The submission path requires the caller to be the reviewer the prompt invited, otherwise 403 `NOT_INVITED_REVIEWER`, and persists the caller's id.
+
+**GET /reviews/prompts/mine** response 200:
+
+```json
+[
+  {
+    "bookingId": "b2e7d410-3a65-4c98-9f12-7d4e6a8b0c55",
+    "role": "CUSTOMER",
+    "revieweeId": "dd73094d-7dbb-4a7f-b96b-0fab756cb240",
+    "status": "OPEN",
+    "expiresAt": "2026-09-18T09:00:00Z",
+    "myRating": null
+  }
+]
+```
+
+`status` is `OPEN`, `REVIEWED` (then `myRating` is the overall score) or `EXPIRED`. A prompt still open 24 hours after it was created (`jihajoor.rating.reminder-delay`, default `PT24H`) gets one `ReviewReminder` event; a job is never reminded twice.
+
+**POST /reviews/{reviewId}/reply** takes `{"text": "Thank you!"}`, 1 to 500 characters, and returns the review as `ReviewView`. A review that is not the caller's, or not publicly visible (flagged, removed, or written by a provider), is 404 `REVIEW_NOT_FOUND`.
+
+**GET /public/workers/{workerId}/reviews** (`size` at most 20) response 200:
+
+```json
+{
+  "summary": {
+    "average": 4.8, "count": 23,
+    "distribution": { "5": 19, "4": 3, "3": 1, "2": 0, "1": 0 },
+    "quality": 4.9, "timeliness": 4.6, "behavior": 4.9, "pricingTransparency": 4.7
+  },
+  "reviews": [
+    {
+      "id": "d72a9e18-4c05-4b63-8f29-1e6d3a7c5b40",
+      "overall": 5, "quality": 5, "timeliness": 4, "behavior": 5, "pricingTransparency": 5,
+      "text": "Arrived on time, explained the fix, cleaned up afterwards.",
+      "submittedAt": "2026-09-11T09:30:00Z",
+      "reply": "Thank you!", "repliedAt": "2026-09-11T12:00:00Z"
+    }
+  ],
+  "page": 0, "size": 10, "hasMore": true
+}
+```
+
+No reviewer id, booking or IP is ever returned. `GET /reviews/received` returns the same `ReviewView` items as a list.
 
 **GET /admin/reviews?status=** returns a bare array of `{id, bookingReference, reviewerName, providerName, rating, comment, status, createdAt}`.
 
@@ -2515,6 +2567,7 @@ The producer refuses to start unless `acks=all` and idempotence are enabled. The
 | `PaymentCompleted` | `PaymentCompleted` |
 | `BookingCancelled` | `BookingCancelled` |
 | `ReviewSubmitted` | `ReviewSubmitted` |
+| `ReviewReminder` | `ReviewReminder` |
 | `ComplaintCreated` | `ComplaintCreated` |
 | `ComplaintStatusChanged` | `ComplaintStatusChanged` |
 | anything unmapped | `domain-events` |
@@ -2763,6 +2816,20 @@ An already completed booking is a no-op. A booking in any other state, or an unk
 ```
 
 notification-service notifies both parties: the reviewer is thanked and the reviewee is told they received a review.
+
+#### ReviewReminder
+
+Aggregate type `ReviewPrompt`, produced by rating-review-service once per customer prompt still open 24 hours after payment.
+
+```json
+{
+  "bookingId": "b2e7d410-3a65-4c98-9f12-7d4e6a8b0c55",
+  "customerId": "bc0551ae-b3fb-4571-8587-017fa39096a4",
+  "providerId": "dd73094d-7dbb-4a7f-b96b-0fab756cb240"
+}
+```
+
+notification-service sends the `REVIEW_REMINDER` template to the customer only (push, SMS and in-app): "How was your service?".
 
 #### Complaint events
 
